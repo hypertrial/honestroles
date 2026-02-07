@@ -21,6 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest",
+  "pytest-xdist",
   "pytest-cov",
   "ruff",
 ]
@@ -32,3 +33,4 @@ packages = ["src/honestroles"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+addopts = ["-n", "auto"]

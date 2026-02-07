@@ -57,6 +57,12 @@ def label_seniority(df: pd.DataFrame, *, title_column: str = TITLE) -> pd.DataFr
     result = df.copy()
 
     def match(title: str | None) -> str | None:
+        if title is None:
+            return None
+        if isinstance(title, float) and pd.isna(title):
+            return None
+        if not isinstance(title, str):
+            return None
         if not title:
             return None
         for label, pattern in _SENIORITY_PATTERNS:

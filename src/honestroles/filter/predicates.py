@@ -9,6 +9,7 @@ from honestroles.schema import (
     COUNTRY,
     DESCRIPTION_TEXT,
     LOCATION_RAW,
+    REGION,
     REMOTE_FLAG,
     SALARY_CURRENCY,
     SALARY_MAX,
@@ -26,9 +27,11 @@ def by_location(
     df: pd.DataFrame,
     *,
     cities: Iterable[str] | None = None,
+    regions: Iterable[str] | None = None,
     countries: Iterable[str] | None = None,
     remote_only: bool = False,
 ) -> pd.Series:
+    """Filter rows by city, region, country, and remote-only flag."""
     mask = _series_or_true(df)
     if cities and CITY in df.columns:
         allowed = {city.lower() for city in cities}
@@ -41,6 +44,9 @@ def by_location(
     if countries and COUNTRY in df.columns:
         allowed = {country.lower() for country in countries}
         mask &= df[COUNTRY].fillna("").str.lower().isin(allowed)
+    if regions and REGION in df.columns:
+        allowed = {region.lower() for region in regions}
+        mask &= df[REGION].fillna("").str.lower().isin(allowed)
     if remote_only and REMOTE_FLAG in df.columns:
         mask &= df[REMOTE_FLAG].fillna(False)
     return mask

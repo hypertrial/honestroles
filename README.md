@@ -43,6 +43,15 @@ df = hr.label_jobs(df, use_llm=False)
 df = hr.rate_jobs(df)
 ```
 
+## Location normalization
+
+`clean_jobs()` parses `location_raw` into `city`, `region`, `country`, and `remote_type`.
+
+```python
+df = hr.clean_jobs(df)
+df = hr.filter_jobs(df, regions=["California"], countries=["US"])
+```
+
 ## Data I/O
 
 Parquet:
@@ -71,6 +80,7 @@ from honestroles import schema
 
 schema.TITLE
 schema.DESCRIPTION_TEXT
+schema.REGION
 ```
 
 ## Modules

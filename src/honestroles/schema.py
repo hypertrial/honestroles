@@ -24,6 +24,7 @@ SALARY_CURRENCY = "salary_currency"
 SALARY_INTERVAL = "salary_interval"
 CITY = "city"
 COUNTRY = "country"
+REGION = "region"
 REMOTE_TYPE = "remote_type"
 SKILLS = "skills"
 LAST_SEEN = "last_seen"
@@ -67,6 +68,7 @@ ALL_COLUMNS = [
     SALARY_INTERVAL,
     CITY,
     COUNTRY,
+    REGION,
     REMOTE_TYPE,
     SKILLS,
     LAST_SEEN,
@@ -100,6 +102,7 @@ class JobsCurrentRow(TypedDict, total=False):
     salary_interval: str | None
     city: str | None
     country: str | None
+    region: str | None
     remote_type: str | None
     skills: list[str] | None
     last_seen: str | None

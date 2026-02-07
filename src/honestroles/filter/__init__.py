@@ -26,6 +26,7 @@ def filter_jobs(
     df: pd.DataFrame,
     *,
     cities: list[str] | None = None,
+    regions: list[str] | None = None,
     countries: list[str] | None = None,
     remote_only: bool = False,
     min_salary: float | None = None,
@@ -39,7 +40,13 @@ def filter_jobs(
     required_fields: list[str] | None = None,
 ) -> pd.DataFrame:
     chain = FilterChain()
-    chain.add(by_location, cities=cities, countries=countries, remote_only=remote_only)
+    chain.add(
+        by_location,
+        cities=cities,
+        regions=regions,
+        countries=countries,
+        remote_only=remote_only,
+    )
     chain.add(by_salary, min_salary=min_salary, max_salary=max_salary, currency=currency)
     chain.add(by_skills, required=required_skills, excluded=excluded_skills)
     chain.add(

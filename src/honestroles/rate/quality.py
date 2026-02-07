@@ -26,6 +26,12 @@ def rate_quality(
     result = df.copy()
 
     def heuristic(text: str | None) -> float:
+        if text is None:
+            return 0.0
+        if isinstance(text, float) and pd.isna(text):
+            return 0.0
+        if not isinstance(text, str):
+            return 0.0
         if not text:
             return 0.0
         length_score = min(1.0, len(text) / 2000)
