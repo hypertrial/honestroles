@@ -1,23 +1,16 @@
-# honestroles
+# HonestRoles
 
-Clean, filter, label, and rate job description data using heuristics and local LLMs.
+Clean, filter, label, and rate job description data using heuristics and local LLMs. 
 
-## Package layout
+HonestRoles is a Python package designed to transform raw job posting data into structured, scored, and searchable datasets. It provides a modular pipeline for normalization, high-performance filtering, and automated labeling using both traditional heuristics and local LLMs (Ollama).
 
-```
-honestroles/
-├── analytics/                 # standalone EDA script(s)
-├── src/honestroles/           # package source
-│   ├── __init__.py            # public API
-│   ├── schema.py              # column constants + TypedDict
-│   ├── io/                    # parquet + DuckDB I/O
-│   ├── clean/                 # HTML stripping + normalization + dedup
-│   ├── filter/                # predicate filters + FilterChain
-│   ├── label/                 # heuristic + Ollama labeling
-│   ├── rate/                  # completeness + quality + composite ratings
-│   └── llm/                   # Ollama client + prompts
-└── tests/                     # pytest suites for each module
-```
+## Features
+
+- **🧹 Clean**: HTML stripping, location normalization (city/region/country), salary parsing, and record deduplication.
+- **🔍 Filter**: High-performance `FilterChain` with predicates for location, salary, skills, and keyword matching.
+- **🏷️ Label**: Automated seniority detection, role categorization, and tech stack extraction.
+- **⭐️ Rate**: Comprehensive job description scoring for completeness and quality.
+- **🤖 LLM Integration**: seamless integration with local Ollama models (e.g., Llama 3) for deep semantic analysis.
 
 ## Installation
 
@@ -28,6 +21,8 @@ pip install honestroles
 For development:
 
 ```bash
+git clone https://github.com/hypertrial/honestroles.git
+cd honestroles
 pip install -e ".[dev]"
 ```
 
@@ -35,73 +30,90 @@ pip install -e ".[dev]"
 
 ```python
 import honestroles as hr
+from honestroles import schema
 
+# Load raw job data (Parquet or DuckDB)
 df = hr.read_parquet("jobs_current.parquet")
+
+# 1. Clean and normalize data
 df = hr.clean_jobs(df)
-df = hr.filter_jobs(df, remote_only=True, min_salary=100_000)
-df = hr.label_jobs(df, use_llm=False)
+
+# 2. Apply complex filtering
+chain = hr.FilterChain()
+chain.add(hr.filter.by_location, regions=["California", "New York"])
+chain.add(hr.filter.by_salary, min_salary=120_000, currency="USD")
+chain.add(hr.filter.by_skills, required=["Python", "React"])
+df = chain.apply(df)
+
+# 3. Label roles (Heuristics + LLM)
+df = hr.label_jobs(df, use_llm=True, model="llama3")
+
+# 4. Rate job quality
 df = hr.rate_jobs(df)
-```
 
-## Location normalization
+# Access data using schema constants
+print(df[[schema.TITLE, schema.CITY, schema.COUNTRY]].head())
 
-`clean_jobs()` parses `location_raw` into `city`, `region`, `country`, and `remote_type`.
-
-```python
-df = hr.clean_jobs(df)
-df = hr.filter_jobs(df, regions=["California"], countries=["US"])
-```
-
-## Data I/O
-
-Parquet:
-
-```python
-df = hr.read_parquet("jobs_current.parquet")
+# Save structured results
 hr.write_parquet(df, "jobs_scored.parquet")
 ```
 
-DuckDB:
+## Core Modules
 
-```python
-import duckdb
-
-conn = duckdb.connect()
-df = hr.read_duckdb(conn, "jobs_current")
-hr.write_duckdb(df, conn, "jobs_scored")
-```
-
-## Schema constants
-
-Use `honestroles.schema` for consistent column names:
-
+### Schema Constants
+Always use `honestroles.schema` for consistent column referencing:
 ```python
 from honestroles import schema
 
-schema.TITLE
-schema.DESCRIPTION_TEXT
-schema.REGION
+# Available constants:
+# schema.TITLE, schema.DESCRIPTION_TEXT, schema.COMPANY
+# schema.CITY, schema.REGION, schema.COUNTRY
+# schema.SALARY_MIN, schema.SALARY_MAX, etc.
 ```
 
-## Modules
+### Filtering with `FilterChain`
+The `FilterChain` allows you to compose multiple filtering rules efficiently:
+```python
+from honestroles import FilterChain, filter_jobs
 
-- `honestroles.io`: read/write parquet and DuckDB, DataFrame validation
-- `honestroles.clean`: HTML stripping, normalization, and deduplication
-- `honestroles.filter`: composable filter predicates and chains
-- `honestroles.label`: heuristic labeling, optional Ollama-based labeling
-- `honestroles.rate`: completeness and quality scoring with composite ratings
-- `honestroles.llm`: Ollama client and prompt templates
+# Functional approach:
+df = filter_jobs(df, remote_only=True, min_salary=100_000)
 
-## Ollama usage
+# Composable approach:
+chain = FilterChain()
+chain.add(hr.filter.by_keywords, include=["Engineer"], exclude=["Manager"])
+chain.add(hr.filter.by_completeness, required_fields=[schema.DESCRIPTION_TEXT, schema.APPLY_URL])
+filtered_df = chain.apply(df)
+```
 
-Ensure Ollama is running locally:
-
+### Local LLM Usage (Ollama)
+Ensure [Ollama](https://ollama.com/) is running locally:
 ```bash
 ollama serve
+ollama pull llama3
 ```
-
-Then:
-
+Then enable LLM-based labeling or quality rating:
 ```python
 df = hr.label_jobs(df, use_llm=True, model="llama3")
+df = hr.rate_jobs(df, use_llm=True, model="llama3")
+```
+
+## Package Layout
+
+```text
+src/honestroles/
+├── clean/        # HTML stripping, normalization, and dedup
+├── filter/       # Composed FilterChain and predicates
+├── io/           # Parquet and DuckDB I/O with validation
+├── label/        # Seniority, Category, and Tech Stack labeling
+├── llm/          # Ollama client and prompt templates
+├── rate/         # Completeness, Quality, and Composite ratings
+└── schema.py     # Centralized column name constants
+```
+
+## Testing
+
+Run the test suite with `pytest`:
+```bash
+pytest
 ```
