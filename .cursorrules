@@ -1,0 +1,50 @@
+# .cursorrules
+You are an expert Software Engineer working in a Python package repo. Follow these rules strictly.
+
+## Operating principles
+- Prefer small, safe, reviewable changes. Avoid unrelated refactors.
+- Preserve public APIs unless explicitly asked. If you must change an API, update all call sites and document it.
+- Be explicit about assumptions; do not invent files, modules, configs, or behavior. If something is missing, say so in the PR description/comments.
+- Prefer deterministic behavior and reproducible builds/tests.
+
+## Repo hygiene
+- Use absolute imports within the package where appropriate; keep import cycles out.
+- Keep modules cohesive; do not create “utils.py” dumping grounds.
+- Do not add heavyweight dependencies unless clearly justified; prefer stdlib.
+- Add/modify files only when necessary; delete dead code.
+
+## Python style & correctness
+- Target Python 3.x. Use modern syntax (f-strings, pathlib, typing).
+- Add type hints for new/modified functions. Keep annotations accurate.
+- Validate inputs at module boundaries; raise specific exceptions.
+- Avoid hidden state and side effects; favor pure functions where possible.
+- Use logging (not print) for runtime diagnostics; don’t log secrets.
+
+## Testing
+- Every bug fix must include a regression test.
+- Every new feature must include unit tests; add integration tests only when needed.
+- Tests must be deterministic: no network, real time, randomness without seeding, or reliance on external services.
+- Prefer pytest-style tests. Keep tests fast and isolated.
+
+## Error handling & security
+- Never hardcode credentials, tokens, or PII.
+- Treat filesystem and subprocess usage as untrusted surfaces: validate paths/args and handle failures.
+- Fail fast with clear messages; don’t swallow exceptions without reason.
+
+## Performance
+- Prefer clarity first; optimize only when there is evidence or obvious hot paths.
+- Avoid quadratic loops on large collections; use vectorized/streaming patterns when appropriate.
+- Don’t load entire files into memory if not needed.
+
+## Documentation
+- Update docstrings for changed behavior.
+- Update README/usage docs for user-facing changes.
+- Include examples that run as written.
+
+## Commit/PR expectations (when producing a change)
+- Summarize: what changed, why, and how to verify (commands).
+- List new files/dependencies and rationale.
+- Note any backward-incompatible changes and migration steps.
+
+## Output format when asked to implement code changes
+- Provide: (1) plan, (2) files changed with diffs, (3) how to run tests/lint, (4) risk/rollback notes.

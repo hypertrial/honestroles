@@ -1,0 +1,16 @@
+from __future__ import annotations
+
+import pandas as pd
+
+from honestroles.rate.completeness import rate_completeness
+from honestroles.rate.composite import rate_composite
+from honestroles.rate.quality import rate_quality
+
+__all__ = ["rate_jobs", "rate_completeness", "rate_quality", "rate_composite"]
+
+
+def rate_jobs(df: pd.DataFrame, *, use_llm: bool = False, **kwargs: object) -> pd.DataFrame:
+    rated = rate_completeness(df)
+    rated = rate_quality(rated, use_llm=use_llm, **kwargs)
+    rated = rate_composite(rated)
+    return rated
