@@ -142,6 +142,5 @@ pytest
 ## Stability
 
 - Changelog: `/CHANGELOG.md`
-- Deprecation policy: `/docs/deprecation.md`
 - Performance guardrails: `/docs/performance.md`
 - Docs index: `/docs/index.md`

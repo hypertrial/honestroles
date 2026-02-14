@@ -12,10 +12,10 @@ into a composite rating.
 
 ### Public API reference
 
-#### `rate_jobs(df: pd.DataFrame, *, use_llm: bool = False, **kwargs: object) -> pd.DataFrame`
+#### `rate_jobs(df: pd.DataFrame, *, use_llm: bool = False, model: str = "llama3", ollama_url: str = "http://localhost:11434") -> pd.DataFrame`
 
 Runs `rate_completeness` -> `rate_quality` -> `rate_composite`.
-Passes `use_llm` and any additional kwargs to `rate_quality`.
+Passes `use_llm`, `model`, and `ollama_url` to `rate_quality`.
 
 #### `rate_completeness(...) -> pd.DataFrame`
 

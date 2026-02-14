@@ -9,8 +9,14 @@ from honestroles.rate.quality import rate_quality
 __all__ = ["rate_jobs", "rate_completeness", "rate_quality", "rate_composite"]
 
 
-def rate_jobs(df: pd.DataFrame, *, use_llm: bool = False, **kwargs: object) -> pd.DataFrame:
+def rate_jobs(
+    df: pd.DataFrame,
+    *,
+    use_llm: bool = False,
+    model: str = "llama3",
+    ollama_url: str = "http://localhost:11434",
+) -> pd.DataFrame:
     rated = rate_completeness(df)
-    rated = rate_quality(rated, use_llm=use_llm, **kwargs)
+    rated = rate_quality(rated, use_llm=use_llm, model=model, ollama_url=ollama_url)
     rated = rate_composite(rated)
     return rated

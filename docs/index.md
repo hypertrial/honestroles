@@ -20,5 +20,4 @@
 ## Extension and Operations
 
 - `plugins.md`
-- `deprecation.md`
 - `performance.md`

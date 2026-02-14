@@ -25,6 +25,7 @@ dev = [
   "pytest-cov",
   "mypy",
   "ruff",
+  "types-requests",
 ]
 llm = []
 

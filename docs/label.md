@@ -11,11 +11,12 @@ and optional LLM classification.
 
 ### Public API reference
 
-#### `label_jobs(df: pd.DataFrame, *, use_llm: bool = False, plugin_labelers: list[str] | None = None, plugin_labeler_kwargs: dict[str, dict[str, object]] | None = None, **kwargs: object) -> pd.DataFrame`
+#### `label_jobs(df: pd.DataFrame, *, use_llm: bool = False, model: str = "llama3", labels: list[str] | None = None, column: str = DESCRIPTION_TEXT, ollama_url: str = "http://localhost:11434", batch_size: int = 8, plugin_labelers: list[str] | None = None, plugin_labeler_kwargs: dict[str, dict[str, object]] | None = None) -> pd.DataFrame`
 
 Runs heuristic labeling (`label_seniority`, `label_role_category`,
 `label_tech_stack`). If `use_llm=True`, appends `label_with_llm` using the
-provided keyword args. If `plugin_labelers` are provided, registered label
+provided LLM args (`model`, `labels`, `column`, `ollama_url`, `batch_size`).
+If `plugin_labelers` are provided, registered label
 plugins are applied after built-in labeling.
 
 #### `label_seniority(df: pd.DataFrame, *, title_column: str = TITLE) -> pd.DataFrame`
