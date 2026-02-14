@@ -43,3 +43,9 @@ def test_rate_completeness_empty_values_not_counted() -> None:
     df = pd.DataFrame([{"company": "", "skills": [], "benefits": None}])
     rated = rate_completeness(df, required_fields=["company", "skills", "benefits"])
     assert rated.loc[0, "completeness_score"] == 0.0
+
+
+def test_rate_completeness_no_overlapping_required_fields_returns_input() -> None:
+    df = pd.DataFrame([{"company": "Acme"}])
+    rated = rate_completeness(df, required_fields=["missing_one", "missing_two"])
+    assert rated.equals(df)

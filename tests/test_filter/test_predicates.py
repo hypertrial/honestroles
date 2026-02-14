@@ -112,6 +112,12 @@ def test_by_skills_none_values() -> None:
     assert mask.tolist() == [False, False, True]
 
 
+def test_by_skills_scalar_values() -> None:
+    df = pd.DataFrame({"skills": ["Python", "Roadmapping"]})
+    mask = by_skills(df, required=["python"])
+    assert mask.tolist() == [True, False]
+
+
 def test_by_keywords(sample_df: pd.DataFrame) -> None:
     mask = by_keywords(sample_df, include=["roadmap"])
     assert mask.tolist() == [False, True]

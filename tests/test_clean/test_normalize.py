@@ -30,6 +30,22 @@ def test_normalize_locations_empty_values() -> None:
     assert normalized["country"].tolist() == [None, None]
 
 
+def test_normalize_locations_nan_and_non_string_values() -> None:
+    df = pd.DataFrame({"location_raw": [float("nan"), 123], "remote_flag": [False, False]})
+    normalized = normalize_locations(df)
+    assert normalized["city"].tolist() == [None, None]
+    assert normalized["region"].tolist() == [None, None]
+    assert normalized["country"].tolist() == [None, None]
+
+
+def test_normalize_locations_single_unknown_token_becomes_city() -> None:
+    df = pd.DataFrame({"location_raw": ["Atlantis"], "remote_flag": [False]})
+    normalized = normalize_locations(df)
+    assert normalized.loc[0, "city"] == "Atlantis"
+    assert normalized.loc[0, "region"] is None
+    assert normalized.loc[0, "country"] is None
+
+
 @pytest.mark.parametrize(
     ("location", "expected_city"),
     [
@@ -131,6 +147,38 @@ def test_normalize_canadian_locations(
     assert normalized.loc[0, "remote_type"] == expected_remote
 
 
+def test_normalize_locations_us_city_with_ambiguous_country_token_prefers_country_match() -> None:
+    df = pd.DataFrame({"location_raw": ["Denver, CA"], "remote_flag": [False]})
+    normalized = normalize_locations(df)
+    assert normalized.loc[0, "city"] == "Denver"
+    assert normalized.loc[0, "region"] is None
+    assert normalized.loc[0, "country"] == "CA"
+
+
+def test_normalize_locations_us_address_signal_with_zip_prefers_us_region() -> None:
+    df = pd.DataFrame({"location_raw": ["Mysterytown 94105, CA"], "remote_flag": [False]})
+    normalized = normalize_locations(df)
+    assert normalized.loc[0, "city"] == "Mysterytown 94105"
+    assert normalized.loc[0, "region"] == "California"
+    assert normalized.loc[0, "country"] == "US"
+
+
+def test_normalize_locations_us_address_signal_with_leading_digit_prefers_us_region() -> None:
+    df = pd.DataFrame({"location_raw": ["123 Main Street, CA"], "remote_flag": [False]})
+    normalized = normalize_locations(df)
+    assert normalized.loc[0, "city"] == "123 Main Street"
+    assert normalized.loc[0, "region"] == "California"
+    assert normalized.loc[0, "country"] == "US"
+
+
+def test_normalize_locations_non_us_region_country_ambiguity_prefers_country_alias() -> None:
+    df = pd.DataFrame({"location_raw": ["Exampletown, NL"], "remote_flag": [False]})
+    normalized = normalize_locations(df)
+    assert normalized.loc[0, "city"] == "Exampletown"
+    assert normalized.loc[0, "region"] is None
+    assert normalized.loc[0, "country"] == "NL"
+
+
 def test_normalize_salaries(sample_df: pd.DataFrame) -> None:
     normalized = normalize_salaries(sample_df)
     assert normalized.loc[0, "salary_min"] == 120000.0
@@ -230,3 +278,39 @@ def test_enrich_country_from_context_preserves_non_ca_country() -> None:
     )
     enriched = enrich_country_from_context(df)
     assert enriched.loc[0, "country"] == "US"
+
+
+def test_enrich_country_from_context_canadian_based_infers_region_from_single_province() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "country": float("nan"),
+                "region": None,
+                "description_text": "Canadian-based role in Ontario.",
+                "title": float("nan"),
+                "salary_text": float("nan"),
+                "apply_url": "https://example.com/jobs",
+                "benefits": ["RRSP match"],
+            }
+        ]
+    )
+    enriched = enrich_country_from_context(df)
+    assert enriched.loc[0, "country"] == "CA"
+    assert enriched.loc[0, "region"] == "Ontario"
+
+
+def test_enrich_country_from_context_currency_and_compliance_keywords() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "country": None,
+                "region": None,
+                "description_text": (
+                    "Role based in Canada. Compensation in CAD. Must provide SIN number."
+                ),
+                "apply_url": "https://example.com/jobs",
+            }
+        ]
+    )
+    enriched = enrich_country_from_context(df)
+    assert enriched.loc[0, "country"] == "CA"
