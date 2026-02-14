@@ -1,7 +1,11 @@
 import duckdb
 import pandas as pd
 
-from honestroles.io import read_duckdb, write_duckdb
+from honestroles.io import (
+    read_duckdb,
+    validate_source_data_contract,
+    write_duckdb,
+)
 
 
 def test_duckdb_roundtrip(sample_df: pd.DataFrame) -> None:
@@ -42,3 +46,19 @@ def test_read_duckdb_validate_false(sample_df: pd.DataFrame) -> None:
     write_duckdb(sample_df, conn, "jobs")
     loaded = read_duckdb(conn, "jobs", validate=False)
     assert len(loaded) == len(sample_df)
+
+
+def test_duckdb_contract_validation_with_extra_columns_and_arrays(
+    minimal_df: pd.DataFrame,
+) -> None:
+    conn = duckdb.connect()
+    df = minimal_df.copy()
+    df["skills"] = [["Python", "SQL"]]
+    df["source_data_debug"] = ["trace-1"]
+
+    write_duckdb(df, conn, "jobs_contract")
+    loaded = read_duckdb(conn, "jobs_contract", validate=False)
+    validate_source_data_contract(loaded)
+
+    assert loaded["source_data_debug"].tolist() == ["trace-1"]
+    assert list(loaded["skills"].iloc[0]) == ["Python", "SQL"]

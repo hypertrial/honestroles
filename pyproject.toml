@@ -23,6 +23,7 @@ dev = [
   "pytest",
   "pytest-xdist",
   "pytest-cov",
+  "mypy",
   "ruff",
 ]
 llm = []
@@ -34,3 +35,17 @@ packages = ["src/honestroles"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 addopts = ["-n", "auto"]
+markers = [
+  "performance: runtime guardrail checks for hot paths",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src/honestroles"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true

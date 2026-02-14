@@ -10,6 +10,7 @@ from honestroles.filter.predicates import (
     by_salary,
     by_skills,
 )
+from honestroles.plugins import apply_filter_plugins
 
 __all__ = [
     "FilterChain",
@@ -38,6 +39,9 @@ def filter_jobs(
     exclude_keywords: list[str] | None = None,
     keyword_columns: list[str] | None = None,
     required_fields: list[str] | None = None,
+    plugin_filters: list[str] | None = None,
+    plugin_filter_kwargs: dict[str, dict[str, object]] | None = None,
+    plugin_filter_mode: str = "and",
 ) -> pd.DataFrame:
     chain = FilterChain()
     chain.add(
@@ -53,4 +57,12 @@ def filter_jobs(
         by_keywords, include=include_keywords, exclude=exclude_keywords, columns=keyword_columns
     )
     chain.add(by_completeness, required_fields=required_fields)
-    return chain.apply(df)
+    filtered = chain.apply(df)
+    if not plugin_filters:
+        return filtered
+    return apply_filter_plugins(
+        filtered,
+        plugin_filters,
+        mode=plugin_filter_mode,
+        plugin_kwargs=plugin_filter_kwargs,
+    )

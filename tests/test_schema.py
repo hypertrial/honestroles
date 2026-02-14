@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 from honestroles import schema
 
 
@@ -46,3 +49,18 @@ def test_schema_constants_are_strings() -> None:
         schema.VISA_SPONSORSHIP,
     ]
     assert all(isinstance(value, str) for value in constants)
+
+
+def test_contract_doc_required_fields_match_schema_required_columns() -> None:
+    doc_path = (
+        Path(__file__).resolve().parents[1]
+        / "docs"
+        / "source_data_contract_v1.md"
+    )
+    assert doc_path.exists()
+    text = doc_path.read_text(encoding="utf-8")
+
+    doc_required_fields = set(
+        re.findall(r"^\|\s*`([a-z_]+)`\s*\|", text, flags=re.MULTILINE)
+    )
+    assert doc_required_fields == schema.REQUIRED_COLUMNS

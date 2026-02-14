@@ -209,3 +209,4 @@ __marimo__/
 *.duckdb
 *.db
 *.parquet
+.DS_Store

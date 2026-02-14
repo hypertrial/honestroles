@@ -8,6 +8,7 @@ minimal DataFrame validation utility.
 - `parquet.py`: Parquet read/write.
 - `duckdb_io.py`: DuckDB read/write.
 - `dataframe.py`: `validate_dataframe`.
+- `contract.py`: Source-data normalization and contract validation.
 
 ### Public API reference
 
@@ -35,6 +36,18 @@ Uses `CREATE OR REPLACE` when `overwrite=True`.
 Ensures required columns are present (defaults to `schema.REQUIRED_COLUMNS`).
 Raises `ValueError` if any are missing.
 
+#### `validate_source_data_contract(df: pd.DataFrame, required_columns: Iterable[str] | None = None, require_non_null: bool = True) -> pd.DataFrame`
+
+Validates the source-data contract used by `honestroles`:
+- required columns must exist
+- required columns must be non-null when `require_non_null=True`
+
+#### `normalize_source_data_contract(df: pd.DataFrame, timestamp_columns: Iterable[str] | None = None, array_columns: Iterable[str] | None = None) -> pd.DataFrame`
+
+Normalizes common source-data format issues:
+- timestamp-like fields -> ISO-8601 UTC strings
+- array-like fields encoded as strings -> Python lists
+
 ### Usage examples
 
 ```python
@@ -51,6 +64,16 @@ from honestroles.io import read_duckdb, write_duckdb
 conn = duckdb.connect()
 df = read_duckdb(conn, "jobs_current")
 write_duckdb(df, conn, "jobs_scored", overwrite=True)
+```
+
+```python
+from honestroles.io import (
+    normalize_source_data_contract,
+    validate_source_data_contract,
+)
+
+df = normalize_source_data_contract(df)
+df = validate_source_data_contract(df)
 ```
 
 ### Design notes

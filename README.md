@@ -58,6 +58,25 @@ print(df[[schema.TITLE, schema.CITY, schema.COUNTRY]].head())
 hr.write_parquet(df, "jobs_scored.parquet")
 ```
 
+## Contract-First Flow
+
+For source data, use contract normalization + validation before processing:
+
+```python
+import honestroles as hr
+
+df = hr.read_parquet("jobs_current.parquet", validate=False)
+df = hr.normalize_source_data_contract(df)
+df = hr.validate_source_data_contract(df)
+
+df = hr.clean_jobs(df)
+df = hr.filter_jobs(df, remote_only=True)
+df = hr.label_jobs(df, use_llm=False)
+df = hr.rate_jobs(df, use_llm=False)
+```
+
+See `/docs/quickstart_contract.md` and `/docs/source_data_contract_v1.md`.
+
 ## Core Modules
 
 ### Schema Constants
@@ -117,3 +136,9 @@ Run the test suite with `pytest`:
 ```bash
 pytest
 ```
+
+## Stability
+
+- Changelog: `/CHANGELOG.md`
+- Deprecation policy: `/docs/deprecation.md`
+- Performance guardrails: `/docs/performance.md`

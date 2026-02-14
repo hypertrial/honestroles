@@ -30,11 +30,15 @@ filter_jobs(
     exclude_keywords: list[str] | None = None,
     keyword_columns: list[str] | None = None,
     required_fields: list[str] | None = None,
+    plugin_filters: list[str] | None = None,
+    plugin_filter_kwargs: dict[str, dict[str, object]] | None = None,
+    plugin_filter_mode: str = "and",
 ) -> pd.DataFrame
 ```
 
 Builds a `FilterChain` in AND mode with `by_location`, `by_salary`,
-`by_skills`, `by_keywords`, and `by_completeness`.
+`by_skills`, `by_keywords`, and `by_completeness`. If `plugin_filters` are
+provided, registered filter plugins are applied after the built-in chain.
 
 #### `FilterChain`
 

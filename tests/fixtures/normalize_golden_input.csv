@@ -1,0 +1,4 @@
+job_key,location_raw,remote_flag,salary_text
+gold-1,"Toronto, ON, Canada",false,"$100000 - $120000"
+gold-2,"Remote, US",false,"$80 - $100"
+gold-3,"San Francisco, CA",true,"$150000 - $120000"
