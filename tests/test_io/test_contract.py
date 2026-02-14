@@ -92,6 +92,12 @@ def test_validate_source_data_contract_custom_required_columns_non_null_disabled
     )
 
 
+def test_validate_source_data_contract_empty_dataframe_short_circuits_non_null_check() -> None:
+    df = pd.DataFrame({"id": [], "payload": []})
+    validated = validate_source_data_contract(df, required_columns=["id", "payload"])
+    assert validated.empty
+
+
 def test_normalize_source_data_contract_timestamps_and_arrays() -> None:
     df = pd.DataFrame(
         [
@@ -137,3 +143,74 @@ def test_normalize_source_data_contract_can_enable_validation() -> None:
     normalized = normalize_source_data_contract(df)
     validate_source_data_contract(normalized)
     assert normalized.loc[0, "skills"] == ["Python", "SQL"]
+
+
+def test_normalize_source_data_contract_timestamp_variants() -> None:
+    naive = pd.Timestamp("2025-01-03 10:00:00")
+    aware = pd.Timestamp("2025-01-03 10:00:00", tz="US/Eastern")
+    sentinel = object()
+    df = pd.DataFrame(
+        {
+            "ts": [
+                None,
+                float("nan"),
+                naive,
+                aware,
+                "   ",
+                "not-a-date",
+                1735862400000000000,
+                sentinel,
+            ]
+        }
+    )
+
+    normalized = normalize_source_data_contract(
+        df, timestamp_columns=["ts"], array_columns=[]
+    )
+    values = normalized["ts"].tolist()
+    assert values[0] is None
+    assert values[1] is None
+    assert values[2] == "2025-01-03T10:00:00Z"
+    assert values[3] == "2025-01-03T15:00:00Z"
+    assert values[4] is None
+    assert values[5] == "not-a-date"
+    assert values[6] == "2025-01-03T00:00:00Z"
+    assert values[7] is sentinel
+
+
+def test_normalize_source_data_contract_array_variants() -> None:
+    df = pd.DataFrame(
+        {
+            "arr": [
+                None,
+                float("nan"),
+                "   ",
+                '["Python", " ", "SQL"]',
+                '[" ", ""]',
+                "[not-json]",
+                ",,,",
+                "alpha,beta",
+                "alpha;beta",
+                "single",
+                ("AWS", " "),
+                {"Docker", " "},
+                42,
+            ]
+        }
+    )
+
+    normalized = normalize_source_data_contract(df, timestamp_columns=[], array_columns=["arr"])
+    values = normalized["arr"].tolist()
+    assert values[0] is None
+    assert values[1] is None
+    assert values[2] is None
+    assert values[3] == ["Python", "SQL"]
+    assert values[4] is None
+    assert values[5] == ["[not-json]"]
+    assert values[6] is None
+    assert values[7] == ["alpha", "beta"]
+    assert values[8] == ["alpha", "beta"]
+    assert values[9] == ["single"]
+    assert values[10] == ["AWS"]
+    assert values[11] == ["Docker"]
+    assert values[12] == ["42"]

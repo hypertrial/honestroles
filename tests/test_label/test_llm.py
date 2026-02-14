@@ -69,3 +69,21 @@ def test_label_with_llm_bad_json(monkeypatch, caplog: pytest.LogCaptureFixture) 
     labeled = label_llm.label_with_llm(df)
     assert labeled["llm_labels"].tolist() == [[]]
     assert any("Failed to parse LLM response" in record.message for record in caplog.records)
+
+
+class _NonListLabelsClient:
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def is_available(self) -> bool:
+        return True
+
+    def generate(self, prompt: str, *, model: str, temperature: float = 0.1, max_tokens=None) -> str:
+        return json.dumps({"labels": "engineering"})
+
+
+def test_label_with_llm_non_list_labels_fallback(monkeypatch) -> None:
+    monkeypatch.setattr(label_llm, "OllamaClient", _NonListLabelsClient)
+    df = pd.DataFrame({"description_text": ["test"]})
+    labeled = label_llm.label_with_llm(df)
+    assert labeled["llm_labels"].tolist() == [[]]

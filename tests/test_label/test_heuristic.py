@@ -42,6 +42,12 @@ def test_label_seniority_empty_title() -> None:
     assert labeled["seniority"].tolist() == [None, None]
 
 
+def test_label_seniority_nan_and_non_string_title() -> None:
+    df = pd.DataFrame({"title": [float("nan"), 123]})
+    labeled = label_seniority(df)
+    assert labeled["seniority"].tolist() == [None, None]
+
+
 def test_label_role_category(sample_df: pd.DataFrame) -> None:
     labeled = label_role_category(sample_df)
     assert labeled.loc[0, "role_category"] == "engineering"
@@ -72,6 +78,12 @@ def test_label_role_category_missing_columns(sample_df: pd.DataFrame) -> None:
     df = sample_df.drop(columns=["title", "description_text"])
     labeled = label_role_category(df)
     assert labeled.equals(df)
+
+
+def test_label_role_category_unmatched_returns_none() -> None:
+    df = pd.DataFrame({"title": ["Astronaut"], "description_text": ["Space travel."]})
+    labeled = label_role_category(df)
+    assert labeled.loc[0, "role_category"] is None
 
 
 def test_label_tech_stack(sample_df: pd.DataFrame) -> None:

@@ -1,5 +1,9 @@
-import pandas as pd
+import json
 
+import pandas as pd
+import pytest
+
+import honestroles.rate.quality as quality_module
 from honestroles.rate.quality import rate_quality
 
 
@@ -32,3 +36,65 @@ def test_rate_quality_missing_column(sample_df: pd.DataFrame) -> None:
     df = sample_df.drop(columns=["description_text"])
     rated = rate_quality(df)
     assert rated.equals(df)
+
+
+def test_rate_quality_heuristic_handles_nan_and_non_strings() -> None:
+    df = pd.DataFrame({"description_text": [float("nan"), 123, ["x"]]})
+    rated = rate_quality(df)
+    assert rated["quality_score"].tolist() == [0.0, 0.0, 0.0]
+
+
+def test_rate_quality_llm_unavailable_uses_heuristic_only(
+    sample_df: pd.DataFrame,
+    monkeypatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class _UnavailableClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def is_available(self) -> bool:
+            return False
+
+    monkeypatch.setattr(quality_module, "OllamaClient", _UnavailableClient)
+    rated = rate_quality(sample_df, use_llm=True)
+    assert "quality_score" in rated.columns
+    assert "quality_score_llm" not in rated.columns
+    assert any("Ollama is not available" in record.message for record in caplog.records)
+
+
+def test_rate_quality_llm_parses_scores_and_handles_bad_payloads(
+    monkeypatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    df = pd.DataFrame({"description_text": ["good text", "bad type", "bad json", "   "]})
+
+    class _FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            self._calls = 0
+
+        def is_available(self) -> bool:
+            return True
+
+        def generate(
+            self, prompt: str, *, model: str, temperature: float = 0.1, max_tokens=None
+        ) -> str:
+            responses = [
+                json.dumps({"score": 0.8, "reason": "strong structure"}),
+                json.dumps({"score": "bad", "reason": "not numeric"}),
+                "not-json",
+            ]
+            response = responses[self._calls]
+            self._calls += 1
+            return response
+
+    monkeypatch.setattr(quality_module, "OllamaClient", _FakeClient)
+    rated = rate_quality(df, use_llm=True)
+    assert rated["quality_score_llm"].tolist() == [0.8, 0.0, 0.0, 0.0]
+    assert rated["quality_reason_llm"].tolist() == [
+        "strong structure",
+        "",
+        "",
+        "",
+    ]
+    assert any("Failed to parse LLM response" in record.message for record in caplog.records)

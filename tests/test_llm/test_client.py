@@ -34,6 +34,15 @@ def test_is_available_network_error(monkeypatch) -> None:
     assert client.is_available() is False
 
 
+def test_is_available_success(monkeypatch) -> None:
+    def _get(url, timeout):  # type: ignore[no-untyped-def]
+        return _Response(200, {})
+
+    monkeypatch.setattr(requests, "get", _get)
+    client = OllamaClient()
+    assert client.is_available() is True
+
+
 def test_generate_payload_and_response(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -72,3 +81,17 @@ def test_chat_payload_and_response(monkeypatch) -> None:
     client = OllamaClient()
     response = client.chat([{"role": "user", "content": "hi"}], model="llama3")
     assert response == "hello"
+
+
+def test_chat_includes_max_tokens(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _post(url, json, timeout):  # type: ignore[no-untyped-def]
+        captured["payload"] = json
+        return _Response(200, {"message": {"content": "ok"}})
+
+    monkeypatch.setattr(requests, "post", _post)
+    client = OllamaClient()
+    client.chat([{"role": "user", "content": "hi"}], model="llama3", max_tokens=64)
+    options = captured["payload"]["options"]
+    assert options["num_predict"] == 64
