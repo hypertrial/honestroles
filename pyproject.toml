@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "honestroles"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Clean, filter, label, and rate job description data with heuristics and local LLMs."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -31,10 +31,13 @@ llm = []
 [tool.hatch.build.targets.wheel]
 packages = ["src/honestroles"]
 
+[tool.hatch.version]
+path = "src/honestroles/__about__.py"
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-addopts = ["-n", "auto"]
+addopts = ["-n", "auto", "-m", "not performance"]
 markers = [
   "performance: runtime guardrail checks for hot paths",
 ]

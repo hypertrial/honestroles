@@ -9,13 +9,14 @@
 
 ```python
 import pandas as pd
-import honestroles as hr
+from honestroles.filter import filter_jobs
+from honestroles.plugins import register_filter_plugin
 
 def only_backend(df: pd.DataFrame) -> pd.Series:
     return df["title"].fillna("").str.contains("Backend", case=False)
 
-hr.register_filter_plugin("only_backend", only_backend)
-df = hr.filter_jobs(df, plugin_filters=["only_backend"])
+register_filter_plugin("only_backend", only_backend)
+df = filter_jobs(df, plugin_filters=["only_backend"])
 ```
 
 ## Label Plugins
@@ -25,15 +26,16 @@ df = hr.filter_jobs(df, plugin_filters=["only_backend"])
 
 ```python
 import pandas as pd
-import honestroles as hr
+from honestroles.label import label_jobs
+from honestroles.plugins import register_label_plugin
 
 def add_region_group(df: pd.DataFrame) -> pd.DataFrame:
     result = df.copy()
     result["region_group"] = result["country"].fillna("UNK")
     return result
 
-hr.register_label_plugin("region_group", add_region_group)
-df = hr.label_jobs(df, use_llm=False, plugin_labelers=["region_group"])
+register_label_plugin("region_group", add_region_group)
+df = label_jobs(df, use_llm=False, plugin_labelers=["region_group"])
 ```
 
 ## API

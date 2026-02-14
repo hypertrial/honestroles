@@ -1,6 +1,7 @@
 import pandas as pd
 import pytest
 
+from honestroles.plugins import reset_plugins
 from honestroles.schema import REQUIRED_COLUMNS
 
 
@@ -65,3 +66,10 @@ def minimal_df() -> pd.DataFrame:
             }
         ]
     )
+
+
+@pytest.fixture(autouse=True)
+def _reset_plugin_registry() -> None:
+    reset_plugins()
+    yield
+    reset_plugins()

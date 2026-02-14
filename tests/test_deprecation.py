@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from honestroles._deprecation import (
+from honestroles.deprecation import (
     HonestrolesDeprecationWarning,
     deprecated,
     warn_deprecated,

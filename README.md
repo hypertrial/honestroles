@@ -77,6 +77,8 @@ df = hr.rate_jobs(df, use_llm=False)
 
 See `/docs/quickstart_contract.md` and `/docs/source_data_contract_v1.md`.
 
+Documentation index: `/docs/index.md`.
+
 ## Core Modules
 
 ### Schema Constants
@@ -142,3 +144,4 @@ pytest
 - Changelog: `/CHANGELOG.md`
 - Deprecation policy: `/docs/deprecation.md`
 - Performance guardrails: `/docs/performance.md`
+- Docs index: `/docs/index.md`

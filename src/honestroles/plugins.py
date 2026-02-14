@@ -108,3 +108,9 @@ def apply_label_plugins(
             )
         result = result_candidate
     return result
+
+
+def reset_plugins() -> None:
+    """Reset all registered plugins. Intended for tests and isolated runs."""
+    _FILTER_PLUGINS.clear()
+    _LABEL_PLUGINS.clear()

@@ -52,4 +52,4 @@ jobs:
           HONESTROLES_MAX_CLEAN_SECONDS: "8.0"
           HONESTROLES_MAX_FILTER_SECONDS: "4.0"
           HONESTROLES_MAX_RATE_SECONDS: "4.0"
-        run: pytest -m "performance" -q
+        run: pytest -m "performance" -q -o addopts="-n auto"

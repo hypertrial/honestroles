@@ -20,7 +20,7 @@
 ## Helper Usage
 
 ```python
-from honestroles import deprecated
+from honestroles.deprecation import deprecated
 
 @deprecated(since="0.2.0", remove_in="0.4.0", alternative="new_api")
 def old_api(...):
@@ -28,7 +28,7 @@ def old_api(...):
 ```
 
 ```python
-from honestroles import warn_deprecated
+from honestroles.deprecation import warn_deprecated
 
 def shim():
     warn_deprecated(

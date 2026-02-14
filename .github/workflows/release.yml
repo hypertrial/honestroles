@@ -26,16 +26,19 @@ jobs:
           import os
           import re
           import sys
-          import tomllib
           from pathlib import Path
 
           ref = os.environ["GITHUB_REF_NAME"]
           if not re.fullmatch(r"v\d+\.\d+\.\d+", ref):
               sys.exit(f"Tag '{ref}' must match v<major>.<minor>.<patch>.")
 
-          version = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+          about_text = Path("src/honestroles/__about__.py").read_text(encoding="utf-8")
+          match = re.search(r'__version__\s*=\s*"([^"]+)"', about_text)
+          if not match:
+              sys.exit("Could not find __version__ in src/honestroles/__about__.py")
+          version = match.group(1)
           if ref[1:] != version:
-              sys.exit(f"Tag version {ref[1:]} does not match pyproject version {version}.")
+              sys.exit(f"Tag version {ref[1:]} does not match package version {version}.")
           print("Version check passed.")
           PY
 

@@ -210,13 +210,13 @@ def _classify_parts(parts: list[str]) -> tuple[str | None, str | None, str | Non
         return None, None, None
     if len(tokens) == 1:
         orig, norm = tokens[0]
-        country = _match_country(norm)
-        if country:
-            return None, None, country
+        matched_country = _match_country(norm)
+        if matched_country:
+            return None, None, matched_country
         region_match = _match_region(norm)
         if region_match:
-            region, region_country = region_match
-            return None, region, region_country
+            matched_region, matched_region_country = region_match
+            return None, matched_region, matched_region_country
         return orig, None, None
 
     city_parts: list[str] = []

@@ -37,9 +37,9 @@ def by_location(
         allowed = {city.lower() for city in cities}
         mask &= df[CITY].fillna("").str.lower().isin(allowed)
     elif cities and LOCATION_RAW in df.columns:
-        allowed = [city.lower() for city in cities]
+        allowed_substrings = [city.lower() for city in cities]
         mask &= df[LOCATION_RAW].fillna("").str.lower().apply(
-            lambda value: any(city in value for city in allowed)
+            lambda value: any(city in value for city in allowed_substrings)
         )
     if countries and COUNTRY in df.columns:
         allowed = {country.lower() for country in countries}
