@@ -23,11 +23,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install --force-reinstall --no-cache-dir "numpy==1.26.4" "pandas==2.2.3"
-          python -m pip install -e ".[dev]"
-          python -m pip check
-          python - <<'PY'
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install --force-reinstall --no-cache-dir "numpy==1.26.4" "pandas==2.2.3"
+          .venv/bin/python -m pip install -e ".[dev]"
+          .venv/bin/python -m pip check
+          .venv/bin/python - <<'PY'
           import numpy
           import pandas
           print("numpy", numpy.__version__)
@@ -36,14 +37,14 @@ jobs:
 
       - name: Ruff
         if: matrix.python-version == '3.11'
-        run: python -m ruff check src tests
+        run: .venv/bin/python -m ruff check src tests
 
       - name: Mypy
         if: matrix.python-version == '3.11'
-        run: python -m mypy src/honestroles
+        run: .venv/bin/python -m mypy src/honestroles
 
       - name: Tests (non-performance)
-        run: python -m pytest -o addopts="" -m "not performance" -q
+        run: .venv/bin/python -m pytest -o addopts="" -m "not performance" -q
 
   publish:
     needs: verify
