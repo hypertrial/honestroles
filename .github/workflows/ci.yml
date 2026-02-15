@@ -24,8 +24,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install numpy
+          python -m pip install --force-reinstall --no-cache-dir "numpy==1.26.4" "pandas==2.2.3"
           python -m pip install -e ".[dev]"
+          python -m pip check
           python - <<'PY'
           import numpy
           import pandas
@@ -43,16 +44,16 @@ jobs:
 
       - name: Plugin API Contract Tests
         if: matrix.python-version == '3.11'
-        run: python -m pytest tests/test_plugin_api_contract.py tests/test_plugin_compat_matrix.py -q
+        run: python -m pytest -o addopts="" tests/test_plugin_api_contract.py tests/test_plugin_compat_matrix.py -q
 
       - name: Plugin Index Schema Validation
         if: matrix.python-version == '3.11'
-        run: python -m pytest tests/test_plugins_index.py -q
+        run: python -m pytest -o addopts="" tests/test_plugins_index.py -q
 
       - name: Plugin Runtime Coverage Gate
         if: matrix.python-version == '3.11'
         run: |
-          python -m pytest \
+          python -m pytest -o addopts="" \
             tests/test_plugin_api_contract.py \
             tests/test_plugin_compat_matrix.py \
             tests/test_plugins_index.py \
@@ -63,7 +64,7 @@ jobs:
             -q
 
       - name: Tests (non-performance)
-        run: python -m pytest -m "not performance" -q
+        run: python -m pytest -o addopts="" -m "not performance" -q
 
   performance:
     runs-on: ubuntu-latest
@@ -79,8 +80,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install numpy
+          python -m pip install --force-reinstall --no-cache-dir "numpy==1.26.4" "pandas==2.2.3"
           python -m pip install -e ".[dev]"
+          python -m pip check
           python - <<'PY'
           import numpy
           import pandas

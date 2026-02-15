@@ -1,8 +1,6 @@
 # HonestRoles
 
-Clean, filter, label, and rate job description data using heuristics and local LLMs. 
-
-HonestRoles is a Python package designed to transform raw job posting data into structured, scored, and searchable datasets. It provides a modular pipeline for normalization, high-performance filtering, and automated labeling using both traditional heuristics and local LLMs (Ollama).
+HonestRoles, developed by [Hypertrial](www.hypertrial.ai), is a Python package designed to transform raw job posting data into structured, scored, and searchable datasets.
 
 ## Features
 

@@ -13,8 +13,8 @@ authors = [{ name = "Hypertrial" }]
 dependencies = [
   "beautifulsoup4",
   "duckdb",
-  "numpy",
-  "pandas",
+  "numpy>=1.26,<2.0",
+  "pandas>=2.2,<2.3",
   "pyarrow",
   "requests",
 ]
