@@ -73,10 +73,10 @@ df = hr.label_jobs(df, use_llm=False)
 df = hr.rate_jobs(df, use_llm=False)
 ```
 
-See `/docs/quickstart_contract.md` and `/docs/source_data_contract_v1.md`.
+See `/docs/start/quickstart.md` and `/docs/reference/source_data_contract_v1.md`.
 
 Documentation index: `/docs/index.md`.
-Docs stack: `/docs/docs_stack.md`.
+Docs stack: `/docs/maintainers/docs_stack.md`.
 
 Build docs locally:
 ```bash
@@ -159,5 +159,5 @@ This installs a Git `pre-commit` hook that runs `ruff`, `mypy`, and `pytest -m "
 ## Stability
 
 - Changelog: `/CHANGELOG.md`
-- Performance guardrails: `/docs/performance.md`
+- Performance guardrails: `/docs/maintainers/performance.md`
 - Docs index: `/docs/index.md`

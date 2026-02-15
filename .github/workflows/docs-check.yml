@@ -1,0 +1,54 @@
+name: Docs Check
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install docs dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[docs]"
+          pip install codespell pymarkdownlnt
+
+      - name: Lint markdown
+        run: pymarkdown scan --disable-rules MD013,MD033 docs README.md CHANGELOG.md CONTRIBUTING_PLUGIN.md
+
+      - name: Check spelling
+        run: codespell docs README.md CHANGELOG.md CONTRIBUTING_PLUGIN.md
+
+      - name: Check links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --glob --verbose --no-progress --max-retries 2 --retry-wait-time 2
+            --accept 200,429 --exclude-mail
+            docs/**/*.md README.md CHANGELOG.md CONTRIBUTING_PLUGIN.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check docs references
+        run: bash scripts/check_docs_refs.sh
+
+      - name: Build docs (strict)
+        run: mkdocs build --strict

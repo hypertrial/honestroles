@@ -52,11 +52,11 @@ def test_schema_constants_are_strings() -> None:
 
 
 def test_contract_doc_required_fields_match_schema_required_columns() -> None:
-    doc_path = (
-        Path(__file__).resolve().parents[1]
-        / "docs"
-        / "source_data_contract_v1.md"
-    )
+    docs_root = Path(__file__).resolve().parents[1] / "docs"
+    doc_path = docs_root / "reference" / "source_data_contract_v1.md"
+    if not doc_path.exists():
+        # Backward compatibility with the previous docs layout.
+        doc_path = docs_root / "source_data_contract_v1.md"
     assert doc_path.exists()
     text = doc_path.read_text(encoding="utf-8")
 

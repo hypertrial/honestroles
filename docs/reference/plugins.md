@@ -4,9 +4,9 @@
 
 For the complete plugin contract and author workflow:
 
-- `plugins/api_contract.md`
-- `plugins/author_guide.md`
-- `plugins/compatibility.md`
+- `reference/plugins/api_contract.md`
+- `reference/plugins/author_guide.md`
+- `reference/plugins/compatibility.md`
 
 ## Filter Plugins
 

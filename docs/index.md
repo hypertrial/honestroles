@@ -1,34 +1,37 @@
 # Documentation Index
 
-## Core
+## Start
 
-- `framework.md`
-- `docs_stack.md`
-- `page_template.md`
-- `objects.md`
-- `schema.md`
-- `source_schema.md`
-- `source_data_contract_v1.md`
-- `quickstart_contract.md`
+- `start/quickstart.md`
 
-## Processing
+## Concepts
 
-- `clean.md`
-- `filter.md`
-- `label.md`
-- `rate.md`
-- `llm.md`
-- `io.md`
+- `concepts/framework.md`
 
-## Extension and Operations
+## Reference
 
-- `plugins.md`
-- `plugins/api_contract.md`
-- `plugins/author_guide.md`
-- `plugins/compatibility.md`
-- `performance.md`
+- `reference/objects.md`
+- `reference/schema.md`
+- `reference/source_schema.md`
+- `reference/source_data_contract_v1.md`
+- `reference/clean.md`
+- `reference/filter.md`
+- `reference/label.md`
+- `reference/rate.md`
+- `reference/llm.md`
+- `reference/io.md`
+- `reference/plugins.md`
+- `reference/plugins/api_contract.md`
+- `reference/plugins/author_guide.md`
+- `reference/plugins/compatibility.md`
 
 ## API
 
-- `api/index.md`
-- `api/reference.md`
+- `reference/api/index.md`
+- `reference/api/reference.md`
+
+## Maintainers
+
+- `maintainers/docs_stack.md`
+- `maintainers/page_template.md`
+- `maintainers/performance.md`
