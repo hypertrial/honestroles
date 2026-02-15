@@ -6,9 +6,9 @@
   --hr-surface-input: #2f2f54;
   --hr-surface-card-edge: #27274d;
   --hr-text-primary: #fefefe;
-  --hr-text-secondary: #b0b0be;
-  --hr-text-muted: #6f6f88;
-  --hr-text-label: #958c98;
+  --hr-text-secondary: #d8dbea;
+  --hr-text-muted: #b6b8cb;
+  --hr-text-label: #c4c6d7;
   --hr-brand-primary: #47b9e7;
   --hr-accent-primary: #fe9941;
   --hr-accent-hover: #feab63;
@@ -19,6 +19,9 @@
   --md-default-fg-color--light: var(--hr-text-secondary);
   --md-default-fg-color--lighter: var(--hr-text-muted);
   --md-default-fg-color--lightest: var(--hr-text-label);
+  --md-typeset-color: var(--hr-text-primary);
+  --md-typeset-a-color: var(--hr-brand-primary);
+  --md-code-fg-color: #f5f6ff;
 
   --md-primary-fg-color: var(--hr-bg-header);
   --md-primary-fg-color--light: var(--hr-bg-header);
@@ -78,6 +81,12 @@
 [data-md-color-scheme="honestroles-dark"] .md-typeset li,
 [data-md-color-scheme="honestroles-dark"] .md-search-result__article {
   color: var(--hr-text-secondary);
+}
+
+[data-md-color-scheme="honestroles-dark"] .md-sidebar .md-nav__link:hover,
+[data-md-color-scheme="honestroles-dark"] .md-sidebar .md-nav__link:focus,
+[data-md-color-scheme="honestroles-dark"] .md-nav__item .md-nav__link--active {
+  color: var(--hr-text-primary);
 }
 
 [data-md-color-scheme="honestroles-dark"] .md-typeset small,
