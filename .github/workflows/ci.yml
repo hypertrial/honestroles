@@ -28,6 +28,24 @@ jobs:
       - name: Mypy
         run: mypy src/honestroles
 
+      - name: Plugin API Contract Tests
+        run: pytest tests/test_plugin_api_contract.py tests/test_plugin_compat_matrix.py -q
+
+      - name: Plugin Index Schema Validation
+        run: pytest tests/test_plugins_index.py -q
+
+      - name: Plugin Runtime Coverage Gate
+        run: |
+          pytest \
+            tests/test_plugin_api_contract.py \
+            tests/test_plugin_compat_matrix.py \
+            tests/test_plugins_index.py \
+            tests/test_plugins.py \
+            --cov=honestroles.plugins \
+            --cov-report=term-missing \
+            --cov-fail-under=99 \
+            -q
+
       - name: Tests (non-performance)
         run: pytest -m "not performance" -q
 

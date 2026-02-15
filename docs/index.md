@@ -20,4 +20,7 @@
 ## Extension and Operations
 
 - `plugins.md`
+- `plugins/api_contract.md`
+- `plugins/author_guide.md`
+- `plugins/compatibility.md`
 - `performance.md`

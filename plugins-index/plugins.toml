@@ -1,0 +1,9 @@
+# Community plugin registry for discovery.
+# Keep entries alphabetized by key.
+
+[plugin."honestroles-plugin-example"]
+description = "Reference plugin package with filter, label, and rate examples."
+repo = "https://github.com/hypertrial/honestroles/tree/main/plugin_template"
+api_version = "1.0"
+status = "reference"
+maintainers = ["@hypertrial"]

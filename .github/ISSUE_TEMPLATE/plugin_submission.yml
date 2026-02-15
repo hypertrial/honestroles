@@ -1,0 +1,62 @@
+name: Plugin Submission
+description: Propose a new HonestRoles plugin for the ecosystem index.
+title: "[Plugin]: "
+labels:
+  - plugin-runtime
+body:
+  - type: input
+    id: plugin_name
+    attributes:
+      label: Plugin name
+      description: Distribution name (for example, honestroles-plugin-geo-taxonomy)
+      placeholder: honestroles-plugin-example
+    validations:
+      required: true
+
+  - type: input
+    id: repository
+    attributes:
+      label: Repository URL
+      description: Public source repository
+      placeholder: https://github.com/org/repo
+    validations:
+      required: true
+
+  - type: input
+    id: api_version
+    attributes:
+      label: HonestRoles plugin API version
+      description: Must match the supported plugin API major/minor
+      placeholder: "1.0"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: capabilities
+    attributes:
+      label: Plugin capabilities
+      options:
+        - label: Filter plugin(s)
+        - label: Label plugin(s)
+        - label: Rate plugin(s)
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and testing
+      description: Describe tested HonestRoles versions and test evidence.
+      placeholder: Tested on honestroles==x.y.z with pytest...
+    validations:
+      required: true
+
+  - type: textarea
+    id: checklist
+    attributes:
+      label: Submission checklist
+      value: |
+        - [ ] Includes PluginSpec metadata with api_version.
+        - [ ] Includes plugin README with usage examples.
+        - [ ] Includes plugin tests.
+        - [ ] Ready to be added to plugins-index/plugins.toml.
+    validations:
+      required: true

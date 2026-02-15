@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "honestroles-plugin-example"
+version = "0.1.0"
+description = "Example plugin package for honestroles."
+requires-python = ">=3.10"
+dependencies = ["honestroles", "pandas"]
+
+[project.entry-points."honestroles.filter_plugins"]
+example_filter = "honestroles_plugin_example.plugins:filter_plugin_export"
+
+[project.entry-points."honestroles.label_plugins"]
+example_label = "honestroles_plugin_example.plugins:label_plugin_export"
+
+[project.entry-points."honestroles.rate_plugins"]
+example_rate = "honestroles_plugin_example.plugins:rate_plugin_export"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,6 +1,12 @@
 # Plugins
 
-`honestroles` supports lightweight plugin registration for custom filtering and labeling logic without modifying core package code.
+`honestroles` supports a stable plugin system for custom filtering, labeling, and rating logic without modifying core package code.
+
+For the complete plugin contract and author workflow:
+
+- `plugins/api_contract.md`
+- `plugins/author_guide.md`
+- `plugins/compatibility.md`
 
 ## Filter Plugins
 
@@ -38,6 +44,24 @@ register_label_plugin("region_group", add_region_group)
 df = label_jobs(df, use_llm=False, plugin_labelers=["region_group"])
 ```
 
+## Rate Plugins
+
+Register a post-rating transform plugin and apply it through `rate_jobs(..., plugin_raters=[...])`.
+
+```python
+import pandas as pd
+from honestroles.rate import rate_jobs
+from honestroles.plugins import register_rate_plugin
+
+def mark_top_tier(df: pd.DataFrame, threshold: float = 0.8) -> pd.DataFrame:
+    result = df.copy()
+    result["is_top_tier"] = result["rating"].fillna(0).ge(threshold)
+    return result
+
+register_rate_plugin("mark_top_tier", mark_top_tier)
+df = rate_jobs(df, use_llm=False, plugin_raters=["mark_top_tier"])
+```
+
 ## API
 
 - `register_filter_plugin`
@@ -48,3 +72,9 @@ df = label_jobs(df, use_llm=False, plugin_labelers=["region_group"])
 - `unregister_label_plugin`
 - `list_label_plugins`
 - `apply_label_plugins`
+- `register_rate_plugin`
+- `unregister_rate_plugin`
+- `list_rate_plugins`
+- `apply_rate_plugins`
+- `load_plugins_from_entrypoints`
+- `load_plugins_from_module`
