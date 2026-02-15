@@ -26,11 +26,13 @@ Documentation = "https://github.com/hypertrial/honestroles/tree/main/docs"
 
 [project.optional-dependencies]
 dev = [
+  "pre-commit",
   "pytest",
   "pytest-xdist",
   "pytest-cov",
   "mypy",
   "ruff",
+  "tomli; python_version < '3.11'",
   "types-requests",
 ]
 llm = []

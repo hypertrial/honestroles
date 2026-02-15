@@ -1,0 +1,20 @@
+default_stages: [pre-commit]
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: python -m ruff check src tests
+        language: system
+        pass_filenames: false
+      - id: mypy
+        name: mypy
+        entry: python -m mypy src/honestroles
+        language: system
+        pass_filenames: false
+      - id: pytest-non-performance
+        name: pytest (non-performance)
+        entry: python -m pytest -m "not performance" -q
+        language: system
+        pass_filenames: false

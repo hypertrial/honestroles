@@ -139,6 +139,14 @@ Run the test suite with `pytest`:
 pytest
 ```
 
+Run all CI-equivalent quality checks automatically before each local commit:
+```bash
+pip install -e ".[dev]"
+pre-commit install
+pre-commit run --all-files
+```
+This installs a Git `pre-commit` hook that runs `ruff`, `mypy`, and `pytest -m "not performance" -q`.
+
 ## Stability
 
 - Changelog: `/CHANGELOG.md`
