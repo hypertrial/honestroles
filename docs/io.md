@@ -21,10 +21,15 @@ When `validate=True`, checks required columns.
 
 Writes a Parquet file, creating parent directories if needed.
 
-#### `read_duckdb(conn: duckdb.DuckDBPyConnection, table_or_query: str, validate: bool = True) -> pd.DataFrame`
+#### `read_duckdb_table(conn: duckdb.DuckDBPyConnection, table: str, validate: bool = True) -> pd.DataFrame`
 
-Reads from DuckDB by table name or SQL query. When `validate=True`, checks
+Reads from DuckDB by validated table name. When `validate=True`, checks
 required columns.
+
+#### `read_duckdb_query(conn: duckdb.DuckDBPyConnection, query: str, validate: bool = True) -> pd.DataFrame`
+
+Reads from DuckDB using a validated read-only SQL query (`SELECT`/`WITH`,
+single statement only). When `validate=True`, checks required columns.
 
 #### `write_duckdb(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection, table: str, *, overwrite: bool = True) -> None`
 
@@ -36,11 +41,17 @@ Uses `CREATE OR REPLACE` when `overwrite=True`.
 Ensures required columns are present (defaults to `schema.REQUIRED_COLUMNS`).
 Raises `ValueError` if any are missing.
 
-#### `validate_source_data_contract(df: pd.DataFrame, required_columns: Iterable[str] | None = None, require_non_null: bool = True) -> pd.DataFrame`
+#### `validate_source_data_contract(df: pd.DataFrame, required_columns: Iterable[str] | None = None, require_non_null: bool = True, enforce_formats: bool = True) -> pd.DataFrame`
 
 Validates the source-data contract used by `honestroles`:
 - required columns must exist
 - required columns must be non-null when `require_non_null=True`
+- format/type validation when `enforce_formats=True`:
+  - timestamp columns must be parseable
+  - `apply_url` must be a valid `http`/`https` URL
+  - known array columns must be arrays of strings
+  - known boolean columns must be booleans
+  - salary metadata values must match expected format/ranges
 
 #### `normalize_source_data_contract(df: pd.DataFrame, timestamp_columns: Iterable[str] | None = None, array_columns: Iterable[str] | None = None) -> pd.DataFrame`
 
@@ -59,10 +70,11 @@ hr.write_parquet(df, "jobs_clean.parquet")
 
 ```python
 import duckdb
-from honestroles.io import read_duckdb, write_duckdb
+from honestroles.io import read_duckdb_query, read_duckdb_table, write_duckdb
 
 conn = duckdb.connect()
-df = read_duckdb(conn, "jobs_current")
+df = read_duckdb_table(conn, "jobs_current")
+subset = read_duckdb_query(conn, "select * from jobs_current where source = 'greenhouse'")
 write_duckdb(df, conn, "jobs_scored", overwrite=True)
 ```
 
@@ -78,6 +90,6 @@ df = validate_source_data_contract(df)
 
 ### Design notes
 
-- Validation is intentionally lightweight and focuses on required columns.
-- `read_duckdb` treats any string containing `select`, ` from `, or `;` as a query.
-- `write_duckdb` uses a temporary registered DataFrame to avoid SQL injection.
+- Contract validation is strict by default for known field types/formats.
+- `read_duckdb_table` and `read_duckdb_query` are the preferred explicit APIs.
+- `write_duckdb` uses a temporary registered DataFrame and validates table names.

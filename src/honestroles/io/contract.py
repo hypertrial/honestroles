@@ -1,12 +1,24 @@
 from __future__ import annotations
 
 import json
+import re
+from urllib.parse import urlparse
 from typing import Iterable
 
+import numpy as np
 import pandas as pd
 
 from honestroles.io.dataframe import validate_dataframe
-from honestroles.schema import REQUIRED_COLUMNS
+from honestroles.schema import (
+    APPLY_URL,
+    REMOTE_FLAG,
+    REQUIRED_COLUMNS,
+    SALARY_CURRENCY,
+    SALARY_INTERVAL,
+    SALARY_MAX,
+    SALARY_MIN,
+    VISA_SPONSORSHIP,
+)
 
 DEFAULT_TIMESTAMP_COLUMNS = (
     "ingested_at",
@@ -17,6 +29,18 @@ DEFAULT_TIMESTAMP_COLUMNS = (
 )
 
 DEFAULT_ARRAY_COLUMNS = ("skills", "languages", "benefits", "keywords")
+DEFAULT_BOOLEAN_COLUMNS = (REMOTE_FLAG, VISA_SPONSORSHIP)
+_CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
+_ALLOWED_SALARY_INTERVALS = {"hour", "day", "week", "month", "year"}
+
+
+def _is_missing(value: object) -> bool:
+    if value is None:
+        return True
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):
+        return False
 
 
 def _normalize_timestamp_value(value: object) -> object:
@@ -105,6 +129,7 @@ def validate_source_data_contract(
     *,
     required_columns: Iterable[str] | None = None,
     require_non_null: bool = True,
+    enforce_formats: bool = True,
 ) -> pd.DataFrame:
     """Validate source data against the honestroles core contract.
 
@@ -115,17 +140,110 @@ def validate_source_data_contract(
     required = set(required_columns or REQUIRED_COLUMNS)
     validate_dataframe(df, required_columns=required)
 
-    if not require_non_null or df.empty:
+    if df.empty:
         return df
 
-    null_violations: list[str] = []
-    for column in sorted(required):
-        null_count = int(df[column].isna().sum())
-        if null_count > 0:
-            null_violations.append(f"{column} ({null_count} null)")
+    if require_non_null:
+        null_violations: list[str] = []
+        for column in sorted(required):
+            null_count = int(df[column].isna().sum())
+            if null_count > 0:
+                null_violations.append(f"{column} ({null_count} null)")
 
-    if null_violations:
-        joined = ", ".join(null_violations)
-        raise ValueError(f"Required columns contain null values: {joined}")
+        if null_violations:
+            joined = ", ".join(null_violations)
+            raise ValueError(f"Required columns contain null values: {joined}")
+
+    if not enforce_formats:
+        return df
+
+    format_violations: list[str] = []
+
+    for column in DEFAULT_TIMESTAMP_COLUMNS:
+        if column not in df.columns:
+            continue
+        for index, value in enumerate(df[column].tolist()):
+            if _is_missing(value):
+                continue
+            parsed = pd.to_datetime(value, errors="coerce", utc=True)
+            if pd.isna(parsed):
+                format_violations.append(f"{column}[{index}] invalid timestamp")
+
+    if APPLY_URL in df.columns:
+        for index, value in enumerate(df[APPLY_URL].tolist()):
+            if _is_missing(value):
+                continue
+            if not isinstance(value, str):
+                format_violations.append(f"{APPLY_URL}[{index}] must be a URL string")
+                continue
+            parsed = urlparse(value.strip())
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                format_violations.append(f"{APPLY_URL}[{index}] invalid URL")
+
+    for column in DEFAULT_ARRAY_COLUMNS:
+        if column not in df.columns:
+            continue
+        for index, value in enumerate(df[column].tolist()):
+            if _is_missing(value):
+                continue
+            if not isinstance(value, (list, tuple, set, np.ndarray)):
+                format_violations.append(f"{column}[{index}] must be an array of strings")
+                continue
+            for item in value:
+                if not isinstance(item, str):
+                    format_violations.append(f"{column}[{index}] contains non-string values")
+                    break
+
+    for column in DEFAULT_BOOLEAN_COLUMNS:
+        if column not in df.columns:
+            continue
+        for index, value in enumerate(df[column].tolist()):
+            if _is_missing(value):
+                continue
+            if not isinstance(value, (bool, np.bool_)):
+                format_violations.append(f"{column}[{index}] must be boolean")
+
+    if SALARY_CURRENCY in df.columns:
+        for index, value in enumerate(df[SALARY_CURRENCY].tolist()):
+            if _is_missing(value):
+                continue
+            if not isinstance(value, str) or not _CURRENCY_RE.match(value.strip()):
+                format_violations.append(
+                    f"{SALARY_CURRENCY}[{index}] must be a 3-letter uppercase currency code"
+                )
+
+    if SALARY_INTERVAL in df.columns:
+        for index, value in enumerate(df[SALARY_INTERVAL].tolist()):
+            if _is_missing(value):
+                continue
+            if not isinstance(value, str) or value.strip().lower() not in _ALLOWED_SALARY_INTERVALS:
+                format_violations.append(
+                    f"{SALARY_INTERVAL}[{index}] must be one of "
+                    f"{sorted(_ALLOWED_SALARY_INTERVALS)}"
+                )
+
+    if SALARY_MIN in df.columns and SALARY_MAX in df.columns:
+        mins = df[SALARY_MIN].tolist()
+        maxs = df[SALARY_MAX].tolist()
+        for index, (minimum, maximum) in enumerate(zip(mins, maxs)):
+            if _is_missing(minimum) or _is_missing(maximum):
+                continue
+            try:
+                min_value = float(minimum)
+                max_value = float(maximum)
+            except (TypeError, ValueError):
+                format_violations.append(f"salary_min/salary_max[{index}] must be numeric")
+                continue
+            if min_value > max_value:
+                format_violations.append(
+                    f"salary_min/salary_max[{index}] has min greater than max"
+                )
+
+    if format_violations:
+        preview = ", ".join(format_violations[:8])
+        remaining = len(format_violations) - 8
+        if remaining > 0:
+            preview = f"{preview}, ... (+{remaining} more)"
+        raise ValueError(f"Source data contract format violations: {preview}")
 
     return df

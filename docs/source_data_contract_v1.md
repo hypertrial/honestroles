@@ -100,6 +100,21 @@ If present, these should use the listed types:
 - Nulls: use `NULL`/`None`/`null`, not empty string where possible
 - Encoding: UTF-8
 
+## Validation Behavior in `honestroles`
+
+`validate_source_data_contract(...)` enforces:
+
+- required columns exist
+- required columns are non-null (default)
+- known format/type checks (default), including:
+  - parseable timestamps
+  - valid `apply_url` (`http`/`https`)
+  - array columns as array-of-string values
+  - boolean columns (`remote_flag`, `visa_sponsorship`) as booleans
+  - salary metadata shape (`salary_currency`, `salary_interval`, and `salary_min <= salary_max`)
+
+Format checks can be disabled with `enforce_formats=False` for ingestion transitions.
+
 ## Compatibility Rules
 
 - Producer (source data) may add columns without breaking v1.

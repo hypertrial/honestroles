@@ -5,7 +5,8 @@ from honestroles.clean import clean_jobs
 from honestroles.filter import FilterChain, filter_jobs
 from honestroles.io import (
     normalize_source_data_contract,
-    read_duckdb,
+    read_duckdb_query,
+    read_duckdb_table,
     read_parquet,
     validate_source_data_contract,
     write_duckdb,
@@ -35,7 +36,8 @@ from honestroles.rate import rate_jobs
 __all__ = [
     "read_parquet",
     "write_parquet",
-    "read_duckdb",
+    "read_duckdb_table",
+    "read_duckdb_query",
     "write_duckdb",
     "normalize_source_data_contract",
     "validate_source_data_contract",

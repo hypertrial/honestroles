@@ -28,6 +28,22 @@ def test_by_location_remote_only(sample_df: pd.DataFrame) -> None:
     assert mask.tolist() == [True, False]
 
 
+def test_by_location_remote_only_uses_remote_type_when_remote_flag_missing(sample_df: pd.DataFrame) -> None:
+    df = sample_df.copy()
+    df = df.drop(columns=["remote_flag"])
+    df["remote_type"] = ["remote", None]
+    mask = by_location(df, remote_only=True)
+    assert mask.tolist() == [True, False]
+
+
+def test_by_location_remote_only_combines_remote_flag_and_remote_type(sample_df: pd.DataFrame) -> None:
+    df = sample_df.copy()
+    df["remote_flag"] = [False, False]
+    df["remote_type"] = [None, "remote"]
+    mask = by_location(df, remote_only=True)
+    assert mask.tolist() == [False, True]
+
+
 def test_by_location_fallback_location_raw(sample_df: pd.DataFrame) -> None:
     df = sample_df.drop(columns=["city"], errors="ignore")
     mask = by_location(df, cities=["new york"])

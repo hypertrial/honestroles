@@ -8,9 +8,9 @@ from honestroles.schema import DESCRIPTION_TEXT, SKILLS, TITLE
 
 _SENIORITY_PATTERNS = [
     ("intern", re.compile(r"\bintern\b", re.IGNORECASE)),
-    ("junior", re.compile(r"\bjunior\b|\bjr\.\b", re.IGNORECASE)),
+    ("junior", re.compile(r"\b(?:junior|jr)\b\.?", re.IGNORECASE)),
     ("mid", re.compile(r"\bmid\b|\bmid-level\b", re.IGNORECASE)),
-    ("senior", re.compile(r"\bsenior\b|\bsr\.\b", re.IGNORECASE)),
+    ("senior", re.compile(r"\b(?:senior|sr)\b\.?", re.IGNORECASE)),
     ("staff", re.compile(r"\bstaff\b", re.IGNORECASE)),
     ("principal", re.compile(r"\bprincipal\b", re.IGNORECASE)),
     ("lead", re.compile(r"\blead\b", re.IGNORECASE)),

@@ -14,8 +14,12 @@ def test_label_seniority(sample_df: pd.DataFrame) -> None:
     [
         ("Intern Software Engineer", "intern"),
         ("Junior Engineer", "junior"),
+        ("Jr Developer", "junior"),
+        ("Jr. Developer", "junior"),
         ("Mid-level Developer", "mid"),
         ("Senior Engineer", "senior"),
+        ("Sr Software Engineer", "senior"),
+        ("Sr. Software Engineer", "senior"),
         ("Staff Engineer", "staff"),
         ("Principal Engineer", "principal"),
         ("Tech Lead", "lead"),

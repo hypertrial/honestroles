@@ -11,6 +11,7 @@ from honestroles.schema import (
     LOCATION_RAW,
     REGION,
     REMOTE_FLAG,
+    REMOTE_TYPE,
     SALARY_CURRENCY,
     SALARY_MAX,
     SALARY_MIN,
@@ -47,8 +48,20 @@ def by_location(
     if regions and REGION in df.columns:
         allowed = {region.lower() for region in regions}
         mask &= df[REGION].fillna("").str.lower().isin(allowed)
-    if remote_only and REMOTE_FLAG in df.columns:
-        mask &= df[REMOTE_FLAG].fillna(False)
+    if remote_only:
+        remote_mask = _series_or_true(df)
+        has_remote_signal = False
+        if REMOTE_FLAG in df.columns:
+            remote_mask = df[REMOTE_FLAG].fillna(False).astype(bool)
+            has_remote_signal = True
+        if REMOTE_TYPE in df.columns:
+            remote_type_mask = (
+                df[REMOTE_TYPE].fillna("").astype(str).str.strip().str.lower().eq("remote")
+            )
+            remote_mask = (remote_mask | remote_type_mask) if has_remote_signal else remote_type_mask
+            has_remote_signal = True
+        if has_remote_signal:
+            mask &= remote_mask
     return mask
 
 

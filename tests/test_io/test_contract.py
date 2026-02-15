@@ -98,6 +98,115 @@ def test_validate_source_data_contract_empty_dataframe_short_circuits_non_null_c
     assert validated.empty
 
 
+def test_validate_source_data_contract_rejects_invalid_timestamp(minimal_df: pd.DataFrame) -> None:
+    df = minimal_df.copy()
+    df["ingested_at"] = ["not-a-date"]
+    with pytest.raises(ValueError, match="invalid timestamp"):
+        validate_source_data_contract(df)
+
+
+def test_validate_source_data_contract_rejects_invalid_apply_url(minimal_df: pd.DataFrame) -> None:
+    df = minimal_df.copy()
+    df["apply_url"] = ["example.com/apply"]
+    with pytest.raises(ValueError, match="invalid URL"):
+        validate_source_data_contract(df)
+
+
+def test_validate_source_data_contract_rejects_non_string_apply_url(minimal_df: pd.DataFrame) -> None:
+    df = minimal_df.copy()
+    df["apply_url"] = [123]
+    with pytest.raises(ValueError, match="must be a URL string"):
+        validate_source_data_contract(df)
+
+
+def test_validate_source_data_contract_rejects_non_array_skills(minimal_df: pd.DataFrame) -> None:
+    df = minimal_df.copy()
+    df["skills"] = ["Python,SQL"]
+    with pytest.raises(ValueError, match="must be an array of strings"):
+        validate_source_data_contract(df)
+
+
+def test_validate_source_data_contract_rejects_non_string_array_values(minimal_df: pd.DataFrame) -> None:
+    df = minimal_df.copy()
+    df["skills"] = [["Python", 3]]
+    with pytest.raises(ValueError, match="contains non-string values"):
+        validate_source_data_contract(df)
+
+
+def test_validate_source_data_contract_rejects_non_boolean_remote_flag(minimal_df: pd.DataFrame) -> None:
+    df = minimal_df.copy()
+    df["remote_flag"] = ["yes"]
+    with pytest.raises(ValueError, match="must be boolean"):
+        validate_source_data_contract(df)
+
+
+def test_validate_source_data_contract_rejects_invalid_currency_code(minimal_df: pd.DataFrame) -> None:
+    df = minimal_df.copy()
+    df["salary_currency"] = ["usd"]
+    with pytest.raises(ValueError, match="3-letter uppercase currency code"):
+        validate_source_data_contract(df)
+
+
+def test_validate_source_data_contract_rejects_non_string_currency_code(
+    minimal_df: pd.DataFrame,
+) -> None:
+    df = minimal_df.copy()
+    df["salary_currency"] = [840]
+    with pytest.raises(ValueError, match="3-letter uppercase currency code"):
+        validate_source_data_contract(df)
+
+
+def test_validate_source_data_contract_rejects_invalid_salary_interval(minimal_df: pd.DataFrame) -> None:
+    df = minimal_df.copy()
+    df["salary_interval"] = ["yearly"]
+    with pytest.raises(ValueError, match="must be one of"):
+        validate_source_data_contract(df)
+
+
+def test_validate_source_data_contract_rejects_non_string_salary_interval(
+    minimal_df: pd.DataFrame,
+) -> None:
+    df = minimal_df.copy()
+    df["salary_interval"] = [12]
+    with pytest.raises(ValueError, match="must be one of"):
+        validate_source_data_contract(df)
+
+
+def test_validate_source_data_contract_rejects_salary_min_greater_than_max(
+    minimal_df: pd.DataFrame,
+) -> None:
+    df = minimal_df.copy()
+    df["salary_min"] = [200000]
+    df["salary_max"] = [100000]
+    with pytest.raises(ValueError, match="min greater than max"):
+        validate_source_data_contract(df)
+
+
+def test_validate_source_data_contract_rejects_non_numeric_salary_bounds(
+    minimal_df: pd.DataFrame,
+) -> None:
+    df = minimal_df.copy()
+    df["salary_min"] = ["low"]
+    df["salary_max"] = ["high"]
+    with pytest.raises(ValueError, match="must be numeric"):
+        validate_source_data_contract(df)
+
+
+def test_validate_source_data_contract_truncates_many_format_violations(
+    minimal_df: pd.DataFrame,
+) -> None:
+    df = pd.concat([minimal_df] * 10, ignore_index=True)
+    df["ingested_at"] = ["invalid"] * 10
+    with pytest.raises(ValueError, match=r"\.\.\. \(\+\d+ more\)"):
+        validate_source_data_contract(df)
+
+
+def test_validate_source_data_contract_can_disable_format_checks(minimal_df: pd.DataFrame) -> None:
+    df = minimal_df.copy()
+    df["apply_url"] = ["example.com/apply"]
+    validate_source_data_contract(df, enforce_formats=False)
+
+
 def test_normalize_source_data_contract_timestamps_and_arrays() -> None:
     df = pd.DataFrame(
         [

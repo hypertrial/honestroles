@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 
 import pandas as pd
 
@@ -10,6 +11,16 @@ from honestroles.llm.prompts import build_quality_prompt
 from honestroles.schema import DESCRIPTION_TEXT
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _parse_llm_score(value: object) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        raise ValueError("LLM score is not numeric.")
+    if not math.isfinite(parsed):
+        raise ValueError("LLM score is not finite.")
+    return max(0.0, min(1.0, parsed))
 
 
 def rate_quality(
@@ -59,7 +70,8 @@ def rate_quality(
         response = client.generate(prompt, model=model)
         try:
             payload = json.loads(response)
-            llm_scores.append(float(payload.get("score", 0.0)))
+            score = _parse_llm_score(payload.get("score", 0.0))
+            llm_scores.append(score)
             llm_reasons.append(str(payload.get("reason", "")))
         except (json.JSONDecodeError, ValueError, TypeError):
             LOGGER.warning("Failed to parse LLM response: %s", response)

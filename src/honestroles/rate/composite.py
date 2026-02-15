@@ -13,14 +13,13 @@ def rate_composite(
 ) -> pd.DataFrame:
     result = df.copy()
     weights = weights or {completeness_column: 0.5, quality_column: 0.5}
-    total_weight = sum(weights.values())
+    available_weights = {column: weight for column, weight in weights.items() if column in result.columns}
+    total_weight = sum(available_weights.values())
     if total_weight == 0:
         return result
 
-    score = 0.0
-    for column, weight in weights.items():
-        if column not in result.columns:
-            continue
+    score = pd.Series(0.0, index=result.index)
+    for column, weight in available_weights.items():
         score += result[column].fillna(0) * weight
     result[output_column] = score / total_weight
     return result

@@ -98,3 +98,56 @@ def test_rate_quality_llm_parses_scores_and_handles_bad_payloads(
         "",
     ]
     assert any("Failed to parse LLM response" in record.message for record in caplog.records)
+
+
+def test_rate_quality_llm_clamps_out_of_range_scores(monkeypatch) -> None:
+    df = pd.DataFrame({"description_text": ["high", "low"]})
+
+    class _FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            self._calls = 0
+
+        def is_available(self) -> bool:
+            return True
+
+        def generate(
+            self, prompt: str, *, model: str, temperature: float = 0.1, max_tokens=None
+        ) -> str:
+            responses = [
+                json.dumps({"score": 1.7, "reason": "too high"}),
+                json.dumps({"score": -0.2, "reason": "too low"}),
+            ]
+            response = responses[self._calls]
+            self._calls += 1
+            return response
+
+    monkeypatch.setattr(quality_module, "OllamaClient", _FakeClient)
+    rated = rate_quality(df, use_llm=True)
+    assert rated["quality_score_llm"].tolist() == [1.0, 0.0]
+
+
+def test_rate_quality_llm_handles_non_finite_scores(monkeypatch) -> None:
+    df = pd.DataFrame({"description_text": ["nan score", "inf score"]})
+
+    class _FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            self._calls = 0
+
+        def is_available(self) -> bool:
+            return True
+
+        def generate(
+            self, prompt: str, *, model: str, temperature: float = 0.1, max_tokens=None
+        ) -> str:
+            responses = [
+                json.dumps({"score": "NaN", "reason": "not finite"}),
+                json.dumps({"score": "Infinity", "reason": "not finite"}),
+            ]
+            response = responses[self._calls]
+            self._calls += 1
+            return response
+
+    monkeypatch.setattr(quality_module, "OllamaClient", _FakeClient)
+    rated = rate_quality(df, use_llm=True)
+    assert rated["quality_score_llm"].tolist() == [0.0, 0.0]
+    assert rated["quality_reason_llm"].tolist() == ["", ""]
