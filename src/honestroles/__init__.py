@@ -67,8 +67,24 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "rate_jobs": ("honestroles.rate", "rate_jobs"),
 }
 
+_SUBMODULES = {
+    "clean",
+    "filter",
+    "io",
+    "label",
+    "llm",
+    "plugins",
+    "rate",
+    "schema",
+}
+
 
 def __getattr__(name: str) -> object:
+    if name in _SUBMODULES:
+        module = import_module(f"honestroles.{name}")
+        globals()[name] = module
+        return module
+
     target = _LAZY_IMPORTS.get(name)
     if target is None:
         raise AttributeError(f"module 'honestroles' has no attribute '{name}'")

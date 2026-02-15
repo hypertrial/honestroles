@@ -5,6 +5,7 @@
 - `framework.md`
 - `objects.md`
 - `schema.md`
+- `source_schema.md`
 - `source_data_contract_v1.md`
 - `quickstart_contract.md`
 

@@ -8,7 +8,7 @@ The format is based on Keep a Changelog and the project follows Semantic Version
 
 ### Added
 - Source-data contract validation and normalization utilities.
-- Plugin registry for custom filter and label extensions.
+- Plugin registry for custom filter, label, and rate extensions.
 - Performance guardrail tests for core hot paths.
 - Source-data edge-case fixture pack and regression tests.
 - CI workflow with `ruff`, `mypy`, and `pytest` gates.

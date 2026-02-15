@@ -1,6 +1,6 @@
 # HonestRoles
 
-HonestRoles, developed by [Hypertrial](www.hypertrial.ai), is a Python package designed to transform raw job posting data into structured, scored, and searchable datasets.
+HonestRoles, developed by [Hypertrial](https://www.hypertrial.ai), is a Python package designed to transform raw job posting data into structured, scored, and searchable datasets.
 
 ## Features
 

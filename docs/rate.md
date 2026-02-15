@@ -12,10 +12,11 @@ into a composite rating.
 
 ### Public API reference
 
-#### `rate_jobs(df: pd.DataFrame, *, use_llm: bool = False, model: str = "llama3", ollama_url: str = "http://localhost:11434") -> pd.DataFrame`
+#### `rate_jobs(df: pd.DataFrame, *, use_llm: bool = False, model: str = "llama3", ollama_url: str = "http://localhost:11434", plugin_raters: list[str] | None = None, plugin_rater_kwargs: dict[str, dict[str, object]] | None = None) -> pd.DataFrame`
 
 Runs `rate_completeness` -> `rate_quality` -> `rate_composite`.
 Passes `use_llm`, `model`, and `ollama_url` to `rate_quality`.
+If `plugin_raters` are provided, registered rate plugins are applied after built-in scoring.
 
 #### `rate_completeness(...) -> pd.DataFrame`
 
