@@ -18,6 +18,12 @@ dependencies = [
   "requests",
 ]
 
+[project.urls]
+Homepage = "https://github.com/hypertrial/honestroles"
+Repository = "https://github.com/hypertrial/honestroles"
+Issues = "https://github.com/hypertrial/honestroles/issues"
+Documentation = "https://github.com/hypertrial/honestroles/tree/main/docs"
+
 [project.optional-dependencies]
 dev = [
   "pytest",
