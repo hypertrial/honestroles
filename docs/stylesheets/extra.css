@@ -1,7 +1,112 @@
-/* Minimal docs-level styling overrides. */
-:root {
-  --md-primary-fg-color: #005a52;
-  --md-accent-fg-color: #1c7c54;
+/* HonestRoles custom dark scheme palette. */
+[data-md-color-scheme="honestroles-dark"] {
+  --hr-bg-page: #1f1f44;
+  --hr-bg-header: #121325;
+  --hr-bg-divider: #171d37;
+  --hr-surface-input: #2f2f54;
+  --hr-surface-card-edge: #27274d;
+  --hr-text-primary: #fefefe;
+  --hr-text-secondary: #b0b0be;
+  --hr-text-muted: #6f6f88;
+  --hr-text-label: #958c98;
+  --hr-brand-primary: #47b9e7;
+  --hr-accent-primary: #fe9941;
+  --hr-accent-hover: #feab63;
+  --hr-accent-pressed: #d07d35;
+
+  --md-default-bg-color: var(--hr-bg-page);
+  --md-default-fg-color: var(--hr-text-primary);
+  --md-default-fg-color--light: var(--hr-text-secondary);
+  --md-default-fg-color--lighter: var(--hr-text-muted);
+  --md-default-fg-color--lightest: var(--hr-text-label);
+
+  --md-primary-fg-color: var(--hr-bg-header);
+  --md-primary-fg-color--light: var(--hr-bg-header);
+  --md-primary-fg-color--dark: var(--hr-bg-header);
+  --md-primary-bg-color: var(--hr-text-primary);
+
+  --md-accent-fg-color: var(--hr-accent-primary);
+  --md-accent-fg-color--transparent: rgba(254, 153, 65, 0.18);
+}
+
+/* Force the main reading area to a single flat color (no gradients/images). */
+[data-md-color-scheme="honestroles-dark"] .md-main,
+[data-md-color-scheme="honestroles-dark"] .md-main__inner,
+[data-md-color-scheme="honestroles-dark"] .md-content,
+[data-md-color-scheme="honestroles-dark"] .md-content__inner,
+[data-md-color-scheme="honestroles-dark"] .md-container {
+  background-color: var(--hr-bg-page) !important;
+  background-image: none !important;
+}
+
+[data-md-color-scheme="honestroles-dark"] .md-header,
+[data-md-color-scheme="honestroles-dark"] .md-tabs {
+  background-color: var(--hr-bg-header);
+}
+
+[data-md-color-scheme="honestroles-dark"] .md-header,
+[data-md-color-scheme="honestroles-dark"] .md-tabs,
+[data-md-color-scheme="honestroles-dark"] .md-sidebar,
+[data-md-color-scheme="honestroles-dark"] .md-nav,
+[data-md-color-scheme="honestroles-dark"] .md-search__inner,
+[data-md-color-scheme="honestroles-dark"] .md-search__scrollwrap,
+[data-md-color-scheme="honestroles-dark"] .md-search-result,
+[data-md-color-scheme="honestroles-dark"] .md-typeset table:not([class]),
+[data-md-color-scheme="honestroles-dark"] .md-typeset .admonition,
+[data-md-color-scheme="honestroles-dark"] .md-typeset details {
+  border-color: var(--hr-bg-divider);
+}
+
+[data-md-color-scheme="honestroles-dark"] .md-search__input,
+[data-md-color-scheme="honestroles-dark"] .md-search__output,
+[data-md-color-scheme="honestroles-dark"] .md-search-result__meta,
+[data-md-color-scheme="honestroles-dark"] .md-typeset pre > code,
+[data-md-color-scheme="honestroles-dark"] .md-typeset code {
+  background-color: var(--hr-surface-input);
+}
+
+[data-md-color-scheme="honestroles-dark"] .md-typeset,
+[data-md-color-scheme="honestroles-dark"] .md-nav__title,
+[data-md-color-scheme="honestroles-dark"] .md-nav__item .md-nav__link--active,
+[data-md-color-scheme="honestroles-dark"] .md-search-result__title {
+  color: var(--hr-text-primary);
+}
+
+[data-md-color-scheme="honestroles-dark"] .md-nav__link,
+[data-md-color-scheme="honestroles-dark"] .md-ellipsis,
+[data-md-color-scheme="honestroles-dark"] .md-typeset p,
+[data-md-color-scheme="honestroles-dark"] .md-typeset li,
+[data-md-color-scheme="honestroles-dark"] .md-search-result__article {
+  color: var(--hr-text-secondary);
+}
+
+[data-md-color-scheme="honestroles-dark"] .md-typeset small,
+[data-md-color-scheme="honestroles-dark"] .md-search-result__meta {
+  color: var(--hr-text-muted);
+}
+
+[data-md-color-scheme="honestroles-dark"] .md-typeset a {
+  color: var(--hr-brand-primary);
+}
+
+[data-md-color-scheme="honestroles-dark"] .md-typeset a:hover {
+  color: var(--hr-accent-hover);
+}
+
+[data-md-color-scheme="honestroles-dark"] .md-typeset .md-button--primary {
+  background-color: var(--hr-accent-primary);
+  border-color: var(--hr-accent-primary);
+  color: #121325;
+}
+
+[data-md-color-scheme="honestroles-dark"] .md-typeset .md-button--primary:hover {
+  background-color: var(--hr-accent-hover);
+  border-color: var(--hr-accent-hover);
+}
+
+[data-md-color-scheme="honestroles-dark"] .md-typeset .md-button--primary:active {
+  background-color: var(--hr-accent-pressed);
+  border-color: var(--hr-accent-pressed);
 }
 
 .md-typeset h1,
