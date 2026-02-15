@@ -14,6 +14,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _parse_llm_score(value: object) -> float:
+    if not isinstance(value, (int, float, str, bytes, bytearray)):
+        raise ValueError("LLM score is not numeric.")
     try:
         parsed = float(value)
     except (TypeError, ValueError):

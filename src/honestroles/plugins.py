@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from importlib.metadata import entry_points
 from pathlib import Path
@@ -93,10 +93,13 @@ def _normalize_plugin_spec(
         api_version = str(spec.get("api_version", SUPPORTED_PLUGIN_API_VERSION))
         plugin_version = str(spec.get("plugin_version", "0.1.0"))
         raw_capabilities = spec.get("capabilities", (kind,))
+        capabilities: tuple[str, ...]
         if isinstance(raw_capabilities, str):
             capabilities = (raw_capabilities,)
+        elif isinstance(raw_capabilities, Iterable):
+            capabilities = tuple(str(item) for item in raw_capabilities)
         else:
-            capabilities = tuple(str(item) for item in raw_capabilities)  # type: ignore[arg-type]
+            raise TypeError("spec.capabilities must be a string or iterable of strings.")
         resolved = PluginSpec(
             api_version=api_version,
             plugin_version=plugin_version,
@@ -304,7 +307,9 @@ def _get_entry_points_for_group(group: str) -> list[Any]:
     discovered = entry_points()
     if hasattr(discovered, "select"):
         return list(discovered.select(group=group))
-    return list(discovered.get(group, []))  # type: ignore[no-any-return]
+    if isinstance(discovered, Mapping):
+        return list(discovered.get(group, []))
+    return []
 
 
 def _register_loaded_plugin(
@@ -331,11 +336,11 @@ def _register_loaded_plugin(
         )
 
     if plugin_kind == "filter":
-        register_filter_plugin(name, plugin, overwrite=overwrite, spec=spec)  # type: ignore[arg-type]
+        register_filter_plugin(name, plugin, overwrite=overwrite, spec=spec)
     elif plugin_kind == "label":
-        register_label_plugin(name, plugin, overwrite=overwrite, spec=spec)  # type: ignore[arg-type]
+        register_label_plugin(name, plugin, overwrite=overwrite, spec=spec)
     else:
-        register_rate_plugin(name, plugin, overwrite=overwrite, spec=spec)  # type: ignore[arg-type]
+        register_rate_plugin(name, plugin, overwrite=overwrite, spec=spec)
     return name
 
 
