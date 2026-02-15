@@ -3,6 +3,8 @@
 ## Core
 
 - `framework.md`
+- `docs_stack.md`
+- `page_template.md`
 - `objects.md`
 - `schema.md`
 - `source_schema.md`
@@ -25,3 +27,8 @@
 - `plugins/author_guide.md`
 - `plugins/compatibility.md`
 - `performance.md`
+
+## API
+
+- `api/index.md`
+- `api/reference.md`

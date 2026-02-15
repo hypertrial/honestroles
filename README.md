@@ -76,6 +76,17 @@ df = hr.rate_jobs(df, use_llm=False)
 See `/docs/quickstart_contract.md` and `/docs/source_data_contract_v1.md`.
 
 Documentation index: `/docs/index.md`.
+Docs stack: `/docs/docs_stack.md`.
+
+Build docs locally:
+```bash
+pip install -e ".[docs]"
+mkdocs serve
+```
+
+Deploy docs on GitHub Pages:
+1. Ensure repository **Settings -> Pages -> Build and deployment -> Source** is set to **GitHub Actions**.
+2. Push to `main` to trigger `.github/workflows/docs-pages.yml`.
 
 ## Core Modules
 

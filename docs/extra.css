@@ -1,0 +1,11 @@
+/* Minimal docs-level styling overrides. */
+:root {
+  --md-primary-fg-color: #005a52;
+  --md-accent-fg-color: #1c7c54;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  letter-spacing: 0.01em;
+}

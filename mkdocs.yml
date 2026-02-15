@@ -1,0 +1,71 @@
+site_name: HonestRoles Docs
+site_description: Documentation for the HonestRoles library
+site_url: https://hypertrial.github.io/honestroles
+repo_url: https://github.com/hypertrial/honestroles
+repo_name: hypertrial/honestroles
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+extra_css:
+  - extra.css
+
+nav:
+  - Home: index.md
+  - Core:
+      - Framework: framework.md
+      - Docs Stack: docs_stack.md
+      - Page Template: page_template.md
+      - Objects: objects.md
+      - Schema: schema.md
+      - Source Schema: source_schema.md
+      - Source Data Contract v1: source_data_contract_v1.md
+      - Contract-First Quickstart: quickstart_contract.md
+  - Processing:
+      - Clean: clean.md
+      - Filter: filter.md
+      - Label: label.md
+      - Rate: rate.md
+      - LLM: llm.md
+      - IO: io.md
+  - Plugins:
+      - Overview: plugins.md
+      - API Contract: plugins/api_contract.md
+      - Author Guide: plugins/author_guide.md
+      - Compatibility: plugins/compatibility.md
+  - Operations:
+      - Performance: performance.md
+  - API Reference:
+      - Overview: api/index.md
+      - Python API: api/reference.md
