@@ -46,6 +46,12 @@ def test_label_seniority_empty_title() -> None:
     assert labeled["seniority"].tolist() == [None, None]
 
 
+def test_label_seniority_explicit_none_object_title() -> None:
+    df = pd.DataFrame({"title": pd.Series([None], dtype="object")})
+    labeled = label_seniority(df)
+    assert labeled["seniority"].tolist() == [None]
+
+
 def test_label_seniority_nan_and_non_string_title() -> None:
     df = pd.DataFrame({"title": [float("nan"), 123]})
     labeled = label_seniority(df)

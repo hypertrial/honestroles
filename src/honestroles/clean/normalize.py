@@ -315,18 +315,25 @@ def normalize_locations(
         regions.append(parsed.region)
         countries.append(parsed.country)
         remote_types.append(parsed.remote_type)
-    result[city_column] = cities
-    result[region_column] = regions
-    result[country_column] = countries
+    result[city_column] = pd.Series(cities, dtype="object")
+    result[region_column] = pd.Series(regions, dtype="object")
+    result[country_column] = pd.Series(countries, dtype="object")
+    result[city_column] = result[city_column].where(result[city_column].notna(), None)
+    result[region_column] = result[region_column].where(result[region_column].notna(), None)
+    result[country_column] = result[country_column].where(result[country_column].notna(), None)
 
     if remote_flag_column in result.columns:
         remote_flags = result[remote_flag_column].fillna(False).astype(bool).tolist()
-        result[remote_type_column] = [
+        remote_values = [
             "remote" if (flag or remote == "remote") else None
             for flag, remote in zip(remote_flags, remote_types)
         ]
+        result[remote_type_column] = pd.Series(remote_values, dtype="object")
     else:
-        result[remote_type_column] = remote_types
+        result[remote_type_column] = pd.Series(remote_types, dtype="object")
+    result[remote_type_column] = result[remote_type_column].where(
+        result[remote_type_column].notna(), None
+    )
     return result
 
 

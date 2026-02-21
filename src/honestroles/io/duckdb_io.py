@@ -4,6 +4,7 @@ import re
 
 import duckdb
 import pandas as pd
+from pandas.api.types import is_object_dtype, is_string_dtype
 
 from honestroles.io.dataframe import validate_dataframe
 
@@ -14,6 +15,22 @@ _FORBIDDEN_QUERY_TOKENS_RE = re.compile(
     r"replace|truncate|vacuum)\b",
     re.IGNORECASE,
 )
+
+
+def _coerce_duckdb_compatible(df: pd.DataFrame) -> pd.DataFrame:
+    """Coerce pandas extension dtypes that DuckDB register may not support."""
+    columns_to_convert = [
+        column
+        for column in df.columns
+        if is_string_dtype(df[column].dtype) and not is_object_dtype(df[column].dtype)
+    ]
+    if not columns_to_convert:
+        return df
+
+    result = df.copy()
+    for column in columns_to_convert:
+        result[column] = result[column].astype("object")
+    return result
 
 
 def _validate_table_name(table: str) -> str:
@@ -71,7 +88,7 @@ def write_duckdb(
 ) -> None:
     table_name = _validate_table_name(table)
     temp_name = "__honestroles_df"
-    conn.register(temp_name, df)
+    conn.register(temp_name, _coerce_duckdb_compatible(df))
     try:
         clause = "OR REPLACE " if overwrite else ""
         conn.execute(f"CREATE {clause}TABLE {table_name} AS SELECT * FROM {temp_name}")

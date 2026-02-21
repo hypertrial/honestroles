@@ -22,3 +22,24 @@ def build_quality_prompt(text: str) -> str:
         "Return JSON only, no extra text.\n\n"
         f"Job description:\n{text}"
     )
+
+
+def build_job_signal_prompt(*, title: str, description: str) -> str:
+    return (
+        "Extract structured job-matching signals for an early-career data candidate. "
+        "Return valid JSON only with this exact schema: "
+        "{"
+        '"required_skills": ["..."], '
+        '"preferred_skills": ["..."], '
+        '"experience_years_min": number|null, '
+        '"experience_years_max": number|null, '
+        '"entry_level_likely": true|false|null, '
+        '"visa_sponsorship_signal": true|false|null, '
+        '"application_friction_score": number 0..1, '
+        '"role_clarity_score": number 0..1, '
+        '"confidence": number 0..1, '
+        '"reason": "short text"'
+        "}. "
+        "Do not include markdown.\n\n"
+        f"Title:\n{title}\n\nDescription:\n{description}"
+    )

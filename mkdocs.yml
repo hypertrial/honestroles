@@ -85,6 +85,7 @@ nav:
           - Filter: reference/filter.md
           - Label: reference/label.md
           - Rate: reference/rate.md
+          - Match: reference/match.md
           - LLM: reference/llm.md
           - IO: reference/io.md
       - Plugins:
@@ -99,3 +100,4 @@ nav:
       - Docs Stack: maintainers/docs_stack.md
       - Page Template: maintainers/page_template.md
       - Performance Guardrails: maintainers/performance.md
+      - Agent-First Roadmap: maintainers/roadmap_agent_first.md

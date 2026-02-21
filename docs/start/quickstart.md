@@ -38,3 +38,11 @@ df = hr.rate_jobs(df, use_llm=False)
 ```python
 hr.write_parquet(df, "jobs_processed.parquet")
 ```
+
+## 6) Rank for a candidate profile
+
+```python
+profile = hr.CandidateProfile.mds_new_grad()
+ranked = hr.rank_jobs(df, profile=profile, use_llm_signals=False, top_n=100)
+plan = hr.build_application_plan(ranked, profile=profile, top_n=20)
+```

@@ -30,6 +30,19 @@ def test_normalize_locations_empty_values() -> None:
     assert normalized["country"].tolist() == [None, None]
 
 
+def test_normalize_locations_explicit_none_object_value() -> None:
+    df = pd.DataFrame(
+        {
+            "location_raw": pd.Series([None], dtype="object"),
+            "remote_flag": [False],
+        }
+    )
+    normalized = normalize_locations(df)
+    assert normalized.loc[0, "city"] is None
+    assert normalized.loc[0, "region"] is None
+    assert normalized.loc[0, "country"] is None
+
+
 def test_normalize_locations_nan_and_non_string_values() -> None:
     df = pd.DataFrame({"location_raw": [float("nan"), 123], "remote_flag": [False, False]})
     normalized = normalize_locations(df)

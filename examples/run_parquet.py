@@ -15,9 +15,11 @@ def run(input_path: Path, output_path: Path) -> None:
     df = hr.filter_jobs(df, remote_only=False)
     print(f"Filtering complete. {len(df)} rows remain. Adding heuristic labels...")
     df = hr.label_jobs(df, use_llm=False)
-    print(f"Labeling complete. Writing output to {output_path}...")
+    print("Labeling complete. Scoring jobs...")
+    df = hr.rate_jobs(df, use_llm=False)
+    print(f"Scoring complete. Writing output to {output_path}...")
     hr.write_parquet(df, output_path)
-    print("Done. Output parquet contains cleaned, filtered, labeled job data.")
+    print("Done. Output parquet contains cleaned, filtered, labeled, scored job data.")
 
 
 def parse_args() -> argparse.Namespace:

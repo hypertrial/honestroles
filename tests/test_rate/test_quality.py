@@ -151,3 +151,14 @@ def test_rate_quality_llm_handles_non_finite_scores(monkeypatch) -> None:
     rated = rate_quality(df, use_llm=True)
     assert rated["quality_score_llm"].tolist() == [0.0, 0.0]
     assert rated["quality_reason_llm"].tolist() == ["", ""]
+
+
+def test_parse_llm_score_rejects_non_numeric_types() -> None:
+    with pytest.raises(ValueError, match="not numeric"):
+        quality_module._parse_llm_score({})  # type: ignore[arg-type]
+
+
+def test_rate_quality_heuristic_none_value_branch() -> None:
+    df = pd.DataFrame({"description_text": pd.Series([None], dtype="object")})
+    rated = rate_quality(df)
+    assert rated["quality_score"].tolist() == [0.0]

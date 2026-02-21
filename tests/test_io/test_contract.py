@@ -1,6 +1,7 @@
 import pandas as pd
 import pytest
 
+import honestroles.io.contract as contract_module
 from honestroles.io import (
     normalize_source_data_contract,
     validate_source_data_contract,
@@ -205,6 +206,26 @@ def test_validate_source_data_contract_can_disable_format_checks(minimal_df: pd.
     df = minimal_df.copy()
     df["apply_url"] = ["example.com/apply"]
     validate_source_data_contract(df, enforce_formats=False)
+
+
+def test_contract_is_missing_handles_none() -> None:
+    assert contract_module._is_missing(None) is True
+
+
+def test_validate_source_data_contract_skips_missing_optional_format_fields(
+    minimal_df: pd.DataFrame,
+) -> None:
+    df = minimal_df.copy()
+    df["posted_at"] = [None]
+    df["apply_url"] = [None]
+    df["skills"] = [None]
+    df["remote_flag"] = [None]
+    df["salary_currency"] = [None]
+    df["salary_interval"] = [None]
+    df["salary_min"] = [None]
+    df["salary_max"] = [100000]
+
+    validate_source_data_contract(df, require_non_null=False, enforce_formats=True)
 
 
 def test_normalize_source_data_contract_timestamps_and_arrays() -> None:

@@ -8,6 +8,7 @@ HonestRoles, developed by [Hypertrial](https://www.hypertrial.ai), is a Python p
 - **🔍 Filter**: High-performance `FilterChain` with predicates for location, salary, skills, and keyword matching.
 - **🏷️ Label**: Automated seniority detection, role categorization, and tech stack extraction.
 - **⭐️ Rate**: Comprehensive job description scoring for completeness and quality.
+- **🎯 Match**: Candidate-profile-based ranking with explainable fit breakdowns and next actions.
 - **🤖 LLM Integration**: seamless integration with local Ollama models (e.g., Llama 3) for deep semantic analysis.
 
 ## Installation
@@ -48,6 +49,11 @@ df = hr.label_jobs(df, use_llm=True, model="llama3")
 
 # 4. Rate job quality
 df = hr.rate_jobs(df)
+
+# 5. Rank for a candidate profile
+profile = hr.CandidateProfile.mds_new_grad()
+ranked = hr.rank_jobs(df, profile=profile, use_llm_signals=False, top_n=100)
+plan = hr.build_application_plan(ranked, profile=profile, top_n=20)
 
 # Access data using schema constants
 print(df[[schema.TITLE, schema.CITY, schema.COUNTRY]].head())
@@ -126,6 +132,7 @@ Then enable LLM-based labeling or quality rating:
 ```python
 df = hr.label_jobs(df, use_llm=True, model="llama3")
 df = hr.rate_jobs(df, use_llm=True, model="llama3")
+ranked = hr.rank_jobs(df, profile=hr.CandidateProfile.mds_new_grad(), use_llm_signals=True, model="llama3")
 ```
 
 ## Package Layout
@@ -137,6 +144,7 @@ src/honestroles/
 ├── io/           # Parquet and DuckDB I/O with validation
 ├── label/        # Seniority, Category, and Tech Stack labeling
 ├── llm/          # Ollama client and prompt templates
+├── match/        # Candidate profile matching, ranking, and action plans
 ├── rate/         # Completeness, Quality, and Composite ratings
 └── schema.py     # Centralized column name constants
 ```

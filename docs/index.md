@@ -18,6 +18,7 @@
 - `reference/filter.md`
 - `reference/label.md`
 - `reference/rate.md`
+- `reference/match.md`
 - `reference/llm.md`
 - `reference/io.md`
 - `reference/plugins.md`
@@ -35,3 +36,4 @@
 - `maintainers/docs_stack.md`
 - `maintainers/page_template.md`
 - `maintainers/performance.md`
+- `maintainers/roadmap_agent_first.md`

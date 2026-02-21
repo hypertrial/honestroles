@@ -70,6 +70,15 @@ def test_filter_plugin_spec_invalid_type_raises() -> None:
         )
 
 
+def test_filter_plugin_spec_invalid_capabilities_type_raises() -> None:
+    with pytest.raises(TypeError, match="capabilities"):
+        register_filter_plugin(
+            "bad_capabilities",
+            lambda df: pd.Series([True] * len(df), index=df.index),
+            spec={"api_version": "1.0", "capabilities": 123},
+        )
+
+
 def test_get_filter_plugin_spec_unknown_raises() -> None:
     with pytest.raises(KeyError, match="Unknown filter plugin"):
         get_filter_plugin_spec("missing")
@@ -307,3 +316,8 @@ def test_load_plugins_from_module_import_error_for_bad_file_spec(tmp_path, monke
     monkeypatch.setattr(plugins_module.importlib.util, "spec_from_file_location", lambda *a, **k: None)
     with pytest.raises(ImportError, match="Cannot import plugin module"):
         load_plugins_from_module(str(plugin_file))
+
+
+def test_get_entry_points_for_group_unknown_discovery_shape(monkeypatch) -> None:
+    monkeypatch.setattr(plugins_module, "entry_points", lambda: object())
+    assert plugins_module._get_entry_points_for_group("honestroles.filter_plugins") == []

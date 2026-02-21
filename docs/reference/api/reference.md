@@ -20,6 +20,10 @@
 
 ::: honestroles.rate
 
+## `honestroles.match`
+
+::: honestroles.match
+
 ## `honestroles.io`
 
 ::: honestroles.io

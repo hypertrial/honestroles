@@ -24,6 +24,12 @@ def test_strip_html_none_or_empty_values() -> None:
     assert cleaned["description_text"].tolist() == [None, None, None]
 
 
+def test_strip_html_explicit_none_object_value() -> None:
+    df = pd.DataFrame({"description_html": pd.Series([None], dtype="object")})
+    cleaned = strip_html(df)
+    assert cleaned["description_text"].tolist() == [None]
+
+
 def test_strip_html_nan_and_non_string_values() -> None:
     df = pd.DataFrame({"description_html": [float("nan"), 123]})
     cleaned = strip_html(df)

@@ -32,6 +32,27 @@ SALARY_TEXT = "salary_text"
 LANGUAGES = "languages"
 BENEFITS = "benefits"
 VISA_SPONSORSHIP = "visa_sponsorship"
+TECH_STACK = "tech_stack"
+QUALITY_SCORE = "quality_score"
+RATING = "rating"
+
+# Match/ranking derived columns (agent-facing outputs)
+FIT_SCORE = "fit_score"
+FIT_BREAKDOWN = "fit_breakdown"
+MISSING_REQUIREMENTS = "missing_requirements"
+WHY_MATCH = "why_match"
+NEXT_ACTIONS = "next_actions"
+REQUIRED_SKILLS_EXTRACTED = "required_skills_extracted"
+PREFERRED_SKILLS_EXTRACTED = "preferred_skills_extracted"
+EXPERIENCE_YEARS_MIN = "experience_years_min"
+EXPERIENCE_YEARS_MAX = "experience_years_max"
+ENTRY_LEVEL_LIKELY = "entry_level_likely"
+VISA_SPONSORSHIP_SIGNAL = "visa_sponsorship_signal"
+APPLICATION_FRICTION_SCORE = "application_friction_score"
+ROLE_CLARITY_SCORE = "role_clarity_score"
+SIGNAL_CONFIDENCE = "signal_confidence"
+SIGNAL_SOURCE = "signal_source"
+SIGNAL_REASON = "signal_reason"
 
 REQUIRED_COLUMNS = {
     JOB_KEY,

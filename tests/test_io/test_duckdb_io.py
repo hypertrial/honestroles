@@ -10,6 +10,7 @@ from honestroles.io import (
     validate_source_data_contract,
     write_duckdb,
 )
+from honestroles.io.duckdb_io import _coerce_duckdb_compatible
 
 
 def test_duckdb_roundtrip(sample_df: pd.DataFrame) -> None:
@@ -129,3 +130,16 @@ def test_duckdb_contract_validation_with_extra_columns_and_arrays(
 
     assert loaded["source_data_debug"].tolist() == ["trace-1"]
     assert list(loaded["skills"].iloc[0]) == ["Python", "SQL"]
+
+
+def test_coerce_duckdb_compatible_no_copy_when_not_needed() -> None:
+    df = pd.DataFrame({"a": ["x", "y"]}).astype({"a": "object"})
+    coerced = _coerce_duckdb_compatible(df)
+    assert coerced is df
+
+
+def test_coerce_duckdb_compatible_converts_string_extension_dtype() -> None:
+    df = pd.DataFrame({"a": pd.Series(["x", "y"], dtype="string")})
+    coerced = _coerce_duckdb_compatible(df)
+    assert coerced is not df
+    assert str(coerced["a"].dtype) == "object"
