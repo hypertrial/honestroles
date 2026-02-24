@@ -3,11 +3,11 @@ from __future__ import annotations
 import pandas as pd
 
 from honestroles.plugins import apply_filter_plugins, apply_label_plugins, apply_rate_plugins
-from honestroles_plugin_example.plugins import register_plugins
+from honestroles_plugin_example.plugins import register
 
 
 def test_template_plugin_contract() -> None:
-    register_plugins()
+    register()
     df = pd.DataFrame(
         {
             "remote_flag": [True, False],

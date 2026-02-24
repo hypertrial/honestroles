@@ -48,3 +48,13 @@ PRs should demonstrate:
 - No breaking plugin API changes without a major version plan.
 - No silent fallback when compatibility check fails.
 - New plugin loader behavior must be covered by tests.
+- Repository non-performance coverage gate must remain at 100%.
+
+## Validation Commands
+
+Run these before opening a plugin-related PR:
+
+```bash
+pytest tests/test_plugin_api_contract.py tests/test_plugin_compat_matrix.py -q
+pytest -m "not performance" --cov=src --cov=plugin_template/src --cov-fail-under=100 -q
+```

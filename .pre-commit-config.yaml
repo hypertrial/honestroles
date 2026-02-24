@@ -15,6 +15,6 @@ repos:
         pass_filenames: false
       - id: pytest-non-performance
         name: pytest (non-performance)
-        entry: python -m pytest -m "not performance" -q
+        entry: python -m pytest -m "not performance" --cov=src --cov=plugin_template/src --cov-report=term-missing --cov-fail-under=100 -q
         language: system
         pass_filenames: false

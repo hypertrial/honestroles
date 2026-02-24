@@ -51,8 +51,8 @@ packages = ["src/honestroles"]
 path = "src/honestroles/__about__.py"
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
-testpaths = ["tests"]
+pythonpath = ["src", "plugin_template/src"]
+testpaths = ["tests", "plugin_template/tests"]
 addopts = ["-n", "auto", "-m", "not performance"]
 markers = [
   "performance: runtime guardrail checks for hot paths",

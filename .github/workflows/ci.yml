@@ -51,20 +51,8 @@ jobs:
         if: matrix.python-version == '3.11'
         run: .venv/bin/python -m pytest -o addopts="" tests/test_plugins_index.py -q
 
-      - name: Plugin Runtime Coverage Gate
-        if: matrix.python-version == '3.11'
-        run: |
-          .venv/bin/python -m coverage erase
-          .venv/bin/python -m coverage run --source=honestroles.plugins -m pytest -o addopts="" \
-            tests/test_plugin_api_contract.py \
-            tests/test_plugin_compat_matrix.py \
-            tests/test_plugins_index.py \
-            tests/test_plugins.py \
-            -q
-          .venv/bin/python -m coverage report --show-missing --fail-under=99
-
       - name: Tests (non-performance)
-        run: .venv/bin/python -m pytest -o addopts="" -m "not performance" -q
+        run: .venv/bin/python -m pytest -o addopts="" -m "not performance" --cov=src --cov=plugin_template/src --cov-report=term-missing --cov-fail-under=100 -q
 
   performance:
     runs-on: ubuntu-latest

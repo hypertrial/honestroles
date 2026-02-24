@@ -13,9 +13,9 @@ If plugin API changed, describe compatibility impact:
 
 ## Validation
 
-- [ ] `pytest -m "not performance" -q`
+- [ ] `pytest -m "not performance" --cov=src --cov=plugin_template/src --cov-fail-under=100 -q`
 - [ ] `pytest tests/test_plugin_api_contract.py tests/test_plugin_compat_matrix.py -q`
-- [ ] Plugin runtime coverage gate passes (`honestroles.plugins`)
+- [ ] Repository coverage gate passes at 100%
 
 ## Checklist
 

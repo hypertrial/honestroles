@@ -151,9 +151,14 @@ src/honestroles/
 
 ## Testing
 
-Run the test suite with `pytest`:
+Run the default test suite (includes `tests/` and `plugin_template/tests/`) with `pytest`:
 ```bash
 pytest
+```
+
+Run the repository coverage gate (100% required):
+```bash
+pytest -m "not performance" --cov=src --cov=plugin_template/src --cov-report=term-missing --cov-fail-under=100 -q
 ```
 
 Run all CI-equivalent quality checks automatically before each local commit:
@@ -162,7 +167,7 @@ pip install -e ".[dev]"
 pre-commit install
 pre-commit run --all-files
 ```
-This installs a Git `pre-commit` hook that runs `ruff`, `mypy`, and `pytest -m "not performance" -q`.
+This installs a Git `pre-commit` hook that runs `ruff`, `mypy`, and the 100% coverage gate command above.
 
 ## Stability
 

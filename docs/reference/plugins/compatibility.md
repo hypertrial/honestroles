@@ -43,6 +43,7 @@ Before releasing a plugin:
 Before releasing `honestroles`:
 
 1. Run plugin compatibility tests.
-2. Review any API changes impacting plugin signatures.
-3. Update `docs/reference/plugins/api_contract.md` and migration notes.
-4. Bump major version for plugin API breaking changes.
+2. Run the non-performance repository coverage gate at 100%.
+3. Review any API changes impacting plugin signatures.
+4. Update `docs/reference/plugins/api_contract.md` and migration notes.
+5. Bump major version for plugin API breaking changes.
