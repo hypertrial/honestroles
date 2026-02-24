@@ -27,8 +27,6 @@ from honestroles.schema import (
 )
 from honestroles.clean.location_data import (
     CANADIAN_CITIES,
-    CANADIAN_BENEFIT_KEYWORDS,
-    CANADIAN_COMPLIANCE_KEYWORDS,
     CANADIAN_COUNTRY_KEYWORDS,
     CANADIAN_CURRENCY_KEYWORDS,
     CANADIAN_POSTAL_RE_PATTERN,
@@ -68,6 +66,14 @@ _CANADA_CONTEXT_RE = re.compile(
     re.IGNORECASE,
 )
 _CANADA_BASED_RE = re.compile(r"(?:canada|canadian)[- ]based", re.IGNORECASE)
+_CANADIAN_COUNTRY_KEYWORDS_RE = re.compile(
+    "|".join(re.escape(keyword) for keyword in sorted(CANADIAN_COUNTRY_KEYWORDS)),
+    re.IGNORECASE,
+)
+_CANADIAN_CURRENCY_KEYWORDS_RE = re.compile(
+    "|".join(re.escape(keyword) for keyword in sorted(CANADIAN_CURRENCY_KEYWORDS)),
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -128,71 +134,32 @@ def _has_us_address_signal(tokens: list[tuple[str, str]]) -> bool:
     return False
 
 
-def _is_missing(value: object) -> bool:
-    if value is None:
-        return True
-    if isinstance(value, float) and pd.isna(value):
-        return True
-    return False
+def _series_to_lower_text(series: pd.Series) -> pd.Series:
+    if series.dtype != object:
+        return series.astype("string").fillna("").str.lower()
+
+    list_mask = series.map(lambda value: isinstance(value, list))
+    text = pd.Series("", index=series.index, dtype="string")
+    if bool(list_mask.any()):
+        list_text = series.loc[list_mask].map(
+            lambda values: " ".join(str(item) for item in values)
+        )
+        text.loc[list_mask] = list_text.astype("string")
+    non_list_mask = ~list_mask
+    if bool(non_list_mask.any()):
+        text.loc[non_list_mask] = (
+            series.loc[non_list_mask].astype("string").fillna("")
+        )
+    return text.fillna("").str.lower()
 
 
-def _collect_text(row: pd.Series, columns: list[str]) -> str:
-    parts: list[str] = []
+def _combined_lower_text(df: pd.DataFrame, columns: list[str]) -> pd.Series:
+    text = pd.Series("", index=df.index, dtype="string")
     for column in columns:
-        if column not in row:
+        if column not in df.columns:
             continue
-        value = row[column]
-        if _is_missing(value):
-            continue
-        if isinstance(value, list):
-            parts.extend(str(item) for item in value)
-        else:
-            parts.append(str(value))
-    return " ".join(parts).lower()
-
-
-def _has_canada_context(text: str) -> bool:
-    if _CANADA_CONTEXT_RE.search(text):
-        return True
-    if _CANADA_BASED_RE.search(text):
-        return True
-    return False
-
-
-def _detect_canadian_signals(
-    row: pd.Series,
-    *,
-    text_columns: list[str],
-    salary_currency_column: str,
-    apply_url_column: str,
-) -> tuple[set[str], set[str]]:
-    text = _collect_text(row, text_columns + [apply_url_column])
-    signals: set[str] = set()
-    has_postal = _CANADIAN_POSTAL_RE.search(text) is not None
-    if has_postal:
-        signals.add("postal_code")
-    has_country_keyword = any(keyword in text for keyword in CANADIAN_COUNTRY_KEYWORDS)
-    has_context = _has_canada_context(text) if has_country_keyword else False
-    if has_context:
-        signals.add("country_keyword")
-    has_currency_keyword = any(keyword in text for keyword in CANADIAN_CURRENCY_KEYWORDS)
-    if has_currency_keyword:
-        signals.add("currency_keyword")
-    has_benefit = any(keyword in text for keyword in CANADIAN_BENEFIT_KEYWORDS)
-    has_compliance = any(keyword in text for keyword in CANADIAN_COMPLIANCE_KEYWORDS)
-    if salary_currency_column in row:
-        currency = row[salary_currency_column]
-        if isinstance(currency, str) and currency.strip().upper() == "CAD":
-            signals.add("salary_currency")
-            has_currency_keyword = True
-    if has_context:
-        if has_benefit:
-            signals.add("benefit_keyword")
-        if has_compliance:
-            signals.add("compliance_keyword")
-    strong_signal = has_postal or has_currency_keyword or has_context
-    provinces = _detect_provinces(text) if strong_signal else set()
-    return signals, provinces
+        text = text.str.cat(_series_to_lower_text(df[column]), sep=" ")
+    return text
 
 
 def _detect_provinces(text: str) -> set[str]:
@@ -273,6 +240,17 @@ def _classify_parts(parts: list[str]) -> tuple[str | None, str | None, str | Non
     return city, region, country
 
 
+def _parse_location_string(value: str) -> LocationResult:
+    cleaned = value.strip()
+    if not cleaned:
+        return LocationResult(None, None, None, None)
+    remote_type = "remote" if _detect_remote(cleaned) else None
+    primary = _extract_primary_location(cleaned)
+    parts = [part.strip() for part in primary.split(",") if part.strip()]
+    city, region, country = _classify_parts(parts)
+    return LocationResult(city, region, country, remote_type)
+
+
 def normalize_locations(
     df: pd.DataFrame,
     *,
@@ -288,33 +266,32 @@ def normalize_locations(
         LOGGER.warning("Location column %s not found; returning input DataFrame.", location_column)
         return df
     result = df.copy()
+    raw = result[location_column]
+    string_mask = raw.map(lambda value: isinstance(value, str)).astype("bool")
+    stripped = pd.Series("", index=result.index, dtype="string")
+    if bool(string_mask.any()):
+        stripped.loc[string_mask] = raw.loc[string_mask].astype("string").fillna("").str.strip()
+    non_empty_mask = stripped.ne("").fillna(False).astype("bool")
+    parse_mask = string_mask & non_empty_mask
 
-    def parse_location(value: str | None) -> LocationResult:
-        if value is None:
-            return LocationResult(None, None, None, None)
-        if isinstance(value, float) and pd.isna(value):
-            return LocationResult(None, None, None, None)
-        if not isinstance(value, str):
-            return LocationResult(None, None, None, None)
-        if not value:
-            return LocationResult(None, None, None, None)
-        cleaned = value.strip()
-        remote_type = "remote" if _detect_remote(cleaned) else None
-        primary = _extract_primary_location(cleaned)
-        parts = [part.strip() for part in primary.split(",") if part.strip()]
-        city, region, country = _classify_parts(parts)
-        return LocationResult(city, region, country, remote_type)
+    parsed = pd.Series(
+        [LocationResult(None, None, None, None)] * len(result),
+        index=result.index,
+        dtype="object",
+    )
+    if bool(parse_mask.any()):
+        unique_locations = pd.unique(stripped.loc[parse_mask].astype(str))
+        parsed_map = {
+            location: _parse_location_string(location)
+            for location in unique_locations
+        }
+        parsed.loc[parse_mask] = stripped.loc[parse_mask].map(parsed_map)
 
-    cities: list[str | None] = []
-    regions: list[str | None] = []
-    countries: list[str | None] = []
-    remote_types: list[str | None] = []
-    for value in result[location_column].tolist():
-        parsed = parse_location(value)
-        cities.append(parsed.city)
-        regions.append(parsed.region)
-        countries.append(parsed.country)
-        remote_types.append(parsed.remote_type)
+    parsed_values = parsed.tolist()
+    cities = [item.city for item in parsed_values]
+    regions = [item.region for item in parsed_values]
+    countries = [item.country for item in parsed_values]
+    remote_types = [item.remote_type for item in parsed_values]
     result[city_column] = pd.Series(cities, dtype="object")
     result[region_column] = pd.Series(regions, dtype="object")
     result[country_column] = pd.Series(countries, dtype="object")
@@ -352,41 +329,94 @@ def enrich_country_from_context(
     if country_column not in df.columns:
         return df
     result = df.copy()
-    text_columns = [description_column, title_column, salary_text_column, benefits_column]
-    countries = result[country_column].tolist()
-    regions = (
-        result[region_column].tolist()
-        if region_column in result.columns
-        else [None] * len(result)
+    text_columns = [
+        description_column,
+        title_column,
+        salary_text_column,
+        benefits_column,
+        apply_url_column,
+    ]
+    countries = result[country_column].copy().astype("object")
+    missing_country = countries.isna()
+
+    if region_column not in result.columns:
+        if not bool(missing_country.any()):
+            return result
+        candidate_index = missing_country
+        subset = result.loc[candidate_index]
+        text = _combined_lower_text(subset, text_columns)
+        has_country_keyword = text.str.contains(_CANADIAN_COUNTRY_KEYWORDS_RE, na=False)
+        has_context = has_country_keyword & (
+            text.str.contains(_CANADA_CONTEXT_RE, na=False)
+            | text.str.contains(_CANADA_BASED_RE, na=False)
+        )
+        has_postal = text.str.contains(_CANADIAN_POSTAL_RE, na=False)
+        has_currency_keyword = text.str.contains(_CANADIAN_CURRENCY_KEYWORDS_RE, na=False)
+        salary_currency_cad = pd.Series(False, index=subset.index, dtype="bool")
+        if salary_currency_column in subset.columns:
+            salary_currency_cad = (
+                subset[salary_currency_column]
+                .astype("string")
+                .fillna("")
+                .str.strip()
+                .str.upper()
+                .eq("CAD")
+            )
+        ca_candidate = has_postal | has_context | has_currency_keyword | salary_currency_cad
+        countries.loc[ca_candidate.index[ca_candidate]] = "CA"
+        result[country_column] = countries
+        return result
+
+    regions = result[region_column].copy().astype("object")
+    region_missing = regions.isna()
+    ca_missing_region = countries.astype("string").fillna("").str.upper().eq("CA") & region_missing
+
+    candidate_index = missing_country | ca_missing_region
+    if not bool(candidate_index.any()):
+        return result
+
+    subset = result.loc[candidate_index]
+    text = _combined_lower_text(subset, text_columns)
+
+    missing_subset = missing_country.loc[candidate_index]
+    missing_subset_text = text.loc[missing_subset]
+    has_country_keyword = missing_subset_text.str.contains(_CANADIAN_COUNTRY_KEYWORDS_RE, na=False)
+    has_context = has_country_keyword & (
+        missing_subset_text.str.contains(_CANADA_CONTEXT_RE, na=False)
+        | missing_subset_text.str.contains(_CANADA_BASED_RE, na=False)
     )
+    has_postal = missing_subset_text.str.contains(_CANADIAN_POSTAL_RE, na=False)
+    has_currency_keyword = missing_subset_text.str.contains(_CANADIAN_CURRENCY_KEYWORDS_RE, na=False)
 
-    for index in range(len(result)):
-        country = countries[index]
-        region = regions[index]
-        if _is_missing(country):
-            signals, provinces = _detect_canadian_signals(
-                result.iloc[index],
-                text_columns=text_columns,
-                salary_currency_column=salary_currency_column,
-                apply_url_column=apply_url_column,
-            )
-            if signals:
-                country = "CA"
-                if _is_missing(region) and len(provinces) == 1:
-                    region = next(iter(provinces))
-        elif isinstance(country, str) and country.upper() == "CA" and _is_missing(region):
-            text = _collect_text(
-                result.iloc[index], text_columns + [apply_url_column]
-            )
-            provinces = _detect_provinces(text)
-            if len(provinces) == 1:
-                region = next(iter(provinces))
-        countries[index] = country
-        regions[index] = region
+    salary_currency_cad = pd.Series(False, index=missing_subset_text.index, dtype="bool")
+    if salary_currency_column in subset.columns:
+        salary_currency_cad = (
+            subset.loc[missing_subset_text.index, salary_currency_column]
+            .astype("string")
+            .fillna("")
+            .str.strip()
+            .str.upper()
+            .eq("CAD")
+        )
 
+    ca_candidate = has_postal | has_context | has_currency_keyword | salary_currency_cad
+    countries.loc[ca_candidate.index[ca_candidate]] = "CA"
     result[country_column] = countries
-    if region_column in result.columns:
-        result[region_column] = regions
+
+    new_ca_region_missing = ca_candidate & region_missing.loc[ca_candidate.index]
+    needs_region_index = new_ca_region_missing.index[new_ca_region_missing].union(
+        ca_missing_region.index[ca_missing_region]
+    )
+    if len(needs_region_index) > 0:
+        provinces = text.loc[needs_region_index.intersection(text.index)].map(_detect_provinces)
+        has_single_province = provinces.map(len).eq(1)
+        if bool(has_single_province.any()):
+            regions.loc[has_single_province.index[has_single_province]] = (
+                provinces.loc[has_single_province]
+                .map(lambda matched: next(iter(matched)))
+                .astype("object")
+            )
+    result[region_column] = regions
     return result
 
 

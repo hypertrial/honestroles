@@ -44,20 +44,35 @@ def filter_jobs(
     plugin_filter_mode: str = "and",
 ) -> pd.DataFrame:
     chain = FilterChain()
-    chain.add(
-        by_location,
-        cities=cities,
-        regions=regions,
-        countries=countries,
-        remote_only=remote_only,
-    )
-    chain.add(by_salary, min_salary=min_salary, max_salary=max_salary, currency=currency)
-    chain.add(by_skills, required=required_skills, excluded=excluded_skills)
-    chain.add(
-        by_keywords, include=include_keywords, exclude=exclude_keywords, columns=keyword_columns
-    )
-    chain.add(by_completeness, required_fields=required_fields)
-    filtered = chain.apply(df)
+    has_predicate = False
+    if bool(cities or regions or countries or remote_only):
+        chain.add(
+            by_location,
+            cities=cities,
+            regions=regions,
+            countries=countries,
+            remote_only=remote_only,
+        )
+        has_predicate = True
+    if min_salary is not None or max_salary is not None or bool(currency):
+        chain.add(by_salary, min_salary=min_salary, max_salary=max_salary, currency=currency)
+        has_predicate = True
+    if bool(required_skills or excluded_skills):
+        chain.add(by_skills, required=required_skills, excluded=excluded_skills)
+        has_predicate = True
+    if bool(include_keywords or exclude_keywords):
+        chain.add(
+            by_keywords,
+            include=include_keywords,
+            exclude=exclude_keywords,
+            columns=keyword_columns,
+        )
+        has_predicate = True
+    if bool(required_fields):
+        chain.add(by_completeness, required_fields=required_fields)
+        has_predicate = True
+
+    filtered = chain.apply(df) if has_predicate else df.reset_index(drop=True)
     if not plugin_filters:
         return filtered
     return apply_filter_plugins(

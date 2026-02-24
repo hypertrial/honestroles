@@ -69,3 +69,9 @@ def test_strip_html_preserves_existing_text_when_overwrite_disabled() -> None:
     )
     cleaned = strip_html(df, overwrite_existing=False)
     assert cleaned.loc[0, "description_text"] == "Already normalized"
+
+
+def test_strip_html_overwrite_disabled_creates_text_column_when_missing() -> None:
+    df = pd.DataFrame({"description_html": ["<p>Hello</p>"]})
+    cleaned = strip_html(df, overwrite_existing=False)
+    assert cleaned.loc[0, "description_text"] == "Hello"

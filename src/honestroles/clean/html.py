@@ -43,15 +43,7 @@ def strip_html(
         return df
     result = df.copy()
 
-    def convert(value: str | None) -> str | None:
-        if value is None:
-            return None
-        if isinstance(value, float) and pd.isna(value):
-            return None
-        if not isinstance(value, str):
-            return None
-        if value == "":
-            return None
+    def convert(value: str) -> str | None:
         soup = BeautifulSoup(value, "html.parser")
         text = soup.get_text(separator="\n")
         text = _strip_boilerplate(text)

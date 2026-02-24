@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 import pandas as pd
 
 from honestroles.schema import CONTENT_HASH
@@ -22,7 +24,10 @@ def compact_snapshots(
     first_seen_column: str = "first_seen",
     last_seen_column: str = "last_seen",
     snapshot_count_column: str = "snapshot_count",
+    timestamp_output: Literal["iso8601", "datetime"] = "iso8601",
 ) -> pd.DataFrame:
+    if timestamp_output not in {"iso8601", "datetime"}:
+        raise ValueError("timestamp_output must be 'iso8601' or 'datetime'")
     if not key_columns:
         result = df.copy()
         result[snapshot_count_column] = 1
@@ -41,8 +46,13 @@ def compact_snapshots(
     if df.empty:
         result = df.copy()
         result[snapshot_count_column] = pd.Series([], dtype="int64")
-        result[first_seen_column] = pd.Series([], dtype="object")
-        result[last_seen_column] = pd.Series([], dtype="object")
+        if timestamp_output == "datetime":
+            empty_ts = pd.Series([], dtype="datetime64[ns, UTC]")
+            result[first_seen_column] = empty_ts.copy()
+            result[last_seen_column] = empty_ts.copy()
+        else:
+            result[first_seen_column] = pd.Series([], dtype="object")
+            result[last_seen_column] = pd.Series([], dtype="object")
         return result
 
     result = df.copy().reset_index(drop=True)
@@ -69,18 +79,31 @@ def compact_snapshots(
                 last_seen_column: ("__parsed_ts", "max"),
             }
         ).reset_index()
-        for col in (first_seen_column, last_seen_column):
-            metadata[col] = (
-                metadata[col]
-                .dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-                .where(metadata[col].notna(), None)
-            )
+        if timestamp_output == "iso8601":
+            for col in (first_seen_column, last_seen_column):
+                metadata[col] = (
+                    metadata[col]
+                    .dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    .where(metadata[col].notna(), None)
+                )
     else:
         metadata = grouped.agg(
             **{snapshot_count_column: ("__row_order", "size")}
         ).reset_index()
-        metadata[first_seen_column] = None
-        metadata[last_seen_column] = None
+        if timestamp_output == "datetime":
+            metadata[first_seen_column] = pd.Series(
+                pd.NaT,
+                index=metadata.index,
+                dtype="datetime64[ns, UTC]",
+            )
+            metadata[last_seen_column] = pd.Series(
+                pd.NaT,
+                index=metadata.index,
+                dtype="datetime64[ns, UTC]",
+            )
+        else:
+            metadata[first_seen_column] = None
+            metadata[last_seen_column] = None
 
     representative = representative.merge(metadata, on=present_keys, how="left")
     representative = representative.drop(columns=["__row_order"], errors="ignore")

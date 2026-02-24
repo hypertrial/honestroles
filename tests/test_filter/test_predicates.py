@@ -143,6 +143,12 @@ def test_by_skills_scalar_values() -> None:
     assert mask.tolist() == [True, False]
 
 
+def test_by_skills_no_constraints_fast_path() -> None:
+    df = pd.DataFrame({"skills": [["Python"], []]})
+    mask = by_skills(df, required=None, excluded=None)
+    assert mask.tolist() == [True, True]
+
+
 def test_by_keywords(sample_df: pd.DataFrame) -> None:
     mask = by_keywords(sample_df, include=["roadmap"])
     assert mask.tolist() == [False, True]
@@ -158,6 +164,50 @@ def test_by_keywords_custom_columns(sample_df: pd.DataFrame) -> None:
     df["notes"] = ["Important note", "Other"]
     mask = by_keywords(df, include=["important"], columns=["notes"])
     assert mask.tolist() == [True, False]
+
+
+def test_by_keywords_single_include_literal_term() -> None:
+    df = pd.DataFrame(
+        {
+            "title": ["C++ Engineer", "Python Engineer"],
+            "description_text": ["Build systems.", "Maintain services."],
+        }
+    )
+    mask = by_keywords(df, include=["c++"])
+    assert mask.tolist() == [True, False]
+
+
+def test_by_keywords_single_include_preserves_cross_column_match() -> None:
+    df = pd.DataFrame(
+        {
+            "title": ["Build", "Something else"],
+            "description_text": ["systems", "build systems in detail"],
+        }
+    )
+    mask = by_keywords(df, include=["build systems"])
+    assert mask.tolist() == [True, True]
+
+
+def test_by_keywords_single_include_empty_term_returns_all() -> None:
+    df = pd.DataFrame(
+        {
+            "title": ["Engineer", "Manager"],
+            "description_text": ["Build systems", "Roadmaps"],
+        }
+    )
+    mask = by_keywords(df, include=[""])
+    assert mask.tolist() == [True, True]
+
+
+def test_by_keywords_multi_include_ignores_empty_terms() -> None:
+    df = pd.DataFrame(
+        {
+            "title": ["Engineer", "Manager"],
+            "description_text": ["Build systems", "Roadmaps"],
+        }
+    )
+    mask = by_keywords(df, include=["", "roadmap"])
+    assert mask.tolist() == [False, True]
 
 
 def test_by_keywords_missing_columns(sample_df: pd.DataFrame) -> None:
@@ -188,3 +238,8 @@ def test_by_completeness_partial_presence(sample_df: pd.DataFrame) -> None:
     df.loc[1, "apply_url"] = None
     mask = by_completeness(df, required_fields=["apply_url"])
     assert mask.tolist() == [True, False]
+
+
+def test_by_completeness_no_required_fields_returns_all(sample_df: pd.DataFrame) -> None:
+    mask = by_completeness(sample_df, required_fields=None)
+    assert mask.tolist() == [True, True]
