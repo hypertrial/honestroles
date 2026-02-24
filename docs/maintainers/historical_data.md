@@ -31,8 +31,14 @@ df = hr.rate_jobs(df, use_llm=False)
 - `detect_listing_pages`
 - `drop_listing_pages`
 - `compact_snapshots`
+- `snapshot_timestamp_output` (`"datetime"` by default, `"iso8601"` optional)
 - `compaction_keys`
 - `ingested_at_column`
+
+By default, historical compaction keeps `first_seen` and `last_seen` as UTC
+datetime values for faster processing. Use
+`snapshot_timestamp_output="iso8601"` when downstream consumers require string
+timestamps.
 
 ## Data quality reporting
 

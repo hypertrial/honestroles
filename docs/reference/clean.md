@@ -30,6 +30,9 @@ standard cleaning steps (`strip_html`, `normalize_locations`, `enrich_country_fr
 Adds:
 - `historical_is_listing_page`
 - `snapshot_count` / `first_seen` / `last_seen` (when compaction enabled)
+  - default historical mode emits timezone-aware UTC datetimes for
+    `first_seen` / `last_seen`
+  - set `snapshot_timestamp_output="iso8601"` to emit legacy ISO-8601 strings
 
 #### `HistoricalCleanOptions`
 
@@ -37,6 +40,7 @@ Dataclass for historical mode behavior:
 - `detect_listing_pages: bool = True`
 - `drop_listing_pages: bool = True`
 - `compact_snapshots: bool = True`
+- `snapshot_timestamp_output: Literal["iso8601", "datetime"] = "datetime"`
 - `compaction_keys: tuple[str, ...] = ("job_key", "content_hash")`
 - `ingested_at_column: str = "ingested_at"`
 

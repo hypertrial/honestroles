@@ -95,6 +95,8 @@ def by_skills(
         return _series_or_true(df)
     required_set = {skill.lower() for skill in required or []}
     excluded_set = {skill.lower() for skill in excluded or []}
+    if not required_set and not excluded_set:
+        return _series_or_true(df)
 
     def matches(skills: object) -> bool:
         if skills is None:
@@ -130,6 +132,35 @@ def by_keywords(
     existing = [col for col in search_columns if col in df.columns]
     if not existing:
         return _series_or_true(df)
+
+    if len(include_terms) == 1 and not exclude_terms:
+        term = include_terms[0]
+        if not term:
+            return _series_or_true(df)
+        include_mask = pd.Series(False, index=df.index, dtype="bool")
+        string_columns: list[pd.Series] = []
+        for column in existing:
+            column_text = df[column].astype("string")
+            string_columns.append(column_text)
+            include_mask |= column_text.str.contains(
+                term,
+                case=False,
+                regex=False,
+                na=False,
+            )
+
+        # Preserve previous behavior where concatenated column boundaries could match spaced terms.
+        if " " in term and len(string_columns) > 1:
+            combined = pd.Series("", index=df.index, dtype="string")
+            for column_text in string_columns:
+                combined = combined.str.cat(column_text.fillna(""), sep=" ")
+            include_mask |= combined.str.contains(
+                term,
+                case=False,
+                regex=False,
+                na=False,
+            )
+        return include_mask
 
     texts = pd.Series("", index=df.index, dtype="string")
     for column in existing:

@@ -1,6 +1,7 @@
 import pandas as pd
 import pytest
 
+import honestroles.clean.normalize as normalize_module
 from honestroles.clean.normalize import (
     enrich_country_from_context,
     normalize_employment_types,
@@ -43,12 +44,42 @@ def test_normalize_locations_explicit_none_object_value() -> None:
     assert normalized.loc[0, "country"] is None
 
 
+def test_normalize_locations_reuses_unique_location_parsing(monkeypatch) -> None:
+    df = pd.DataFrame(
+        {
+            "location_raw": [" Remote, US ", "Remote, US", "Toronto, ON"],
+            "remote_flag": [False, False, False],
+        }
+    )
+    calls: list[str] = []
+    original = normalize_module._parse_location_string
+
+    def wrapped(value: str):
+        calls.append(value)
+        return original(value)
+
+    monkeypatch.setattr(normalize_module, "_parse_location_string", wrapped)
+    normalized = normalize_locations(df)
+
+    assert len(calls) == 2
+    assert set(calls) == {"Remote, US", "Toronto, ON"}
+    assert normalized["country"].tolist() == ["US", "US", "CA"]
+
+
 def test_normalize_locations_nan_and_non_string_values() -> None:
     df = pd.DataFrame({"location_raw": [float("nan"), 123], "remote_flag": [False, False]})
     normalized = normalize_locations(df)
     assert normalized["city"].tolist() == [None, None]
     assert normalized["region"].tolist() == [None, None]
     assert normalized["country"].tolist() == [None, None]
+
+
+def test_parse_location_string_empty_value() -> None:
+    parsed = normalize_module._parse_location_string("   ")
+    assert parsed.city is None
+    assert parsed.region is None
+    assert parsed.country is None
+    assert parsed.remote_type is None
 
 
 def test_normalize_locations_single_unknown_token_becomes_city() -> None:
@@ -279,6 +310,72 @@ def test_enrich_country_from_context_missing_country_column(sample_df: pd.DataFr
     assert enriched.equals(df)
 
 
+def test_enrich_country_from_context_noop_skips_text_assembly(monkeypatch) -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "country": "US",
+                "region": "California",
+                "description_text": "Based in Canada.",
+                "apply_url": "https://example.com/jobs",
+            }
+        ]
+    )
+
+    def _fail(*args, **kwargs):
+        raise AssertionError("_combined_lower_text should not be called")
+
+    monkeypatch.setattr(normalize_module, "_combined_lower_text", _fail)
+    enriched = enrich_country_from_context(df)
+    assert enriched.loc[0, "country"] == "US"
+    assert enriched.loc[0, "region"] == "California"
+
+
+def test_enrich_country_from_context_without_region_column() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "country": None,
+                "description_text": "Role based in Canada.",
+                "apply_url": "https://example.com/jobs",
+            }
+        ]
+    )
+    enriched = enrich_country_from_context(df, region_column="region")
+    assert enriched.loc[0, "country"] == "CA"
+    assert "region" not in enriched.columns
+
+
+def test_enrich_country_from_context_without_region_column_no_missing_country() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "country": "US",
+                "description_text": "Role based in Canada.",
+                "apply_url": "https://example.com/jobs",
+            }
+        ]
+    )
+    enriched = enrich_country_from_context(df, region_column="region")
+    assert enriched.loc[0, "country"] == "US"
+    assert "region" not in enriched.columns
+
+
+def test_enrich_country_from_context_without_region_column_uses_salary_currency() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "country": None,
+                "salary_currency": "CAD",
+                "description_text": "No location text",
+            }
+        ]
+    )
+    enriched = enrich_country_from_context(df, region_column="region")
+    assert enriched.loc[0, "country"] == "CA"
+    assert "region" not in enriched.columns
+
+
 def test_enrich_country_from_context_preserves_non_ca_country() -> None:
     df = pd.DataFrame(
         [
@@ -327,3 +424,38 @@ def test_enrich_country_from_context_currency_and_compliance_keywords() -> None:
     )
     enriched = enrich_country_from_context(df)
     assert enriched.loc[0, "country"] == "CA"
+
+
+def test_enrich_country_from_context_sparse_signals_only_mark_candidates() -> None:
+    df = pd.DataFrame(
+        [
+            {"country": None, "region": None, "description_text": "No geo signal."},
+            {
+                "country": None,
+                "region": None,
+                "description_text": "Role based in Canada with postal code M5V 2T6.",
+            },
+        ]
+    )
+    enriched = enrich_country_from_context(df)
+    assert enriched["country"].tolist() == [None, "CA"]
+    assert enriched.loc[1, "region"] is None
+
+
+def test_enrich_country_from_context_existing_ca_region_fill_from_single_province() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "country": "CA",
+                "region": None,
+                "description_text": "Candidates must reside in British Columbia.",
+                "title": None,
+                "salary_text": None,
+                "benefits": None,
+                "apply_url": None,
+            }
+        ]
+    )
+    enriched = enrich_country_from_context(df)
+    assert enriched.loc[0, "country"] == "CA"
+    assert enriched.loc[0, "region"] == "British Columbia"

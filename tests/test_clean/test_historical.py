@@ -74,6 +74,8 @@ def test_clean_historical_jobs_default_drops_listing_and_compacts() -> None:
     assert "historical_is_listing_page" in cleaned.columns
     assert "snapshot_count" in cleaned.columns
     assert int(cleaned.loc[0, "snapshot_count"]) == 2
+    assert isinstance(cleaned["first_seen"].dtype, pd.DatetimeTZDtype)
+    assert isinstance(cleaned["last_seen"].dtype, pd.DatetimeTZDtype)
     assert bool(cleaned.loc[0, "historical_is_listing_page"]) is False
 
 
@@ -90,6 +92,16 @@ def test_clean_historical_jobs_opt_out_flags() -> None:
     assert len(cleaned) == 3
     assert "snapshot_count" not in cleaned.columns
     assert cleaned["historical_is_listing_page"].tolist() == [False, False, False]
+
+
+def test_clean_historical_jobs_iso8601_snapshot_override() -> None:
+    df = _historical_fixture()
+    cleaned = clean_historical_jobs(
+        df,
+        options=HistoricalCleanOptions(snapshot_timestamp_output="iso8601"),
+    )
+    assert cleaned.loc[0, "first_seen"] == "2025-01-01T01:00:00Z"
+    assert cleaned.loc[0, "last_seen"] == "2025-01-02T01:00:00Z"
 
 
 def test_clean_historical_jobs_with_missing_compaction_keys_keeps_rows() -> None:

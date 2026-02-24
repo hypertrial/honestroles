@@ -213,6 +213,16 @@ def test_contract_is_missing_handles_none() -> None:
     assert contract_module._is_missing(None) is True
 
 
+def test_normalize_timestamp_value_handles_none_and_nan() -> None:
+    assert contract_module._normalize_timestamp_value(None) is None
+    assert contract_module._normalize_timestamp_value(float("nan")) is None
+
+
+def test_normalize_array_value_handles_none_and_nan() -> None:
+    assert contract_module._normalize_array_value(None) is None
+    assert contract_module._normalize_array_value(float("nan")) is None
+
+
 def test_validate_source_data_contract_skips_missing_optional_format_fields(
     minimal_df: pd.DataFrame,
 ) -> None:

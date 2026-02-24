@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from typing import Literal
 
 import pandas as pd
 
@@ -32,6 +33,7 @@ class HistoricalCleanOptions:
     drop_listing_pages: bool = True
     compact_snapshots: bool = True
     prefer_existing_description_text: bool = True
+    snapshot_timestamp_output: Literal["iso8601", "datetime"] = "datetime"
     compaction_keys: tuple[str, ...] = (JOB_KEY, CONTENT_HASH)
     ingested_at_column: str = INGESTED_AT
 
@@ -96,6 +98,7 @@ def clean_historical_jobs(
             first_seen_column=FIRST_SEEN,
             last_seen_column=LAST_SEEN,
             snapshot_count_column=SNAPSHOT_COUNT,
+            timestamp_output=opts.snapshot_timestamp_output,
         )
     rows_compacted = rows_before_compact - len(result)
     duplicate_ratio_after = _duplicate_ratio(result, opts.compaction_keys)
