@@ -70,7 +70,7 @@ def by_salary(
     *,
     min_salary: float | None = None,
     max_salary: float | None = None,
-    currency: str | None = "USD",
+    currency: str | None = None,
 ) -> pd.Series:
     if SALARY_MIN not in df.columns or SALARY_MAX not in df.columns:
         return _series_or_true(df)

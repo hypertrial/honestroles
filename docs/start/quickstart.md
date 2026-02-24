@@ -46,3 +46,21 @@ profile = hr.CandidateProfile.mds_new_grad()
 ranked = hr.rank_jobs(df, profile=profile, use_llm_signals=False, top_n=100)
 plan = hr.build_application_plan(ranked, profile=profile, top_n=20)
 ```
+
+## Historical snapshots (opt-in)
+
+For `jobs_historical`-style inputs:
+
+```python
+historical = hr.read_parquet("jobs_historical.parquet", validate=False)
+historical = hr.clean_historical_jobs(historical)
+historical = hr.filter_jobs(historical, remote_only=False)
+historical = hr.label_jobs(historical, use_llm=False)
+historical = hr.rate_jobs(historical, use_llm=False)
+```
+
+Generate a quality report:
+
+```bash
+python scripts/report_data_quality.py jobs_historical.parquet --stream --format json
+```

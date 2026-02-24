@@ -20,6 +20,7 @@ def rate_composite(
 
     score = pd.Series(0.0, index=result.index)
     for column, weight in available_weights.items():
-        score += result[column].fillna(0) * weight
+        numeric = pd.to_numeric(result[column], errors="coerce").fillna(0.0)
+        score += numeric * weight
     result[output_column] = score / total_weight
     return result

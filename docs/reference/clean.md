@@ -7,6 +7,7 @@ including HTML stripping, location normalization, salary parsing, and deduping.
 
 - `__init__.py`: `clean_jobs` orchestrator and re-exports.
 - `dedup.py`: row-level deduplication by content hash or custom columns.
+- `historical.py`: opt-in historical cleaning and snapshot compaction.
 - `html.py`: HTML to text conversion and boilerplate removal.
 - `normalize.py`: location, salary, and employment type normalization.
 - `location_data.py`: static lookup tables used by location normalization.
@@ -18,6 +19,33 @@ including HTML stripping, location normalization, salary parsing, and deduping.
 Runs the standard cleaning pipeline in order:
 `strip_html` -> `normalize_locations` -> `enrich_country_from_context` ->
 `normalize_salaries` -> `normalize_employment_types` -> `deduplicate`.
+
+#### `clean_historical_jobs(df: pd.DataFrame, *, options: HistoricalCleanOptions | None = None) -> pd.DataFrame`
+
+Runs the historical cleaning flow:
+`normalize_source_data_contract` -> listing-page detection/drop -> snapshot compaction ->
+standard cleaning steps (`strip_html`, `normalize_locations`, `enrich_country_from_context`,
+`normalize_salaries`, `normalize_employment_types`).
+
+Adds:
+- `historical_is_listing_page`
+- `snapshot_count` / `first_seen` / `last_seen` (when compaction enabled)
+
+#### `HistoricalCleanOptions`
+
+Dataclass for historical mode behavior:
+- `detect_listing_pages: bool = True`
+- `drop_listing_pages: bool = True`
+- `compact_snapshots: bool = True`
+- `compaction_keys: tuple[str, ...] = ("job_key", "content_hash")`
+- `ingested_at_column: str = "ingested_at"`
+
+#### `detect_historical_listing_pages(df: pd.DataFrame, ...) -> pd.Series`
+
+Marks likely listing/landing rows using:
+- `location_raw == "Unknown"`
+- `title` ending in `" jobs"`
+- slug-like `job_id` (`^[a-z0-9-]{3,40}$`)
 
 #### `deduplicate(df: pd.DataFrame, *, subset: list[str] | None = None, keep: str = "first") -> pd.DataFrame`
 
@@ -95,6 +123,13 @@ import honestroles as hr
 
 df = hr.read_parquet("jobs_current.parquet")
 df = hr.clean_jobs(df)
+```
+
+```python
+from honestroles.clean import clean_historical_jobs
+
+historical = hr.read_parquet("jobs_historical.parquet", validate=False)
+historical = clean_historical_jobs(historical)
 ```
 
 ```python

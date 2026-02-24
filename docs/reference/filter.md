@@ -23,7 +23,7 @@ filter_jobs(
     remote_only: bool = False,
     min_salary: float | None = None,
     max_salary: float | None = None,
-    currency: str | None = "USD",
+    currency: str | None = None,
     required_skills: list[str] | None = None,
     excluded_skills: list[str] | None = None,
     include_keywords: list[str] | None = None,

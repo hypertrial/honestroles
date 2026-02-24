@@ -6,6 +6,7 @@ minimal DataFrame validation utility.
 ### Modules
 
 - `parquet.py`: Parquet read/write.
+- `quality_report.py`: data quality report model + accumulator.
 - `duckdb_io.py`: DuckDB read/write.
 - `dataframe.py`: `validate_dataframe`.
 - `contract.py`: Source-data normalization and contract validation.
@@ -20,6 +21,11 @@ When `validate=True`, checks required columns.
 #### `write_parquet(df: pd.DataFrame, path: str | Path) -> None`
 
 Writes a Parquet file, creating parent directories if needed.
+
+#### `iter_parquet_row_groups(path: str | Path, *, columns: list[str] | None = None, validate: bool = False) -> Iterator[pd.DataFrame]`
+
+Yields one DataFrame per parquet row-group in deterministic order. Useful for
+streaming large datasets without loading the full file in memory.
 
 #### `read_duckdb_table(conn: duckdb.DuckDBPyConnection, table: str, validate: bool = True) -> pd.DataFrame`
 
@@ -59,6 +65,20 @@ Normalizes common source-data format issues:
 - timestamp-like fields -> ISO-8601 UTC strings
 - array-like fields encoded as strings -> Python lists
 
+#### `build_data_quality_report(df: pd.DataFrame, *, dataset_name: str | None = None, top_n_duplicates: int = 10) -> DataQualityReport`
+
+Builds a deterministic quality report summary:
+- required-field null/empty counts
+- duplicate key/hash hotspots
+- listing-page ratios
+- source-level quality slices
+- enrichment sparsity and URL/location health
+
+#### `DataQualityAccumulator`
+
+Incremental accumulator for chunked inputs (for example, parquet row-group streams).
+Call `update(df_chunk)` repeatedly, then `finalize()`.
+
 ### Usage examples
 
 ```python
@@ -80,12 +100,17 @@ write_duckdb(df, conn, "jobs_scored", overwrite=True)
 
 ```python
 from honestroles.io import (
+    build_data_quality_report,
+    iter_parquet_row_groups,
     normalize_source_data_contract,
     validate_source_data_contract,
 )
 
 df = normalize_source_data_contract(df)
 df = validate_source_data_contract(df)
+report = build_data_quality_report(df, dataset_name="jobs_current")
+for chunk in iter_parquet_row_groups("jobs_historical.parquet"):
+    pass
 ```
 
 ### Design notes

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from honestroles.clean.dedup import deduplicate
+from honestroles.clean.dedup import compact_snapshots, deduplicate
 
 
 def test_deduplicate_by_content_hash(sample_df: pd.DataFrame) -> None:
@@ -55,3 +55,86 @@ def test_deduplicate_with_nan_hashes() -> None:
     )
     result = deduplicate(df)
     assert len(result) == 2
+
+
+def test_compact_snapshots_reduces_by_key_and_tracks_metadata() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "job_key": "acme::greenhouse::1",
+                "content_hash": "h1",
+                "ingested_at": "2025-01-01T00:00:00Z",
+                "title": "Engineer",
+            },
+            {
+                "job_key": "acme::greenhouse::1",
+                "content_hash": "h1",
+                "ingested_at": "2025-01-02T00:00:00Z",
+                "title": "Engineer updated",
+            },
+            {
+                "job_key": "acme::greenhouse::2",
+                "content_hash": "h2",
+                "ingested_at": "2025-01-03T00:00:00Z",
+                "title": "PM",
+            },
+        ]
+    )
+
+    compacted = compact_snapshots(df)
+    assert len(compacted) == 2
+    assert compacted["snapshot_count"].tolist() == [2, 1]
+    assert compacted.loc[0, "first_seen"] == "2025-01-01T00:00:00Z"
+    assert compacted.loc[0, "last_seen"] == "2025-01-02T00:00:00Z"
+
+
+def test_compact_snapshots_handles_missing_compaction_keys() -> None:
+    df = pd.DataFrame([{"title": "Engineer"}, {"title": "Engineer"}])
+    compacted = compact_snapshots(df, key_columns=("job_key", "content_hash"))
+    assert compacted["snapshot_count"].tolist() == [1, 1]
+    assert compacted["first_seen"].tolist() == [None, None]
+    assert compacted["last_seen"].tolist() == [None, None]
+
+
+def test_compact_snapshots_handles_empty_dataframe_with_keys() -> None:
+    df = pd.DataFrame(columns=["job_key", "content_hash", "ingested_at"])
+    compacted = compact_snapshots(df)
+    assert compacted.empty
+    assert "snapshot_count" in compacted.columns
+
+
+def test_compact_snapshots_without_timestamp_column() -> None:
+    df = pd.DataFrame(
+        [
+            {"job_key": "a::1", "content_hash": "h1", "title": "Engineer"},
+            {"job_key": "a::1", "content_hash": "h1", "title": "Engineer v2"},
+        ]
+    )
+    compacted = compact_snapshots(df, timestamp_column="missing_ts")
+    assert len(compacted) == 1
+    assert compacted.loc[0, "first_seen"] is None
+    assert compacted.loc[0, "last_seen"] is None
+
+
+def test_compact_snapshots_requires_all_compaction_keys() -> None:
+    df = pd.DataFrame(
+        [
+            {"job_key": "a::1", "ingested_at": "2025-01-01T00:00:00Z"},
+            {"job_key": "a::1", "ingested_at": "2025-01-02T00:00:00Z"},
+        ]
+    )
+    compacted = compact_snapshots(df, key_columns=("job_key", "content_hash"))
+    assert len(compacted) == 2
+    assert compacted["snapshot_count"].tolist() == [1, 1]
+
+
+def test_compact_snapshots_without_key_columns_no_compaction() -> None:
+    df = pd.DataFrame(
+        [
+            {"job_key": "a::1", "content_hash": "h1"},
+            {"job_key": "a::1", "content_hash": "h1"},
+        ]
+    )
+    compacted = compact_snapshots(df, key_columns=())
+    assert len(compacted) == 2
+    assert compacted["snapshot_count"].tolist() == [1, 1]

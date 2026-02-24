@@ -51,7 +51,8 @@ def rate_quality(
         bullet_score = 0.2 if ("- " in text or "\n•" in text) else 0.0
         return min(1.0, length_score * 0.8 + bullet_score)
 
-    result[output_column] = result[column].apply(heuristic)
+    # Ensure a numeric dtype even for empty Arrow-backed string columns.
+    result[output_column] = result[column].apply(heuristic).astype("float64")
 
     if not use_llm:
         return result

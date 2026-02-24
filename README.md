@@ -5,6 +5,7 @@ HonestRoles, developed by [Hypertrial](https://www.hypertrial.ai), is a Python p
 ## Features
 
 - **🧹 Clean**: HTML stripping, location normalization (city/region/country), salary parsing, and record deduplication.
+- **🕰️ Historical Mode**: Opt-in cleaning and compaction for historical snapshots (`clean_historical_jobs`).
 - **🔍 Filter**: High-performance `FilterChain` with predicates for location, salary, skills, and keyword matching.
 - **🏷️ Label**: Automated seniority detection, role categorization, and tech stack extraction.
 - **⭐️ Rate**: Comprehensive job description scoring for completeness and quality.
@@ -77,6 +78,22 @@ df = hr.clean_jobs(df)
 df = hr.filter_jobs(df, remote_only=True)
 df = hr.label_jobs(df, use_llm=False)
 df = hr.rate_jobs(df, use_llm=False)
+```
+
+For historical snapshots, use the opt-in historical workflow:
+
+```python
+df = hr.read_parquet("jobs_historical.parquet", validate=False)
+df = hr.clean_historical_jobs(df)
+df = hr.filter_jobs(df, remote_only=False)
+df = hr.label_jobs(df, use_llm=False)
+df = hr.rate_jobs(df, use_llm=False)
+```
+
+Generate a quality report:
+
+```bash
+python scripts/report_data_quality.py jobs_historical.parquet --stream --format json
 ```
 
 See `/docs/start/quickstart.md` and `/docs/reference/source_data_contract_v1.md`.
@@ -154,6 +171,11 @@ src/honestroles/
 Run the default test suite (includes `tests/` and `plugin_template/tests/`) with `pytest`:
 ```bash
 pytest
+```
+
+Run historical smoke checks explicitly (non-default marker):
+```bash
+pytest -o addopts="" -m "historical_smoke"
 ```
 
 Run the repository coverage gate (100% required):

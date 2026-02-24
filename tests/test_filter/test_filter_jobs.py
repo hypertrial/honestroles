@@ -23,6 +23,15 @@ def test_filter_jobs_no_filters_returns_all(sample_df: pd.DataFrame) -> None:
     assert filtered.equals(sample_df)
 
 
+def test_filter_jobs_no_filters_with_salary_columns_returns_all(sample_df: pd.DataFrame) -> None:
+    df = sample_df.copy()
+    df["salary_min"] = [120000, 80000]
+    df["salary_max"] = [150000, 90000]
+    df["salary_currency"] = ["CAD", None]
+    filtered = filter_jobs(df)
+    assert filtered.equals(df)
+
+
 def test_filter_jobs_empty_dataframe(empty_df: pd.DataFrame) -> None:
     filtered = filter_jobs(empty_df)
     assert filtered.empty

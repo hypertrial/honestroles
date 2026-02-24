@@ -162,3 +162,10 @@ def test_rate_quality_heuristic_none_value_branch() -> None:
     df = pd.DataFrame({"description_text": pd.Series([None], dtype="object")})
     rated = rate_quality(df)
     assert rated["quality_score"].tolist() == [0.0]
+
+
+def test_rate_quality_empty_string_dtype_outputs_float_column() -> None:
+    df = pd.DataFrame({"description_text": pd.Series([], dtype="str")})
+    rated = rate_quality(df)
+    assert rated["quality_score"].dtype == "float64"
+    assert rated.empty

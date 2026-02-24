@@ -100,4 +100,5 @@ nav:
       - Docs Stack: maintainers/docs_stack.md
       - Page Template: maintainers/page_template.md
       - Performance Guardrails: maintainers/performance.md
+      - Historical Data Workflow: maintainers/historical_data.md
       - Agent-First Roadmap: maintainers/roadmap_agent_first.md

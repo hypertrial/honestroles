@@ -43,6 +43,10 @@ def _is_missing(value: object) -> bool:
         return False
 
 
+def _mask_positions(mask: pd.Series) -> list[int]:
+    return [int(pos) for pos in np.flatnonzero(mask.to_numpy())]
+
+
 def _normalize_timestamp_value(value: object) -> object:
     if value is None:
         return None
@@ -162,82 +166,92 @@ def validate_source_data_contract(
     for column in DEFAULT_TIMESTAMP_COLUMNS:
         if column not in df.columns:
             continue
-        for index, value in enumerate(df[column].tolist()):
-            if _is_missing(value):
-                continue
-            parsed = pd.to_datetime(value, errors="coerce", utc=True)
-            if pd.isna(parsed):
-                format_violations.append(f"{column}[{index}] invalid timestamp")
+        series = df[column]
+        invalid_mask = series.notna() & pd.to_datetime(
+            series,
+            errors="coerce",
+            utc=True,
+            format="mixed",
+        ).isna()
+        for pos in _mask_positions(invalid_mask):
+            format_violations.append(f"{column}[{pos}] invalid timestamp")
 
     if APPLY_URL in df.columns:
-        for index, value in enumerate(df[APPLY_URL].tolist()):
-            if _is_missing(value):
-                continue
-            if not isinstance(value, str):
-                format_violations.append(f"{APPLY_URL}[{index}] must be a URL string")
-                continue
-            parsed = urlparse(value.strip())
+        series = df[APPLY_URL]
+        non_missing = series.notna()
+        is_string = series.map(lambda value: isinstance(value, str))
+        invalid_url = pd.Series([False] * len(df), index=df.index, dtype="bool")
+        for pos in _mask_positions(non_missing & is_string):
+            parsed = urlparse(str(series.iloc[pos]).strip())
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-                format_violations.append(f"{APPLY_URL}[{index}] invalid URL")
+                invalid_url.iloc[pos] = True
+        for pos in _mask_positions(non_missing):
+            if not bool(is_string.iloc[pos]):
+                format_violations.append(f"{APPLY_URL}[{pos}] must be a URL string")
+            elif bool(invalid_url.iloc[pos]):
+                format_violations.append(f"{APPLY_URL}[{pos}] invalid URL")
 
     for column in DEFAULT_ARRAY_COLUMNS:
         if column not in df.columns:
             continue
-        for index, value in enumerate(df[column].tolist()):
-            if _is_missing(value):
+        series = df[column]
+        non_missing = series.notna()
+        is_array = series.map(lambda value: isinstance(value, (list, tuple, set, np.ndarray)))
+        bad_type_mask = non_missing & ~is_array
+        for pos in _mask_positions(non_missing):
+            if bool(bad_type_mask.iloc[pos]):
+                format_violations.append(f"{column}[{pos}] must be an array of strings")
                 continue
-            if not isinstance(value, (list, tuple, set, np.ndarray)):
-                format_violations.append(f"{column}[{index}] must be an array of strings")
-                continue
-            for item in value:
-                if not isinstance(item, str):
-                    format_violations.append(f"{column}[{index}] contains non-string values")
-                    break
+            value = series.iloc[pos]
+            if any(not isinstance(item, str) for item in value):
+                format_violations.append(f"{column}[{pos}] contains non-string values")
 
     for column in DEFAULT_BOOLEAN_COLUMNS:
         if column not in df.columns:
             continue
-        for index, value in enumerate(df[column].tolist()):
-            if _is_missing(value):
-                continue
-            if not isinstance(value, (bool, np.bool_)):
-                format_violations.append(f"{column}[{index}] must be boolean")
+        series = df[column]
+        non_missing = series.notna()
+        is_bool = series.map(lambda value: isinstance(value, (bool, np.bool_)))
+        for pos in _mask_positions(non_missing & ~is_bool):
+            format_violations.append(f"{column}[{pos}] must be boolean")
 
     if SALARY_CURRENCY in df.columns:
-        for index, value in enumerate(df[SALARY_CURRENCY].tolist()):
-            if _is_missing(value):
-                continue
-            if not isinstance(value, str) or not _CURRENCY_RE.match(value.strip()):
-                format_violations.append(
-                    f"{SALARY_CURRENCY}[{index}] must be a 3-letter uppercase currency code"
-                )
+        series = df[SALARY_CURRENCY]
+        non_missing = series.notna()
+        valid_currency = series.map(
+            lambda value: isinstance(value, str) and _CURRENCY_RE.match(value.strip()) is not None
+        )
+        for pos in _mask_positions(non_missing & ~valid_currency):
+            format_violations.append(
+                f"{SALARY_CURRENCY}[{pos}] must be a 3-letter uppercase currency code"
+            )
 
     if SALARY_INTERVAL in df.columns:
-        for index, value in enumerate(df[SALARY_INTERVAL].tolist()):
-            if _is_missing(value):
-                continue
-            if not isinstance(value, str) or value.strip().lower() not in _ALLOWED_SALARY_INTERVALS:
-                format_violations.append(
-                    f"{SALARY_INTERVAL}[{index}] must be one of "
-                    f"{sorted(_ALLOWED_SALARY_INTERVALS)}"
-                )
+        series = df[SALARY_INTERVAL]
+        non_missing = series.notna()
+        valid_interval = series.map(
+            lambda value: isinstance(value, str)
+            and value.strip().lower() in _ALLOWED_SALARY_INTERVALS
+        )
+        for pos in _mask_positions(non_missing & ~valid_interval):
+            format_violations.append(
+                f"{SALARY_INTERVAL}[{pos}] must be one of {sorted(_ALLOWED_SALARY_INTERVALS)}"
+            )
 
     if SALARY_MIN in df.columns and SALARY_MAX in df.columns:
-        mins = df[SALARY_MIN].tolist()
-        maxs = df[SALARY_MAX].tolist()
-        for index, (minimum, maximum) in enumerate(zip(mins, maxs)):
-            if _is_missing(minimum) or _is_missing(maximum):
-                continue
-            try:
-                min_value = float(minimum)
-                max_value = float(maximum)
-            except (TypeError, ValueError):
-                format_violations.append(f"salary_min/salary_max[{index}] must be numeric")
-                continue
-            if min_value > max_value:
-                format_violations.append(
-                    f"salary_min/salary_max[{index}] has min greater than max"
-                )
+        mins = df[SALARY_MIN]
+        maxs = df[SALARY_MAX]
+        both_present = mins.notna() & maxs.notna()
+        mins_numeric = pd.to_numeric(mins, errors="coerce")
+        maxs_numeric = pd.to_numeric(maxs, errors="coerce")
+        non_numeric = both_present & (mins_numeric.isna() | maxs_numeric.isna())
+        min_gt_max = both_present & ~non_numeric & (mins_numeric > maxs_numeric)
+        for pos in _mask_positions(non_numeric):
+            format_violations.append(f"salary_min/salary_max[{pos}] must be numeric")
+        for pos in _mask_positions(min_gt_max):
+            format_violations.append(
+                f"salary_min/salary_max[{pos}] has min greater than max"
+            )
 
     if format_violations:
         preview = ", ".join(format_violations[:8])

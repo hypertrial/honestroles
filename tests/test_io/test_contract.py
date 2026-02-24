@@ -1,5 +1,6 @@
 import pandas as pd
 import pytest
+from urllib.parse import urlparse
 
 import honestroles.io.contract as contract_module
 from honestroles.io import (
@@ -344,3 +345,115 @@ def test_normalize_source_data_contract_array_variants() -> None:
     assert values[10] == ["AWS"]
     assert values[11] == ["Docker"]
     assert values[12] == ["42"]
+
+
+def _legacy_collect_format_violations(df: pd.DataFrame) -> list[str]:
+    violations: list[str] = []
+    for column in contract_module.DEFAULT_TIMESTAMP_COLUMNS:
+        if column not in df.columns:
+            continue
+        for index, value in enumerate(df[column].tolist()):
+            if contract_module._is_missing(value):
+                continue
+            parsed = pd.to_datetime(value, errors="coerce", utc=True)
+            if pd.isna(parsed):
+                violations.append(f"{column}[{index}] invalid timestamp")
+
+    if contract_module.APPLY_URL in df.columns:
+        for index, value in enumerate(df[contract_module.APPLY_URL].tolist()):
+            if contract_module._is_missing(value):
+                continue
+            if not isinstance(value, str):
+                violations.append(f"{contract_module.APPLY_URL}[{index}] must be a URL string")
+                continue
+            parsed = urlparse(value.strip())
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                violations.append(f"{contract_module.APPLY_URL}[{index}] invalid URL")
+
+    for column in contract_module.DEFAULT_ARRAY_COLUMNS:
+        if column not in df.columns:
+            continue
+        for index, value in enumerate(df[column].tolist()):
+            if contract_module._is_missing(value):
+                continue
+            if not isinstance(value, (list, tuple, set, contract_module.np.ndarray)):
+                violations.append(f"{column}[{index}] must be an array of strings")
+                continue
+            for item in value:
+                if not isinstance(item, str):
+                    violations.append(f"{column}[{index}] contains non-string values")
+                    break
+
+    for column in contract_module.DEFAULT_BOOLEAN_COLUMNS:
+        if column not in df.columns:
+            continue
+        for index, value in enumerate(df[column].tolist()):
+            if contract_module._is_missing(value):
+                continue
+            if not isinstance(value, (bool, contract_module.np.bool_)):
+                violations.append(f"{column}[{index}] must be boolean")
+
+    if contract_module.SALARY_CURRENCY in df.columns:
+        for index, value in enumerate(df[contract_module.SALARY_CURRENCY].tolist()):
+            if contract_module._is_missing(value):
+                continue
+            if (
+                not isinstance(value, str)
+                or not contract_module._CURRENCY_RE.match(value.strip())
+            ):
+                violations.append(
+                    f"{contract_module.SALARY_CURRENCY}[{index}] must be a 3-letter uppercase currency code"
+                )
+
+    if contract_module.SALARY_INTERVAL in df.columns:
+        for index, value in enumerate(df[contract_module.SALARY_INTERVAL].tolist()):
+            if contract_module._is_missing(value):
+                continue
+            if (
+                not isinstance(value, str)
+                or value.strip().lower() not in contract_module._ALLOWED_SALARY_INTERVALS
+            ):
+                violations.append(
+                    f"{contract_module.SALARY_INTERVAL}[{index}] must be one of {sorted(contract_module._ALLOWED_SALARY_INTERVALS)}"
+                )
+
+    if contract_module.SALARY_MIN in df.columns and contract_module.SALARY_MAX in df.columns:
+        mins = df[contract_module.SALARY_MIN].tolist()
+        maxs = df[contract_module.SALARY_MAX].tolist()
+        for index, (minimum, maximum) in enumerate(zip(mins, maxs)):
+            if contract_module._is_missing(minimum) or contract_module._is_missing(maximum):
+                continue
+            try:
+                min_value = float(minimum)
+                max_value = float(maximum)
+            except (TypeError, ValueError):
+                violations.append(f"salary_min/salary_max[{index}] must be numeric")
+                continue
+            if min_value > max_value:
+                violations.append(f"salary_min/salary_max[{index}] has min greater than max")
+    return violations
+
+
+def test_validate_source_data_contract_vectorized_parity_matches_legacy_message(
+    minimal_df: pd.DataFrame,
+) -> None:
+    df = pd.concat([minimal_df] * 3, ignore_index=True)
+    df["ingested_at"] = ["bad-ts", "2025-01-01T00:00:00Z", "bad-ts-2"]
+    df["apply_url"] = ["https://example.com", 123, "example.com/nope"]
+    df["skills"] = [["Python"], ["Python", 7], "Python,SQL"]
+    df["remote_flag"] = [True, "yes", None]
+    df["salary_currency"] = ["USD", "usd", None]
+    df["salary_interval"] = ["year", "yearly", None]
+    df["salary_min"] = [100000, "low", 200000]
+    df["salary_max"] = [200000, "high", 100000]
+
+    legacy_violations = _legacy_collect_format_violations(df)
+    preview = ", ".join(legacy_violations[:8])
+    remaining = len(legacy_violations) - 8
+    if remaining > 0:
+        preview = f"{preview}, ... (+{remaining} more)"
+    expected = f"Source data contract format violations: {preview}"
+
+    with pytest.raises(ValueError) as exc:
+        validate_source_data_contract(df, require_non_null=False, enforce_formats=True)
+    assert str(exc.value) == expected

@@ -78,6 +78,15 @@ def test_by_salary(sample_df: pd.DataFrame) -> None:
     assert mask.tolist() == [True, False]
 
 
+def test_by_salary_without_filters_does_not_drop_rows(sample_df: pd.DataFrame) -> None:
+    df = sample_df.copy()
+    df["salary_min"] = [120000, 80000]
+    df["salary_max"] = [150000, 90000]
+    df["salary_currency"] = ["CAD", None]
+    mask = by_salary(df)
+    assert mask.tolist() == [True, True]
+
+
 def test_by_salary_max_only(sample_df: pd.DataFrame) -> None:
     df = sample_df.copy()
     df["salary_min"] = [120000, 80000]
