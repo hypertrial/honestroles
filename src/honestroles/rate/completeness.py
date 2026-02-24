@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
+from pandas.api.types import is_object_dtype, is_string_dtype
 
 from honestroles.schema import (
     APPLY_URL,
@@ -35,23 +36,22 @@ def rate_completeness(
         return df
     result = df.copy()
 
-    def score(row: pd.Series) -> float:
-        present = 0
-        for field in existing:
-            value = row[field]
-            if value is None:
-                continue
-            if isinstance(value, list) and not value:
-                continue
-            if isinstance(value, str) and value.strip() == "":
-                continue
-            try:
-                if pd.isna(value):
-                    continue
-            except ValueError:
-                pass
-            present += 1
-        return present / len(existing)
+    present_counts = pd.Series(0.0, index=result.index, dtype="float64")
+    for field in existing:
+        series = result[field]
+        present = series.notna()
+        if is_object_dtype(series.dtype):
+            is_list = series.map(lambda value: isinstance(value, list))
+            if bool(is_list.any()):
+                present &= ~(is_list & series.map(lambda value: len(value) == 0))
+            is_string = series.map(lambda value: isinstance(value, str))
+            if bool(is_string.any()):
+                stripped = series.astype("string").fillna("").str.strip()
+                present &= ~(is_string & stripped.eq("").fillna(False))
+        elif is_string_dtype(series.dtype):
+            stripped = series.astype("string").fillna("").str.strip()
+            present &= stripped.ne("")
+        present_counts += present.astype("float64")
 
-    result[output_column] = result.apply(score, axis=1)
+    result[output_column] = present_counts / float(len(existing))
     return result

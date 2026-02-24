@@ -105,3 +105,13 @@ def test_clean_historical_jobs_with_missing_compaction_keys_keeps_rows() -> None
     )
     assert len(cleaned) == 3
     assert cleaned["snapshot_count"].tolist() == [1, 1, 1]
+
+
+def test_clean_historical_jobs_prefers_existing_description_text_by_default() -> None:
+    df = _historical_fixture().copy()
+    df["description_html"] = ["<p>Landing</p>", "<p>From HTML</p>", "<p>From HTML</p>"]
+    df.loc[1:, "description_text"] = "From source text"
+
+    cleaned = clean_historical_jobs(df)
+
+    assert cleaned.loc[0, "description_text"] == "From source text"

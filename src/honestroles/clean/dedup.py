@@ -60,28 +60,15 @@ def compact_snapshots(
         result = result.sort_values(by=["__row_order"], kind="mergesort")
 
     representative = result.drop_duplicates(subset=present_keys, keep="first").copy()
-    counts = (
-        result.groupby(present_keys, dropna=False)
-        .size()
-        .rename(snapshot_count_column)
-        .reset_index()
-    )
-
+    grouped = result.groupby(present_keys, dropna=False, sort=False)
     if parsed_ts is not None:
-        first_seen = (
-            result.groupby(present_keys, dropna=False)["__parsed_ts"]
-            .min()
-            .rename(first_seen_column)
-            .reset_index()
-        )
-        last_seen = (
-            result.groupby(present_keys, dropna=False)["__parsed_ts"]
-            .max()
-            .rename(last_seen_column)
-            .reset_index()
-        )
-        metadata = counts.merge(first_seen, on=present_keys, how="left")
-        metadata = metadata.merge(last_seen, on=present_keys, how="left")
+        metadata = grouped.agg(
+            **{
+                snapshot_count_column: ("__row_order", "size"),
+                first_seen_column: ("__parsed_ts", "min"),
+                last_seen_column: ("__parsed_ts", "max"),
+            }
+        ).reset_index()
         for col in (first_seen_column, last_seen_column):
             metadata[col] = (
                 metadata[col]
@@ -89,7 +76,9 @@ def compact_snapshots(
                 .where(metadata[col].notna(), None)
             )
     else:
-        metadata = counts.copy()
+        metadata = grouped.agg(
+            **{snapshot_count_column: ("__row_order", "size")}
+        ).reset_index()
         metadata[first_seen_column] = None
         metadata[last_seen_column] = None
 

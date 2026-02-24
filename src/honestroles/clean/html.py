@@ -36,6 +36,7 @@ def strip_html(
     *,
     html_column: str = DESCRIPTION_HTML,
     text_column: str = DESCRIPTION_TEXT,
+    overwrite_existing: bool = True,
 ) -> pd.DataFrame:
     if html_column not in df.columns:
         LOGGER.warning("HTML column %s not found; returning input DataFrame.", html_column)
@@ -56,5 +57,24 @@ def strip_html(
         text = _strip_boilerplate(text)
         return text.strip() or None
 
-    result[text_column] = result[html_column].apply(convert)
+    html_values = result[html_column]
+    parse_mask = html_values.map(
+        lambda value: isinstance(value, str) and value.strip() != ""
+    )
+
+    if overwrite_existing:
+        result[text_column] = pd.Series([None] * len(result), index=result.index, dtype="object")
+    else:
+        if text_column not in result.columns:
+            result[text_column] = pd.Series([None] * len(result), index=result.index, dtype="object")
+        existing_text = result[text_column].astype("string").fillna("").str.strip()
+        needs_text = existing_text.eq("")
+        parse_mask &= needs_text
+
+    if not bool(parse_mask.any()):
+        return result
+
+    subset = html_values[parse_mask].astype(str)
+    parsed_by_html = {html: convert(html) for html in pd.unique(subset)}
+    result.loc[parse_mask, text_column] = subset.map(parsed_by_html).astype("object")
     return result

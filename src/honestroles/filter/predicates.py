@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Iterable
 
 import pandas as pd
@@ -38,10 +39,10 @@ def by_location(
         allowed = {city.lower() for city in cities}
         mask &= df[CITY].fillna("").str.lower().isin(allowed)
     elif cities and LOCATION_RAW in df.columns:
-        allowed_substrings = [city.lower() for city in cities]
-        mask &= df[LOCATION_RAW].fillna("").str.lower().apply(
-            lambda value: any(city in value for city in allowed_substrings)
-        )
+        allowed_substrings = [city.lower() for city in cities if city]
+        if allowed_substrings:
+            city_pattern = "|".join(re.escape(city) for city in allowed_substrings)
+            mask &= df[LOCATION_RAW].fillna("").str.lower().str.contains(city_pattern, regex=True)
     if countries and COUNTRY in df.columns:
         allowed = {country.lower() for country in countries}
         mask &= df[COUNTRY].fillna("").str.lower().isin(allowed)
@@ -130,16 +131,19 @@ def by_keywords(
     if not existing:
         return _series_or_true(df)
 
-    def row_text(row: pd.Series) -> str:
-        parts = [str(row[col]) for col in existing if pd.notna(row[col])]
-        return " ".join(parts).lower()
-
-    texts = df.apply(row_text, axis=1)
+    texts = pd.Series("", index=df.index, dtype="string")
+    for column in existing:
+        column_text = df[column].astype("string").fillna("").str.lower()
+        texts = texts.str.cat(column_text, sep=" ")
     mask = _series_or_true(df)
     if include_terms:
-        mask &= texts.apply(lambda text: any(term in text for term in include_terms))
+        include_pattern = "|".join(re.escape(term) for term in include_terms if term)
+        if include_pattern:
+            mask &= texts.str.contains(include_pattern, regex=True)
     if exclude_terms:
-        mask &= texts.apply(lambda text: all(term not in text for term in exclude_terms))
+        exclude_pattern = "|".join(re.escape(term) for term in exclude_terms if term)
+        if exclude_pattern:
+            mask &= ~texts.str.contains(exclude_pattern, regex=True)
     return mask
 
 

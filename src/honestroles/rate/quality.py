@@ -37,22 +37,17 @@ def rate_quality(
     if column not in df.columns:
         return df
     result = df.copy()
+    values = result[column]
+    text = values.where(values.map(lambda value: isinstance(value, str)), "")
+    text = text.fillna("").astype("string")
 
-    def heuristic(text: str | None) -> float:
-        if text is None:
-            return 0.0
-        if isinstance(text, float) and pd.isna(text):
-            return 0.0
-        if not isinstance(text, str):
-            return 0.0
-        if not text:
-            return 0.0
-        length_score = min(1.0, len(text) / 2000)
-        bullet_score = 0.2 if ("- " in text or "\n•" in text) else 0.0
-        return min(1.0, length_score * 0.8 + bullet_score)
-
-    # Ensure a numeric dtype even for empty Arrow-backed string columns.
-    result[output_column] = result[column].apply(heuristic).astype("float64")
+    length_score = (
+        text.str.len().fillna(0).clip(upper=2000).astype("float64") / 2000.0
+    )
+    bullet_score = (
+        text.str.contains(r"- |\n•", regex=True).fillna(False).astype("float64") * 0.2
+    )
+    result[output_column] = (length_score * 0.8 + bullet_score).clip(upper=1.0)
 
     if not use_llm:
         return result

@@ -31,6 +31,7 @@ class HistoricalCleanOptions:
     detect_listing_pages: bool = True
     drop_listing_pages: bool = True
     compact_snapshots: bool = True
+    prefer_existing_description_text: bool = True
     compaction_keys: tuple[str, ...] = (JOB_KEY, CONTENT_HASH)
     ingested_at_column: str = INGESTED_AT
 
@@ -99,7 +100,10 @@ def clean_historical_jobs(
     rows_compacted = rows_before_compact - len(result)
     duplicate_ratio_after = _duplicate_ratio(result, opts.compaction_keys)
 
-    cleaned = strip_html(result)
+    cleaned = strip_html(
+        result,
+        overwrite_existing=not opts.prefer_existing_description_text,
+    )
     cleaned = normalize_locations(cleaned)
     cleaned = enrich_country_from_context(cleaned)
     cleaned = normalize_salaries(cleaned)

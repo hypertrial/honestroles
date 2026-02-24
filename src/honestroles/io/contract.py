@@ -119,11 +119,25 @@ def normalize_source_data_contract(
 
     for column in timestamps:
         if column in result.columns:
-            result[column] = result[column].apply(_normalize_timestamp_value)
+            series = result[column]
+            normalized = pd.Series([None] * len(series), index=series.index, dtype="object")
+            non_missing = series.notna()
+            if bool(non_missing.any()):
+                normalized.loc[non_missing] = series.loc[non_missing].apply(
+                    _normalize_timestamp_value
+                )
+            result[column] = normalized
 
     for column in arrays:
         if column in result.columns:
-            result[column] = result[column].apply(_normalize_array_value)
+            series = result[column]
+            normalized = pd.Series([None] * len(series), index=series.index, dtype="object")
+            non_missing = series.notna()
+            if bool(non_missing.any()):
+                normalized.loc[non_missing] = series.loc[non_missing].apply(
+                    _normalize_array_value
+                )
+            result[column] = normalized
 
     return result
 

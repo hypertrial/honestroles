@@ -58,3 +58,14 @@ def test_strip_html_custom_columns() -> None:
     df = pd.DataFrame({"html_body": ["<p>Hello</p>"]})
     cleaned = strip_html(df, html_column="html_body", text_column="text_body")
     assert cleaned.loc[0, "text_body"] == "Hello"
+
+
+def test_strip_html_preserves_existing_text_when_overwrite_disabled() -> None:
+    df = pd.DataFrame(
+        {
+            "description_html": ["<p>Parsed text</p>"],
+            "description_text": ["Already normalized"],
+        }
+    )
+    cleaned = strip_html(df, overwrite_existing=False)
+    assert cleaned.loc[0, "description_text"] == "Already normalized"
