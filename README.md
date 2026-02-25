@@ -32,6 +32,7 @@ pip install -e ".[dev]"
 - CLI commands (recommended for quick checks and plugin scaffolding):
   - `honestroles-report-quality`
   - `honestroles-scaffold-plugin`
+  - `honestroles-scaffold-plugin` includes packaged template assets and works after `pip install honestroles` without a repo checkout.
 
 ## Quickstart
 
@@ -100,6 +101,14 @@ pip install -e ".[docs]"
 mkdocs serve
 ```
 
+Packaging checks (maintainers):
+```bash
+pip install -e ".[dev]"
+python -m build --sdist --wheel --no-isolation
+python -m twine check dist/*
+pytest tests/test_packaging_distribution.py -q -o addopts=""
+```
+
 Deploy docs on GitHub Pages:
 1. Ensure repository **Settings -> Pages -> Build and deployment -> Source** is set to **GitHub Actions**.
 2. Push to `main` to trigger `.github/workflows/docs-pages.yml`.
@@ -147,6 +156,12 @@ Then enable LLM-based labeling or quality rating:
 df = hr.label_jobs(df, use_llm=True, model="llama3")
 df = hr.rate_jobs(df, use_llm=True, model="llama3")
 ranked = hr.rank_jobs(df, profile=hr.CandidateProfile.mds_new_grad(), use_llm_signals=True, model="llama3")
+```
+
+For repository contributors, script shims remain available:
+```bash
+python scripts/scaffold_plugin.py --name honestroles-plugin-myorg --output-dir .
+python scripts/report_data_quality.py jobs_historical.parquet --stream --format json
 ```
 
 ## Package Layout

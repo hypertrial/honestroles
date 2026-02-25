@@ -6,6 +6,28 @@ on:
     branches: ["main"]
 
 jobs:
+  packaging:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build and verify distribution artifacts
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -e ".[dev]"
+          .venv/bin/python -m build --sdist --wheel --no-isolation
+          .venv/bin/python -m twine check dist/*
+
+      - name: Installed-wheel smoke
+        run: .venv/bin/python -m pytest tests/test_packaging_distribution.py -q -o addopts=""
+
   performance:
     runs-on: ubuntu-latest
     steps:

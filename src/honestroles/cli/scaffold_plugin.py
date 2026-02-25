@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterator
+from contextlib import contextmanager
+from importlib.resources import as_file, files
+from importlib.abc import Traversable
 import re
 import shutil
 import sys
@@ -50,22 +54,50 @@ def _text_file(path: Path) -> bool:
     return path.suffix in {".md", ".py", ".toml", ".txt", ".yml", ".yaml"}
 
 
-def _resolve_template_root() -> Path:
-    this_file = Path(__file__).resolve()
-    candidates = [
-        this_file.parents[3] / "plugin_template",
-        Path.cwd() / "plugin_template",
-    ]
+def _packaged_template_root() -> Traversable | None:
+    candidate = files("honestroles").joinpath("_templates").joinpath("plugin_template")
+    return candidate if candidate.is_dir() else None
+
+
+def _filesystem_template_candidates(
+    *,
+    this_file: Path | None = None,
+    cwd: Path | None = None,
+) -> list[Path]:
+    resolved_file = this_file or Path(__file__).resolve()
+    resolved_cwd = cwd or Path.cwd()
+    candidates = [resolved_file.parents[3] / "plugin_template", resolved_cwd / "plugin_template"]
+    deduped: list[Path] = []
     seen: set[Path] = set()
     for candidate in candidates:
         resolved = candidate.resolve()
         if resolved in seen:
             continue
         seen.add(resolved)
-        if resolved.exists():
-            return resolved
+        deduped.append(resolved)
+    return deduped
+
+
+@contextmanager
+def _template_root_context() -> Iterator[Path]:
+    packaged_search_target = "package:honestroles/_templates/plugin_template"
+    searched: list[str] = [packaged_search_target]
+    packaged = _packaged_template_root()
+    if packaged is not None:
+        with as_file(packaged) as path:
+            yield path
+            return
+
+    for candidate in _filesystem_template_candidates():
+        searched.append(str(candidate))
+        if candidate.is_dir():
+            yield candidate
+            return
+
+    searched_msg = ", ".join(searched) if searched else "<none>"
     raise FileNotFoundError(
-        "Template directory not found. Expected 'plugin_template' in the repository root."
+        "Template directory not found. Expected 'plugin_template' in package data or repository root. "
+        f"Searched: {searched_msg}"
     )
 
 
@@ -76,49 +108,48 @@ def scaffold_plugin(
     output_dir: Path,
     force: bool,
 ) -> Path:
-    template_root = _resolve_template_root()
+    with _template_root_context() as template_root:
+        dist = _sanitize_distribution_name(distribution_name)
+        package = _sanitize_package_name(package_name or _default_package_name(dist))
+        prefix = _plugin_prefix(dist)
 
-    dist = _sanitize_distribution_name(distribution_name)
-    package = _sanitize_package_name(package_name or _default_package_name(dist))
-    prefix = _plugin_prefix(dist)
+        destination = output_dir / dist
+        if destination.exists():
+            if not force:
+                raise FileExistsError(
+                    f"Destination already exists: {destination}. Use --force to overwrite."
+                )
+            shutil.rmtree(destination)
 
-    destination = output_dir / dist
-    if destination.exists():
-        if not force:
-            raise FileExistsError(
-                f"Destination already exists: {destination}. Use --force to overwrite."
-            )
-        shutil.rmtree(destination)
+        shutil.copytree(template_root, destination)
 
-    shutil.copytree(template_root, destination)
+        src_old = destination / "src" / "honestroles_plugin_example"
+        src_new = destination / "src" / package
+        if src_old.exists() and src_old != src_new:
+            src_old.rename(src_new)
 
-    src_old = destination / "src" / "honestroles_plugin_example"
-    src_new = destination / "src" / package
-    if src_old.exists() and src_old != src_new:
-        src_old.rename(src_new)
+        replacements = {
+            "honestroles-plugin-example": dist,
+            "honestroles_plugin_example": package,
+            "example_filter": f"{prefix}_filter",
+            "example_label": f"{prefix}_label",
+            "example_rate": f"{prefix}_rate",
+            "only_remote": f"{prefix}_only_remote",
+            "add_source_group": f"{prefix}_add_source_group",
+            "add_priority_rating": f"{prefix}_add_priority_rating",
+        }
 
-    replacements = {
-        "honestroles-plugin-example": dist,
-        "honestroles_plugin_example": package,
-        "example_filter": f"{prefix}_filter",
-        "example_label": f"{prefix}_label",
-        "example_rate": f"{prefix}_rate",
-        "only_remote": f"{prefix}_only_remote",
-        "add_source_group": f"{prefix}_add_source_group",
-        "add_priority_rating": f"{prefix}_add_priority_rating",
-    }
+        for path in destination.rglob("*"):
+            if not path.is_file() or not _text_file(path):
+                continue
+            text = path.read_text(encoding="utf-8")
+            updated = text
+            for old, new in replacements.items():
+                updated = updated.replace(old, new)
+            if updated != text:
+                path.write_text(updated, encoding="utf-8")
 
-    for path in destination.rglob("*"):
-        if not path.is_file() or not _text_file(path):
-            continue
-        text = path.read_text(encoding="utf-8")
-        updated = text
-        for old, new in replacements.items():
-            updated = updated.replace(old, new)
-        if updated != text:
-            path.write_text(updated, encoding="utf-8")
-
-    return destination
+        return destination
 
 
 def build_parser() -> argparse.ArgumentParser:

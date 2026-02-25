@@ -5,17 +5,6 @@ import json
 from pathlib import Path
 import sys
 
-import duckdb
-
-from honestroles.io import (
-    DataQualityAccumulator,
-    build_data_quality_report,
-    iter_parquet_row_groups,
-    read_duckdb_query,
-    read_duckdb_table,
-    read_parquet,
-)
-
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build a data quality report for honestroles inputs.")
@@ -116,6 +105,18 @@ def report_to_text(report: dict[str, object]) -> str:
 
 
 def build_report(args: argparse.Namespace) -> dict[str, object]:
+    # Lazy imports keep CLI help usable even in minimal environments.
+    import duckdb
+
+    from honestroles.io import (
+        DataQualityAccumulator,
+        build_data_quality_report,
+        iter_parquet_row_groups,
+        read_duckdb_query,
+        read_duckdb_table,
+        read_parquet,
+    )
+
     input_path: Path = args.input
     dataset_name = args.dataset_name or input_path.name
     suffix = input_path.suffix.lower()

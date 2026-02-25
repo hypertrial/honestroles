@@ -21,6 +21,15 @@ You can scaffold directly from this repository:
 honestroles-scaffold-plugin --name honestroles-plugin-myorg --output-dir .
 ```
 
+`honestroles-scaffold-plugin` ships with packaged template assets, so it works
+after `pip install honestroles` from any working directory.
+
+Repository contributors can also use the compatibility shim:
+
+```bash
+python scripts/scaffold_plugin.py --name honestroles-plugin-myorg --output-dir .
+```
+
 ## 2. Implement Plugin Functions
 
 Each function receives a DataFrame and returns a validated shape:
