@@ -93,3 +93,33 @@ def test_filter_jobs_recency_filter_active() -> None:
         as_of="2025-01-10T00:00:00Z",
     )
     assert filtered["job_id"].tolist() == ["1"]
+
+
+def test_filter_jobs_new_predicates_integration() -> None:
+    df = pd.DataFrame(
+        {
+            "job_id": ["1", "2", "3"],
+            "title": ["Role 1", "Role 2", "Role 3"],
+            "apply_url": ["https://a.example/jobs/1", "https://a.example/jobs/2", "https://a.example/jobs/3"],
+            "employment_type": ["full_time", "contract", "full_time"],
+            "entry_level_likely": [True, False, True],
+            "experience_years_min": [1, 5, 2],
+            "visa_sponsorship_signal": [True, None, False],
+            "citizenship_required": [False, False, True],
+            "application_friction_score": [0.7, 0.3, 0.2],
+            "active_likelihood": [0.8, 0.9, 0.9],
+            "last_seen": ["2025-01-10T00:00:00Z", "2025-01-10T00:00:00Z", "2025-01-10T00:00:00Z"],
+        }
+    )
+    filtered = filter_jobs(
+        df,
+        employment_types=["full-time"],
+        entry_level_only=True,
+        max_experience_years=2,
+        needs_visa_sponsorship=True,
+        include_unknown_visa=True,
+        max_application_friction=0.8,
+        min_active_likelihood=0.5,
+        as_of="2025-01-10T00:00:00Z",
+    )
+    assert filtered["job_id"].tolist() == ["1"]

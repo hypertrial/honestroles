@@ -2,12 +2,18 @@ import pandas as pd
 
 import honestroles.filter.predicates as predicates_module
 from honestroles.filter.predicates import (
+    by_active_likelihood,
+    by_application_friction,
     by_completeness,
+    by_employment_type,
+    by_entry_level,
+    by_experience,
     by_keywords,
     by_location,
     by_recency,
     by_salary,
     by_skills,
+    by_visa_requirements,
 )
 
 
@@ -303,3 +309,84 @@ def test_by_recency_fallbacks_to_ingested_at() -> None:
     df = pd.DataFrame({"ingested_at": ["2025-01-10T00:00:00Z", "2024-11-01T00:00:00Z"]})
     mask = by_recency(df, posted_within_days=10, as_of="2025-01-10T00:00:00Z")
     assert mask.tolist() == [True, False]
+
+
+def test_by_employment_type_normalizes_values() -> None:
+    df = pd.DataFrame({"employment_type": ["Full Time", "contract", None]})
+    mask = by_employment_type(df, employment_types=["full-time"])
+    assert mask.tolist() == [True, False, False]
+
+
+def test_by_entry_level_uses_entry_or_experience() -> None:
+    df = pd.DataFrame(
+        {
+            "entry_level_likely": [None, True, False],
+            "experience_years_min": [1, 4, None],
+        }
+    )
+    mask = by_entry_level(df, entry_level_only=True)
+    assert mask.tolist() == [True, True, False]
+
+
+def test_by_experience_allows_unknowns() -> None:
+    df = pd.DataFrame({"experience_years_min": [1, 4, None]})
+    mask = by_experience(df, max_experience_years=2)
+    assert mask.tolist() == [True, False, True]
+
+
+def test_by_visa_requirements_respects_unknown_toggle_and_citizenship() -> None:
+    df = pd.DataFrame(
+        {
+            "visa_sponsorship_signal": [True, None, False, None],
+            "citizenship_required": [False, False, False, True],
+            "work_authorization_required": [False, False, False, True],
+        }
+    )
+    inclusive = by_visa_requirements(df, needs_visa_sponsorship=True, include_unknown_visa=True)
+    exclusive = by_visa_requirements(df, needs_visa_sponsorship=True, include_unknown_visa=False)
+    assert inclusive.tolist() == [True, True, False, False]
+    assert exclusive.tolist() == [True, False, False, False]
+
+
+def test_by_application_friction_and_active_likelihood() -> None:
+    df = pd.DataFrame(
+        {
+            "application_friction_score": [0.7, 0.4, None],
+            "active_likelihood": [0.8, 0.2, 0.6],
+            "last_seen": ["2025-01-10T00:00:00Z", "2024-09-01T00:00:00Z", None],
+            "ingested_at": ["2025-01-10T00:00:00Z", "2024-09-01T00:00:00Z", "2025-01-09T00:00:00Z"],
+        }
+    )
+    friction_mask = by_application_friction(df, max_application_friction=0.5)
+    active_mask = by_active_likelihood(
+        df,
+        active_within_days=30,
+        min_active_likelihood=0.5,
+        as_of="2025-01-10T00:00:00Z",
+    )
+    assert friction_mask.tolist() == [False, True, True]
+    assert active_mask.tolist() == [True, False, True]
+
+
+def test_new_predicates_noop_and_missing_column_paths() -> None:
+    df = pd.DataFrame({"title": ["Role"]})
+
+    assert by_employment_type(df, employment_types=None).tolist() == [True]
+    assert by_employment_type(df, employment_types=[""]).tolist() == [True]
+    assert by_entry_level(df, entry_level_only=False).tolist() == [True]
+    assert by_entry_level(df, entry_level_only=True).tolist() == [True]
+    assert by_experience(df, max_experience_years=None).tolist() == [True]
+    assert by_experience(df, max_experience_years=2).tolist() == [True]
+    assert by_visa_requirements(df, needs_visa_sponsorship=False).tolist() == [True]
+    assert by_visa_requirements(df, needs_visa_sponsorship=True).tolist() == [True]
+    assert by_application_friction(df, max_application_friction=None).tolist() == [True]
+    assert by_application_friction(df, max_application_friction=0.5).tolist() == [True]
+    assert by_active_likelihood(df).tolist() == [True]
+
+
+def test_by_employment_type_empty_values_cover_normalization_edges() -> None:
+    df = pd.DataFrame({"employment_type": ["", "Full Time"]})
+    mask_with_blank_filter = by_employment_type(df, employment_types=["   "])
+    mask_with_valid_filter = by_employment_type(df, employment_types=["full_time"])
+    assert mask_with_blank_filter.tolist() == [True, True]
+    assert mask_with_valid_filter.tolist() == [False, True]

@@ -46,6 +46,20 @@ def test_rank_helper_parsers_and_basic_paths() -> None:
         )
         == 0.5
     )
+    assert (
+        rank_module._visa_score(
+            pd.Series(
+                {
+                    DEFAULT_RESULT_COLUMNS.visa_sponsorship_signal: None,
+                    DEFAULT_RESULT_COLUMNS.citizenship_required: True,
+                }
+            ),
+            CandidateProfile(needs_visa_sponsorship=True),
+            DEFAULT_RESULT_COLUMNS,
+            ranking_profile="job_seeker_v2",
+        )
+        == 0.0
+    )
 
 
 def test_rank_salary_location_quality_role_and_grad_branches() -> None:
@@ -213,6 +227,7 @@ def test_rank_component_overrides_and_misc_branches() -> None:
         row,
         CandidateProfile(max_years_experience=2),
         DEFAULT_RESULT_COLUMNS,
+        ranking_profile="legacy",
         component_overrides={
             "unknown_component": lambda r, p: 1.0,
             "skills": lambda r, p: float("nan-string"),  # type: ignore[arg-type]
@@ -222,6 +237,122 @@ def test_rank_component_overrides_and_misc_branches() -> None:
     assert isinstance(missing, list)
     assert rank_module._weighted_score({"skills": 1.0}, {}) == 0.0
     assert "moderate fit" in rank_module._why_match({"skills": 0.2}, [], "Role")
+
+
+def test_rank_new_component_scores_defaults() -> None:
+    row = pd.Series(
+        {
+            DEFAULT_RESULT_COLUMNS.active_likelihood: None,
+            DEFAULT_RESULT_COLUMNS.application_friction_score: 0.25,
+            DEFAULT_RESULT_COLUMNS.signal_confidence: None,
+            "salary_confidence": 0.8,
+        }
+    )
+    assert rank_module._active_score(row, DEFAULT_RESULT_COLUMNS) == 0.5
+    assert rank_module._friction_score(row, DEFAULT_RESULT_COLUMNS) == 0.75
+    assert rank_module._confidence_score(row, DEFAULT_RESULT_COLUMNS) == 0.8
+
+    row2 = pd.Series(
+        {
+            DEFAULT_RESULT_COLUMNS.application_friction_score: None,
+            DEFAULT_RESULT_COLUMNS.signal_confidence: None,
+            "salary_confidence": None,
+        }
+    )
+    assert rank_module._friction_score(row2, DEFAULT_RESULT_COLUMNS) == 0.6
+    assert rank_module._confidence_score(row2, DEFAULT_RESULT_COLUMNS) == 0.5
+
+
+def test_rank_v2_missing_requirements_branches() -> None:
+    row = pd.Series(
+        {
+            DEFAULT_RESULT_COLUMNS.work_authorization_required: True,
+            DEFAULT_RESULT_COLUMNS.citizenship_required: True,
+            DEFAULT_RESULT_COLUMNS.visa_sponsorship_signal: None,
+            DEFAULT_RESULT_COLUMNS.active_likelihood: 0.2,
+            DEFAULT_RESULT_COLUMNS.experience_years_min: 1,
+        }
+    )
+    profile = CandidateProfile(needs_visa_sponsorship=True)
+    assert (
+        rank_module._visa_score(
+            row,
+            profile,
+            DEFAULT_RESULT_COLUMNS,
+            ranking_profile="job_seeker_v2",
+        )
+        == 0.0
+    )
+    row_no_citizenship = row.copy()
+    row_no_citizenship[DEFAULT_RESULT_COLUMNS.citizenship_required] = False
+    assert (
+        rank_module._visa_score(
+            row_no_citizenship,
+            profile,
+            DEFAULT_RESULT_COLUMNS,
+            ranking_profile="job_seeker_v2",
+        )
+        == 0.3
+    )
+
+    _, missing = rank_module._score_components(
+        row_no_citizenship,
+        profile,
+        DEFAULT_RESULT_COLUMNS,
+        ranking_profile="job_seeker_v2",
+    )
+    assert "work_authorization_constraint" in missing
+    assert "likely_stale_posting" in missing
+
+    _, missing_with_citizenship = rank_module._score_components(
+        row,
+        profile,
+        DEFAULT_RESULT_COLUMNS,
+        ranking_profile="job_seeker_v2",
+    )
+    assert "citizenship_constraint" in missing_with_citizenship
+
+
+def test_build_application_plan_role_category_and_risk_branches() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                DEFAULT_RESULT_COLUMNS.fit_score: 0.8,
+                DEFAULT_RESULT_COLUMNS.missing_requirements: ["likely_stale_posting", "salary_below_minimum"],
+                DEFAULT_RESULT_COLUMNS.visa_sponsorship_signal: None,
+                DEFAULT_RESULT_COLUMNS.citizenship_required: True,
+                DEFAULT_RESULT_COLUMNS.work_authorization_required: True,
+                DEFAULT_RESULT_COLUMNS.active_likelihood: 0.2,
+                DEFAULT_RESULT_COLUMNS.application_friction_score: 0.2,
+                DEFAULT_RESULT_COLUMNS.signal_confidence: 0.1,
+                "role_category": "product",
+            },
+            {
+                DEFAULT_RESULT_COLUMNS.fit_score: 0.7,
+                DEFAULT_RESULT_COLUMNS.missing_requirements: [],
+                DEFAULT_RESULT_COLUMNS.visa_sponsorship_signal: True,
+                DEFAULT_RESULT_COLUMNS.citizenship_required: False,
+                DEFAULT_RESULT_COLUMNS.work_authorization_required: False,
+                DEFAULT_RESULT_COLUMNS.active_likelihood: 0.9,
+                DEFAULT_RESULT_COLUMNS.application_friction_score: 0.9,
+                DEFAULT_RESULT_COLUMNS.signal_confidence: 0.9,
+                "role_category": "engineering",
+            },
+        ]
+    )
+    planned = rank_module.build_application_plan(
+        df,
+        profile=CandidateProfile(needs_visa_sponsorship=True),
+        top_n=-1,
+        include_diagnostics=True,
+        max_actions_per_job=10,
+    )
+    first_actions = planned.loc[0, DEFAULT_RESULT_COLUMNS.next_actions]
+    second_actions = planned.loc[1, DEFAULT_RESULT_COLUMNS.next_actions]
+    assert any("roadmap prioritization" in action for action in first_actions)
+    assert any("higher-friction process" in action for action in first_actions)
+    assert any("quantified technical outcomes" in action for action in second_actions)
+    assert planned.loc[0, DEFAULT_RESULT_COLUMNS.offer_risk] == "high"
 
 
 def test_rank_jobs_weight_update_top_n_and_build_plan_branches() -> None:

@@ -6,9 +6,14 @@ from typing import Iterable
 import pandas as pd
 
 from honestroles.schema import (
+    ACTIVE_LIKELIHOOD,
+    APPLICATION_FRICTION_SCORE,
     CITY,
     COUNTRY,
     DESCRIPTION_TEXT,
+    EMPLOYMENT_TYPE,
+    ENTRY_LEVEL_LIKELY,
+    EXPERIENCE_YEARS_MIN,
     INGESTED_AT,
     LAST_SEEN,
     LOCATION_RAW,
@@ -23,6 +28,9 @@ from honestroles.schema import (
     SKILLS,
     TECH_STACK,
     TITLE,
+    VISA_SPONSORSHIP_SIGNAL,
+    WORK_AUTHORIZATION_REQUIRED,
+    CITIZENSHIP_REQUIRED,
 )
 
 
@@ -57,6 +65,24 @@ def _resolve_as_of(as_of: str | pd.Timestamp | None) -> pd.Timestamp:
     if pd.isna(parsed):
         return pd.Timestamp.now(tz="UTC")
     return pd.Timestamp(parsed)
+
+
+_EMPLOYMENT_NORMALIZATION = {
+    "full-time": "full_time",
+    "full time": "full_time",
+    "part-time": "part_time",
+    "part time": "part_time",
+}
+
+
+def _normalize_employment(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    lowered = value.strip().lower()
+    if not lowered:
+        return ""
+    canonical = _EMPLOYMENT_NORMALIZATION.get(lowered, lowered)
+    return canonical.replace("-", "_").replace(" ", "_")
 
 
 def by_location(
@@ -116,6 +142,125 @@ def by_salary(
         mask &= df[SALARY_MAX].fillna(0) >= min_salary
     if max_salary is not None:
         mask &= df[SALARY_MIN].fillna(0) <= max_salary
+    return mask
+
+
+def by_employment_type(
+    df: pd.DataFrame,
+    *,
+    employment_types: Iterable[str] | None = None,
+) -> pd.Series:
+    if not employment_types:
+        return _series_or_true(df)
+    if EMPLOYMENT_TYPE not in df.columns:
+        return _series_or_true(df)
+    allowed = {_normalize_employment(value) for value in employment_types if _normalize_employment(value)}
+    if not allowed:
+        return _series_or_true(df)
+    normalized = df[EMPLOYMENT_TYPE].map(_normalize_employment)
+    return normalized.isin(allowed)
+
+
+def by_entry_level(
+    df: pd.DataFrame,
+    *,
+    entry_level_only: bool = False,
+) -> pd.Series:
+    if not entry_level_only:
+        return _series_or_true(df)
+    has_entry = ENTRY_LEVEL_LIKELY in df.columns
+    has_exp = EXPERIENCE_YEARS_MIN in df.columns
+    if not has_entry and not has_exp:
+        return _series_or_true(df)
+
+    entry_mask = (
+        df[ENTRY_LEVEL_LIKELY].map(lambda value: value is True)
+        if has_entry
+        else pd.Series(False, index=df.index, dtype="bool")
+    )
+    exp_mask = (
+        pd.to_numeric(df[EXPERIENCE_YEARS_MIN], errors="coerce").le(2).fillna(False)
+        if has_exp
+        else pd.Series(False, index=df.index, dtype="bool")
+    )
+    return (entry_mask | exp_mask).astype("bool")
+
+
+def by_experience(
+    df: pd.DataFrame,
+    *,
+    max_experience_years: int | None = None,
+) -> pd.Series:
+    if max_experience_years is None:
+        return _series_or_true(df)
+    if EXPERIENCE_YEARS_MIN not in df.columns:
+        return _series_or_true(df)
+    minimum = pd.to_numeric(df[EXPERIENCE_YEARS_MIN], errors="coerce")
+    return (minimum.le(max_experience_years) | minimum.isna()).astype("bool")
+
+
+def by_visa_requirements(
+    df: pd.DataFrame,
+    *,
+    needs_visa_sponsorship: bool | None = None,
+    include_unknown_visa: bool = True,
+) -> pd.Series:
+    if needs_visa_sponsorship is not True:
+        return _series_or_true(df)
+    if VISA_SPONSORSHIP_SIGNAL not in df.columns:
+        return _series_or_true(df)
+
+    visa_series = df[VISA_SPONSORSHIP_SIGNAL]
+    supports = visa_series.map(lambda value: value is True)
+    unknown = visa_series.isna()
+    mask = supports | (unknown & include_unknown_visa)
+
+    if CITIZENSHIP_REQUIRED in df.columns:
+        citizenship_required = df[CITIZENSHIP_REQUIRED].map(lambda value: value is True)
+        mask &= ~citizenship_required
+    if WORK_AUTHORIZATION_REQUIRED in df.columns:
+        work_auth = df[WORK_AUTHORIZATION_REQUIRED].map(lambda value: value is True)
+        mask &= ~(work_auth & ~supports & ~unknown)
+    return mask.astype("bool")
+
+
+def by_application_friction(
+    df: pd.DataFrame,
+    *,
+    max_application_friction: float | None = None,
+) -> pd.Series:
+    if max_application_friction is None:
+        return _series_or_true(df)
+    if APPLICATION_FRICTION_SCORE not in df.columns:
+        return _series_or_true(df)
+    friction = pd.to_numeric(df[APPLICATION_FRICTION_SCORE], errors="coerce")
+    return (friction.le(max_application_friction) | friction.isna()).astype("bool")
+
+
+def by_active_likelihood(
+    df: pd.DataFrame,
+    *,
+    active_within_days: int | None = None,
+    min_active_likelihood: float | None = None,
+    as_of: str | pd.Timestamp | None = None,
+) -> pd.Series:
+    if active_within_days is None and min_active_likelihood is None:
+        return _series_or_true(df)
+
+    mask = _series_or_true(df)
+    anchor = _resolve_as_of(as_of)
+    if active_within_days is not None:
+        seen_column = LAST_SEEN if LAST_SEEN in df.columns else INGESTED_AT
+        if seen_column in df.columns:
+            seen = pd.to_datetime(df[seen_column], errors="coerce", utc=True, format="mixed")
+            if seen_column == LAST_SEEN and INGESTED_AT in df.columns:
+                ingested = pd.to_datetime(df[INGESTED_AT], errors="coerce", utc=True, format="mixed")
+                seen = seen.where(seen.notna(), ingested)
+            cutoff = anchor - pd.Timedelta(days=active_within_days)
+            mask &= seen.ge(cutoff).fillna(False)
+    if min_active_likelihood is not None and ACTIVE_LIKELIHOOD in df.columns:
+        active_score = pd.to_numeric(df[ACTIVE_LIKELIHOOD], errors="coerce")
+        mask &= active_score.ge(min_active_likelihood).fillna(False)
     return mask
 
 

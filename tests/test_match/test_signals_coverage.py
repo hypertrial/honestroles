@@ -72,6 +72,29 @@ def test_signal_boolean_and_numeric_parsers_edge_cases() -> None:
     assert signals_module._parse_score(object()) is None
     assert signals_module._parse_score(float("inf")) is None
     assert signals_module._parse_skill_list("python") == []
+    assert signals_module._resolve_as_of("not-a-date").tzinfo is not None
+
+
+def test_auth_signal_series_and_active_bucket_helpers() -> None:
+    text = pd.Series(
+        [
+            "Must be authorized to work.",
+            "No authorization required.",
+            "No work authorization required.",
+            "No matching phrase.",
+        ],
+        dtype="string",
+    )
+    signal = signals_module._auth_signal_series(
+        text,
+        positive=signals_module._WORK_AUTH_POSITIVE_RE,
+        negative=signals_module._WORK_AUTH_NEGATIVE_RE,
+    )
+    assert signal.tolist() == [True, False, False, None]
+
+    scores, reasons = signals_module._active_bucket(pd.Series([1.0, 20.0, 60.0, 120.0, None]))
+    assert scores.tolist() == [1.0, 0.8, 0.55, 0.2, 0.4]
+    assert reasons.tolist() == ["fresh", "recent", "aging", "stale", "unknown"]
 
 
 def test_extract_job_signals_warns_when_ollama_unavailable(

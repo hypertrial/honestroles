@@ -13,3 +13,6 @@ def test_match_weights_as_dict_contains_new_components() -> None:
     weights = MatchWeights().as_dict()
     assert "role_alignment" in weights
     assert "graduation_alignment" in weights
+    assert "active" in weights
+    assert "friction" in weights
+    assert "confidence" in weights

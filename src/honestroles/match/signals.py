@@ -15,6 +15,9 @@ from honestroles.schema import (
     DESCRIPTION_TEXT,
     EXPERIENCE_YEARS_MAX,
     EXPERIENCE_YEARS_MIN,
+    INGESTED_AT,
+    LAST_SEEN,
+    POSTED_AT,
     REMOTE_FLAG,
     REMOTE_TYPE,
     SKILLS,
@@ -61,6 +64,8 @@ _VISA_POSITIVE = (
     "sponsor visa",
     "h-1b sponsorship",
     "h1b sponsorship",
+    "sponsorship available",
+    "sponsorship provided",
     "opt accepted",
     "cpt accepted",
 )
@@ -70,7 +75,44 @@ _VISA_NEGATIVE = (
     "will not sponsor",
     "cannot sponsor",
     "must be authorized to work",
+    "must be legally authorized to work",
+    "authorization to work required",
     "without sponsorship",
+    "sponsorship not available",
+    "do not provide sponsorship",
+    "unable to provide sponsorship",
+)
+
+_WORK_AUTH_POSITIVE = (
+    "must be authorized to work",
+    "must be legally authorized to work",
+    "authorization to work required",
+    "right to work required",
+    "work authorization required",
+)
+_WORK_AUTH_NEGATIVE = (
+    "no work authorization required",
+    "no authorization required",
+)
+_CITIZENSHIP_POSITIVE = (
+    "us citizen required",
+    "u.s. citizen required",
+    "citizens only",
+    "must be a us citizen",
+    "must be a u.s. citizen",
+    "permanent resident required",
+    "green card required",
+)
+_CITIZENSHIP_NEGATIVE = (
+    "all work authorizations considered",
+    "all applicants are welcome",
+)
+_CLEARANCE_POSITIVE = (
+    "security clearance",
+    "secret clearance",
+    "top secret",
+    "ts/sci",
+    "ability to obtain clearance",
 )
 
 _FRICTION_TERMS = (
@@ -343,6 +385,71 @@ def _visa_signal(text: str) -> bool | None:
     return None
 
 
+def _phrase_fragment(term: str) -> str:
+    return re.escape(term).replace(r"\ ", r"\s+")
+
+
+def _compile_phrase_pattern(terms: tuple[str, ...]) -> re.Pattern[str]:
+    return re.compile("|".join(_phrase_fragment(term) for term in terms), re.IGNORECASE)
+
+
+_WORK_AUTH_POSITIVE_RE = _compile_phrase_pattern(_WORK_AUTH_POSITIVE)
+_WORK_AUTH_NEGATIVE_RE = _compile_phrase_pattern(_WORK_AUTH_NEGATIVE)
+_CITIZENSHIP_POSITIVE_RE = _compile_phrase_pattern(_CITIZENSHIP_POSITIVE)
+_CITIZENSHIP_NEGATIVE_RE = _compile_phrase_pattern(_CITIZENSHIP_NEGATIVE)
+_CLEARANCE_POSITIVE_RE = _compile_phrase_pattern(_CLEARANCE_POSITIVE)
+
+
+def _auth_signal_series(
+    text: pd.Series,
+    *,
+    positive: re.Pattern[str],
+    negative: re.Pattern[str] | None = None,
+) -> pd.Series:
+    positive_mask = text.str.contains(positive, na=False)
+    negative_mask = (
+        text.str.contains(negative, na=False)
+        if negative is not None
+        else pd.Series(False, index=text.index, dtype="bool")
+    )
+    values = pd.Series([None] * len(text), index=text.index, dtype="object")
+    # Resolve overlaps conservatively: an explicit negative phrase should win.
+    values.loc[positive_mask & ~negative_mask] = True
+    values.loc[negative_mask] = False
+    return values
+
+
+def _resolve_as_of(as_of: str | pd.Timestamp | None) -> pd.Timestamp:
+    if as_of is None:
+        return pd.Timestamp.now(tz="UTC")
+    parsed = pd.to_datetime(as_of, errors="coerce", utc=True)
+    if pd.isna(parsed):
+        return pd.Timestamp.now(tz="UTC")
+    return pd.Timestamp(parsed)
+
+
+def _active_bucket(values: pd.Series) -> tuple[pd.Series, pd.Series]:
+    score = pd.Series(0.4, index=values.index, dtype="float64")
+    reason = pd.Series("unknown", index=values.index, dtype="object")
+    known = values.notna()
+    if bool(known.any()):
+        fresh = known & values.le(7)
+        recent = known & values.gt(7) & values.le(30)
+        aging = known & values.gt(30) & values.le(90)
+        stale = known & values.gt(90)
+
+        score.loc[fresh] = 1.0
+        score.loc[recent] = 0.8
+        score.loc[aging] = 0.55
+        score.loc[stale] = 0.2
+
+        reason.loc[fresh] = "fresh"
+        reason.loc[recent] = "recent"
+        reason.loc[aging] = "aging"
+        reason.loc[stale] = "stale"
+    return score, reason
+
+
 def _application_friction_score(text: str, apply_url: str) -> float:
     lowered = text.lower()
     score = 0.8
@@ -488,6 +595,7 @@ def extract_job_signals(
     model: str = "llama3",
     ollama_url: str = "http://localhost:11434",
     llm_min_confidence: float = 0.7,
+    as_of: str | pd.Timestamp | None = None,
 ) -> pd.DataFrame:
     """Extract matching-relevant job signals with heuristic-first, Ollama-fallback flow."""
     result = df.copy()
@@ -537,6 +645,17 @@ def extract_job_signals(
         dtype="object",
     )
     visa_signal = text.map(_visa_signal).astype("object")
+    work_authorization_required = _auth_signal_series(
+        text,
+        positive=_WORK_AUTH_POSITIVE_RE,
+        negative=_WORK_AUTH_NEGATIVE_RE,
+    )
+    citizenship_required = _auth_signal_series(
+        text,
+        positive=_CITIZENSHIP_POSITIVE_RE,
+        negative=_CITIZENSHIP_NEGATIVE_RE,
+    )
+    clearance_required = _auth_signal_series(text, positive=_CLEARANCE_POSITIVE_RE)
     friction = pd.Series(
         [
             _application_friction_score(text_value, apply_url)
@@ -577,6 +696,44 @@ def extract_job_signals(
 
     exp_min = exp_min.where(exp_min.notna(), exp_max)
     exp_max = exp_max.where(exp_max.notna(), exp_min)
+
+    anchor = _resolve_as_of(as_of)
+    seen_base = _series_text(result, LAST_SEEN if LAST_SEEN in result.columns else INGESTED_AT)
+    if LAST_SEEN in result.columns and INGESTED_AT in result.columns:
+        ingested_text = _series_text(result, INGESTED_AT)
+        seen_base = seen_base.where(seen_base.str.strip().ne(""), ingested_text)
+    seen_ts = pd.to_datetime(seen_base, errors="coerce", utc=True, format="mixed")
+    seen_age_days = ((anchor - seen_ts).dt.total_seconds() / 86400.0).astype("float64")
+    recency_score, active_reason = _active_bucket(seen_age_days)
+
+    posted_ts = pd.to_datetime(
+        _series_text(result, POSTED_AT),
+        errors="coerce",
+        utc=True,
+        format="mixed",
+    )
+    posted_age_days = ((anchor - posted_ts).dt.total_seconds() / 86400.0).astype("float64")
+    freshness_score = pd.Series(0.5, index=result.index, dtype="float64")
+    known_posted = posted_age_days.notna()
+    if bool(known_posted.any()):
+        freshness_score.loc[known_posted & posted_age_days.le(14)] = 1.0
+        freshness_score.loc[known_posted & posted_age_days.gt(14) & posted_age_days.le(45)] = 0.8
+        freshness_score.loc[known_posted & posted_age_days.gt(45) & posted_age_days.le(120)] = 0.55
+        freshness_score.loc[known_posted & posted_age_days.gt(120)] = 0.3
+
+    continuity_score = pd.Series(0.5, index=result.index, dtype="float64")
+    if "snapshot_count" in result.columns:
+        snapshot_count = pd.to_numeric(result["snapshot_count"], errors="coerce")
+        known_snapshots = snapshot_count.notna()
+        if bool(known_snapshots.any()):
+            continuity_score.loc[known_snapshots & snapshot_count.ge(3)] = 1.0
+            continuity_score.loc[known_snapshots & snapshot_count.eq(2)] = 0.8
+            continuity_score.loc[known_snapshots & snapshot_count.eq(1)] = 0.6
+
+    active_likelihood = (0.60 * recency_score + 0.30 * freshness_score + 0.10 * continuity_score).clip(
+        lower=0.0,
+        upper=1.0,
+    )
 
     remote_flag = _series_optional_bool(result, remote_flag_column).fillna(False)
     remote_type = _series_text(result, remote_type_column).str.strip().str.lower().eq("remote")
@@ -632,6 +789,11 @@ def extract_job_signals(
     result[columns.experience_years_max] = exp_max.astype("object")
     result[columns.entry_level_likely] = entry_level.astype("object")
     result[columns.visa_sponsorship_signal] = visa_signal.astype("object")
+    result[columns.work_authorization_required] = work_authorization_required.astype("object")
+    result[columns.citizenship_required] = citizenship_required.astype("object")
+    result[columns.clearance_required] = clearance_required.astype("object")
+    result[columns.active_likelihood] = active_likelihood.astype("float64")
+    result[columns.active_reason] = active_reason.astype("object")
     result[columns.application_friction_score] = friction.astype("float64")
     result[columns.role_clarity_score] = clarity.astype("float64")
     result[columns.signal_confidence] = confidence.astype("float64")

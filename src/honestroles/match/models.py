@@ -51,6 +51,9 @@ class MatchWeights:
     salary: float = 0.08
     location: float = 0.08
     quality: float = 0.04
+    active: float = 0.08
+    friction: float = 0.06
+    confidence: float = 0.06
 
     def as_dict(self) -> dict[str, float]:
         return {
@@ -63,6 +66,9 @@ class MatchWeights:
             "salary": self.salary,
             "location": self.location,
             "quality": self.quality,
+            "active": self.active,
+            "friction": self.friction,
+            "confidence": self.confidence,
         }
 
 
@@ -86,6 +92,15 @@ class MatchResultColumns:
     visa_sponsorship_signal: str = schema.VISA_SPONSORSHIP_SIGNAL
     application_friction_score: str = schema.APPLICATION_FRICTION_SCORE
     role_clarity_score: str = schema.ROLE_CLARITY_SCORE
+    work_authorization_required: str = schema.WORK_AUTHORIZATION_REQUIRED
+    citizenship_required: str = schema.CITIZENSHIP_REQUIRED
+    clearance_required: str = schema.CLEARANCE_REQUIRED
+    active_likelihood: str = schema.ACTIVE_LIKELIHOOD
+    active_reason: str = schema.ACTIVE_REASON
+    red_flags: str = schema.RED_FLAGS
+    must_ask_recruiter: str = schema.MUST_ASK_RECRUITER
+    offer_risk: str = schema.OFFER_RISK
+    application_effort_minutes: str = schema.APPLICATION_EFFORT_MINUTES
 
 
 DEFAULT_RESULT_COLUMNS = MatchResultColumns()

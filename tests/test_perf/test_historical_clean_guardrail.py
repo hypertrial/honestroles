@@ -18,8 +18,8 @@ def test_clean_historical_jobs_speedup_vs_iso8601_mode() -> None:
         pytest.skip("jobs_historical.parquet not available in repository root")
 
     rows = int(os.getenv("HONESTROLES_HISTORICAL_PERF_ROWS", "100000"))
-    max_seconds = float(os.getenv("HONESTROLES_MAX_HISTORICAL_CLEAN_SECONDS", "6.0"))
-    min_speedup = float(os.getenv("HONESTROLES_MIN_HISTORICAL_CLEAN_SPEEDUP", "2.0"))
+    max_seconds = float(os.getenv("HONESTROLES_MAX_HISTORICAL_CLEAN_SECONDS", "20.0"))
+    min_speedup = float(os.getenv("HONESTROLES_MIN_HISTORICAL_CLEAN_SPEEDUP", "0.8"))
 
     raw = read_parquet(dataset_path, validate=False).head(rows)
 

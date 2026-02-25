@@ -145,3 +145,34 @@ def test_experience_score_defaults_when_years_min_missing() -> None:
         DEFAULT_RESULT_COLUMNS,
     )
     assert score == 0.6
+
+
+def test_rank_jobs_supports_legacy_profile_switch() -> None:
+    legacy = rank_jobs(_jobs_fixture(), profile=CandidateProfile(), use_llm_signals=False, ranking_profile="legacy")
+    upgraded = rank_jobs(
+        _jobs_fixture(),
+        profile=CandidateProfile(),
+        use_llm_signals=False,
+        ranking_profile="job_seeker_v2",
+    )
+    columns = DEFAULT_RESULT_COLUMNS
+    assert "active" not in legacy.iloc[0][columns.fit_breakdown]
+    assert "active" in upgraded.iloc[0][columns.fit_breakdown]
+
+
+def test_build_application_plan_includes_diagnostics_and_action_limits() -> None:
+    profile = CandidateProfile(needs_visa_sponsorship=True)
+    ranked = rank_jobs(_jobs_fixture(), profile=profile, use_llm_signals=False)
+    planned = build_application_plan(
+        ranked,
+        profile=profile,
+        top_n=2,
+        max_actions_per_job=2,
+        include_diagnostics=True,
+    )
+    columns = DEFAULT_RESULT_COLUMNS
+    assert columns.red_flags in planned.columns
+    assert columns.must_ask_recruiter in planned.columns
+    assert columns.offer_risk in planned.columns
+    assert columns.application_effort_minutes in planned.columns
+    assert len(planned.loc[0, columns.next_actions]) <= 2

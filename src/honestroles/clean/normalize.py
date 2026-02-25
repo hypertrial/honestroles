@@ -19,9 +19,13 @@ from honestroles.schema import (
     REMOTE_FLAG,
     REMOTE_TYPE,
     SALARY_CURRENCY,
+    SALARY_CONFIDENCE,
+    SALARY_ANNUAL_MAX,
+    SALARY_ANNUAL_MIN,
     SALARY_INTERVAL,
     SALARY_MAX,
     SALARY_MIN,
+    SALARY_SOURCE,
     SALARY_TEXT,
     SKILLS,
     TITLE,
@@ -115,6 +119,13 @@ _SALARY_CURRENCY_MAP = {
     "eur": "EUR",
     "£": "GBP",
     "€": "EUR",
+}
+_ANNUAL_INTERVAL_MULTIPLIERS = {
+    "hour": 2080.0,
+    "day": 260.0,
+    "week": 52.0,
+    "month": 12.0,
+    "year": 1.0,
 }
 _SALARY_CONTEXT_RE = re.compile(
     r"\b(?:salary|compensation|base pay|pay range|hourly rate|annual salary|annual pay)\b",
@@ -737,13 +748,16 @@ def normalize_salaries(
     )
     salary_present = salary_text.str.strip().ne("")
     source_text = pd.Series("", index=result.index, dtype="string")
+    parsed_source = pd.Series("none", index=result.index, dtype="object")
     if bool(salary_present.any()):
         source_text.loc[salary_present] = salary_text.loc[salary_present]
+        parsed_source.loc[salary_present] = "salary_text"
     description_candidates = (~salary_present) & description_text.str.contains(
         _SALARY_PARSE_CANDIDATE_RE, na=False
     )
     if bool(description_candidates.any()):
         source_text.loc[description_candidates] = description_text.loc[description_candidates]
+        parsed_source.loc[description_candidates] = "description_text"
     parse_candidates = source_text.str.strip().ne("")
     parsed_min = pd.Series(float("nan"), index=result.index, dtype="float64")
     parsed_max = pd.Series(float("nan"), index=result.index, dtype="float64")
@@ -757,6 +771,7 @@ def normalize_salaries(
         parsed_max.loc[parse_candidates] = subset_max
         parsed_currency.loc[parse_candidates] = subset_currency
         parsed_interval.loc[parse_candidates] = subset_interval
+    parsed_has_salary = parsed_min.notna() | parsed_max.notna()
 
     existing_min = (
         pd.to_numeric(result[salary_min_column], errors="coerce")
@@ -768,6 +783,7 @@ def normalize_salaries(
         if salary_max_column in result.columns
         else pd.Series(float("nan"), index=result.index, dtype="float64")
     )
+    existing_has_salary = existing_min.notna() | existing_max.notna()
     result[salary_min_column] = existing_min.where(existing_min.notna(), parsed_min)
     result[salary_max_column] = existing_max.where(existing_max.notna(), parsed_max)
     result[salary_min_column] = result[salary_min_column].astype("object").where(
@@ -779,8 +795,10 @@ def normalize_salaries(
         None,
     )
 
+    existing_currency_present = pd.Series(False, index=result.index, dtype="bool")
     if salary_currency_column in result.columns:
         existing_currency = result[salary_currency_column].astype("string").fillna("").str.strip()
+        existing_currency_present = existing_currency.ne("")
         result[salary_currency_column] = existing_currency.where(
             existing_currency.ne(""),
             parsed_currency,
@@ -794,8 +812,10 @@ def normalize_salaries(
             "USD",
         ).astype("object")
 
+    existing_interval_present = pd.Series(False, index=result.index, dtype="bool")
     if salary_interval_column in result.columns:
         existing_interval = result[salary_interval_column].astype("string").fillna("").str.strip()
+        existing_interval_present = existing_interval.ne("")
         result[salary_interval_column] = existing_interval.where(
             existing_interval.ne(""),
             parsed_interval,
@@ -808,6 +828,48 @@ def normalize_salaries(
             parsed_interval.notna(),
             "year",
         ).astype("object")
+
+    salary_source = pd.Series("none", index=result.index, dtype="object")
+    salary_source.loc[existing_has_salary] = "existing"
+    parsed_new = ~existing_has_salary & parsed_has_salary
+    salary_source.loc[parsed_new] = parsed_source.loc[parsed_new]
+    result[SALARY_SOURCE] = salary_source
+
+    salary_confidence = pd.Series(0.0, index=result.index, dtype="float64")
+    existing_coherent = existing_has_salary & existing_currency_present & existing_interval_present
+    salary_confidence.loc[existing_has_salary] = 0.85
+    salary_confidence.loc[existing_coherent] = 1.0
+
+    parsed_explicit = parsed_new & parsed_currency.notna() & parsed_interval.notna()
+    from_salary_text = parsed_new & parsed_source.eq("salary_text")
+    from_description = parsed_new & parsed_source.eq("description_text")
+    salary_confidence.loc[from_salary_text] = 0.55
+    salary_confidence.loc[from_description] = 0.55
+    salary_confidence.loc[from_salary_text & parsed_explicit] = 0.85
+    salary_confidence.loc[from_description & parsed_explicit] = 0.70
+    result[SALARY_CONFIDENCE] = salary_confidence
+
+    annual_min = pd.Series(float("nan"), index=result.index, dtype="float64")
+    annual_max = pd.Series(float("nan"), index=result.index, dtype="float64")
+    min_numeric = pd.to_numeric(result[salary_min_column], errors="coerce")
+    max_numeric = pd.to_numeric(result[salary_max_column], errors="coerce")
+    interval_normalized = (
+        result[salary_interval_column].astype("string").fillna("").str.strip().str.lower()
+    )
+    multiplier = interval_normalized.map(_ANNUAL_INTERVAL_MULTIPLIERS).astype("float64")
+
+    known_interval = multiplier.notna()
+    if bool(known_interval.any()):
+        annual_min.loc[known_interval] = min_numeric.loc[known_interval] * multiplier.loc[known_interval]
+        annual_max.loc[known_interval] = max_numeric.loc[known_interval] * multiplier.loc[known_interval]
+
+    annual_like_min = min_numeric.where(min_numeric.ge(15000.0))
+    annual_like_max = max_numeric.where(max_numeric.ge(15000.0))
+    annual_min = annual_min.where(annual_min.notna(), annual_like_min)
+    annual_max = annual_max.where(annual_max.notna(), annual_like_max)
+
+    result[SALARY_ANNUAL_MIN] = annual_min.astype("object").where(annual_min.notna(), None)
+    result[SALARY_ANNUAL_MAX] = annual_max.astype("object").where(annual_max.notna(), None)
     return result
 
 

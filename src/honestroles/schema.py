@@ -22,6 +22,10 @@ SALARY_MIN = "salary_min"
 SALARY_MAX = "salary_max"
 SALARY_CURRENCY = "salary_currency"
 SALARY_INTERVAL = "salary_interval"
+SALARY_ANNUAL_MIN = "salary_annual_min"
+SALARY_ANNUAL_MAX = "salary_annual_max"
+SALARY_CONFIDENCE = "salary_confidence"
+SALARY_SOURCE = "salary_source"
 CITY = "city"
 COUNTRY = "country"
 REGION = "region"
@@ -53,6 +57,15 @@ ROLE_CLARITY_SCORE = "role_clarity_score"
 SIGNAL_CONFIDENCE = "signal_confidence"
 SIGNAL_SOURCE = "signal_source"
 SIGNAL_REASON = "signal_reason"
+WORK_AUTHORIZATION_REQUIRED = "work_authorization_required"
+CITIZENSHIP_REQUIRED = "citizenship_required"
+CLEARANCE_REQUIRED = "clearance_required"
+ACTIVE_LIKELIHOOD = "active_likelihood"
+ACTIVE_REASON = "active_reason"
+RED_FLAGS = "red_flags"
+MUST_ASK_RECRUITER = "must_ask_recruiter"
+OFFER_RISK = "offer_risk"
+APPLICATION_EFFORT_MINUTES = "application_effort_minutes"
 
 REQUIRED_COLUMNS = {
     JOB_KEY,
@@ -87,6 +100,10 @@ ALL_COLUMNS = [
     SALARY_MAX,
     SALARY_CURRENCY,
     SALARY_INTERVAL,
+    SALARY_ANNUAL_MIN,
+    SALARY_ANNUAL_MAX,
+    SALARY_CONFIDENCE,
+    SALARY_SOURCE,
     CITY,
     COUNTRY,
     REGION,
@@ -121,6 +138,10 @@ class JobsCurrentRow(TypedDict, total=False):
     salary_max: float | None
     salary_currency: str | None
     salary_interval: str | None
+    salary_annual_min: float | None
+    salary_annual_max: float | None
+    salary_confidence: float | None
+    salary_source: str | None
     city: str | None
     country: str | None
     region: str | None

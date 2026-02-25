@@ -337,6 +337,78 @@ def test_normalize_salaries_preserves_existing_numeric_values() -> None:
     assert normalized.loc[0, "salary_max"] == 140000.0
     assert normalized.loc[0, "salary_currency"] == "USD"
     assert normalized.loc[0, "salary_interval"] == "year"
+    assert normalized.loc[0, "salary_source"] == "existing"
+    assert normalized.loc[0, "salary_confidence"] == 1.0
+
+
+def test_normalize_salaries_computes_annualized_and_source_confidence() -> None:
+    df = pd.DataFrame(
+        {
+            "salary_text": [
+                "$50 - $60 per hour",
+                "$90,000 - $110,000",
+                None,
+            ],
+            "description_text": [
+                "Compensation listed above.",
+                "Compensation listed above.",
+                "Compensation: CAD 120k - CAD 150k per year.",
+            ],
+            "salary_min": [None, None, 130000.0],
+            "salary_max": [None, None, 160000.0],
+            "salary_currency": [None, None, "CAD"],
+            "salary_interval": [None, None, "year"],
+        }
+    )
+    normalized = normalize_salaries(df)
+
+    assert normalized.loc[0, "salary_annual_min"] == 104000.0
+    assert normalized.loc[0, "salary_annual_max"] == 124800.0
+    assert normalized.loc[0, "salary_source"] == "salary_text"
+    assert normalized.loc[0, "salary_confidence"] == 0.85
+
+    assert normalized.loc[1, "salary_annual_min"] == 90000.0
+    assert normalized.loc[1, "salary_annual_max"] == 110000.0
+    assert normalized.loc[1, "salary_source"] == "salary_text"
+    assert normalized.loc[1, "salary_confidence"] == 0.55
+
+    assert normalized.loc[2, "salary_source"] == "existing"
+    assert normalized.loc[2, "salary_confidence"] == 1.0
+    assert normalized.loc[2, "salary_annual_min"] == 130000.0
+    assert normalized.loc[2, "salary_annual_max"] == 160000.0
+
+
+def test_normalize_salaries_annualization_is_conservative_when_interval_missing() -> None:
+    df = pd.DataFrame(
+        {
+            "salary_text": ["$50 - $60"],
+            "salary_interval": [None],
+        }
+    )
+    normalized = normalize_salaries(df)
+    assert normalized.loc[0, "salary_annual_min"] is None
+    assert normalized.loc[0, "salary_annual_max"] is None
+
+
+def test_normalize_salaries_annualization_supports_one_sided_values() -> None:
+    df = pd.DataFrame(
+        {
+            "salary_text": [None],
+            "salary_min": [50.0],
+            "salary_max": [None],
+            "salary_interval": ["hour"],
+        }
+    )
+    normalized = normalize_salaries(df)
+    assert normalized.loc[0, "salary_annual_min"] == 104000.0
+    assert normalized.loc[0, "salary_annual_max"] is None
+
+
+def test_normalize_salaries_sets_none_source_and_zero_confidence_without_signal() -> None:
+    df = pd.DataFrame({"salary_text": ["Compensation discussed during interview."]})
+    normalized = normalize_salaries(df)
+    assert normalized.loc[0, "salary_source"] == "none"
+    assert normalized.loc[0, "salary_confidence"] == 0.0
 
 
 def test_extract_salary_from_text_rejects_non_positive_or_tiny_ranges() -> None:

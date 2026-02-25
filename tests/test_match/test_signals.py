@@ -31,6 +31,11 @@ def test_extract_job_signals_heuristic_fields() -> None:
     assert columns.required_skills_extracted in enriched.columns
     assert columns.entry_level_likely in enriched.columns
     assert columns.application_friction_score in enriched.columns
+    assert columns.work_authorization_required in enriched.columns
+    assert columns.citizenship_required in enriched.columns
+    assert columns.clearance_required in enriched.columns
+    assert columns.active_likelihood in enriched.columns
+    assert columns.active_reason in enriched.columns
 
     row = enriched.iloc[0]
     required = row[columns.required_skills_extracted]
@@ -172,3 +177,81 @@ def test_extract_job_signals_normalizes_seed_skill_aliases() -> None:
     required = enriched.loc[0, columns.required_skills_extracted]
     assert "aws" in required
     assert "node" in required
+
+
+def test_extract_job_signals_detects_authorization_and_clearance_constraints() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "title": "Platform Engineer",
+                "description_text": (
+                    "Candidates must be legally authorized to work in the US. "
+                    "US citizen required. Active security clearance required."
+                ),
+                "apply_url": "https://example.com/jobs/4",
+            }
+        ]
+    )
+    enriched = extract_job_signals(df, use_llm=False)
+    columns = DEFAULT_RESULT_COLUMNS
+    assert enriched.loc[0, columns.work_authorization_required] is True
+    assert enriched.loc[0, columns.citizenship_required] is True
+    assert enriched.loc[0, columns.clearance_required] is True
+
+
+def test_extract_job_signals_active_likelihood_uses_last_seen_then_ingested_fallback() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "title": "Data Analyst",
+                "description_text": "Role details.",
+                "last_seen": "2025-01-09T00:00:00Z",
+                "posted_at": "2025-01-01T00:00:00Z",
+                "ingested_at": "2025-01-10T00:00:00Z",
+            },
+            {
+                "title": "Data Analyst",
+                "description_text": "Role details.",
+                "last_seen": None,
+                "posted_at": "2024-09-01T00:00:00Z",
+                "ingested_at": "2024-10-01T00:00:00Z",
+            },
+        ]
+    )
+    enriched = extract_job_signals(df, use_llm=False, as_of="2025-01-10T00:00:00Z")
+    columns = DEFAULT_RESULT_COLUMNS
+    assert enriched.loc[0, columns.active_reason] == "fresh"
+    assert enriched.loc[0, columns.active_likelihood] > enriched.loc[1, columns.active_likelihood]
+    assert enriched.loc[1, columns.active_reason] in {"aging", "stale"}
+
+
+def test_extract_job_signals_active_likelihood_uses_snapshot_continuity() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "title": "Role A",
+                "description_text": "Role details.",
+                "last_seen": "2025-01-09T00:00:00Z",
+                "posted_at": "2025-01-05T00:00:00Z",
+                "snapshot_count": 3,
+            },
+            {
+                "title": "Role B",
+                "description_text": "Role details.",
+                "last_seen": "2025-01-09T00:00:00Z",
+                "posted_at": "2025-01-05T00:00:00Z",
+                "snapshot_count": 2,
+            },
+            {
+                "title": "Role C",
+                "description_text": "Role details.",
+                "last_seen": "2025-01-09T00:00:00Z",
+                "posted_at": "2025-01-05T00:00:00Z",
+                "snapshot_count": 1,
+            },
+        ]
+    )
+    enriched = extract_job_signals(df, use_llm=False, as_of="2025-01-10T00:00:00Z")
+    columns = DEFAULT_RESULT_COLUMNS
+    assert enriched.loc[0, columns.active_likelihood] > enriched.loc[1, columns.active_likelihood]
+    assert enriched.loc[1, columns.active_likelihood] > enriched.loc[2, columns.active_likelihood]

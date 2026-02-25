@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import date
 import re
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
 
@@ -14,20 +14,22 @@ from honestroles.match.models import (
 )
 from honestroles.match.signals import extract_job_signals
 from honestroles.schema import (
-    CITY,
-    COUNTRY,
+    ACTIVE_LIKELIHOOD,
     DESCRIPTION_TEXT,
     LOCATION_RAW,
     QUALITY_SCORE,
     RATING,
-    REGION,
     REMOTE_FLAG,
     REMOTE_TYPE,
+    SALARY_CONFIDENCE,
     SALARY_CURRENCY,
     SALARY_MAX,
     SKILLS,
     TECH_STACK,
     TITLE,
+    CITY,
+    COUNTRY,
+    REGION,
 )
 
 ComponentScorer = Callable[[pd.Series, CandidateProfile], float]
@@ -108,14 +110,24 @@ def _experience_score(row: pd.Series, profile: CandidateProfile, columns: Any) -
     return max(0.0, 1.0 - (gap * 0.25))
 
 
-def _visa_score(row: pd.Series, profile: CandidateProfile, columns: Any) -> float:
+def _visa_score(
+    row: pd.Series,
+    profile: CandidateProfile,
+    columns: Any,
+    *,
+    ranking_profile: Literal["job_seeker_v2", "legacy"] = "legacy",
+) -> float:
     if profile.needs_visa_sponsorship is not True:
         return 1.0
+    if ranking_profile == "job_seeker_v2" and row.get(columns.citizenship_required) is True:
+        return 0.0
     value = row.get(columns.visa_sponsorship_signal)
     if value is True:
         return 1.0
     if value is False:
         return 0.0
+    if ranking_profile == "job_seeker_v2" and row.get(columns.work_authorization_required) is True:
+        return 0.3
     return 0.5
 
 
@@ -183,6 +195,32 @@ def _quality_score(row: pd.Series, columns: Any) -> float:
     return 0.5 if clarity is None else clarity
 
 
+def _active_score(row: pd.Series, columns: Any) -> float:
+    value = _as_float(row.get(columns.active_likelihood))
+    if value is None:
+        value = _as_float(row.get(ACTIVE_LIKELIHOOD))
+    if value is None:
+        return 0.5
+    return max(0.0, min(1.0, value))
+
+
+def _friction_score(row: pd.Series, columns: Any) -> float:
+    value = _as_float(row.get(columns.application_friction_score))
+    if value is None:
+        return 0.6
+    return max(0.0, min(1.0, 1.0 - value))
+
+
+def _confidence_score(row: pd.Series, columns: Any) -> float:
+    signal_confidence = _as_float(row.get(columns.signal_confidence))
+    if signal_confidence is not None:
+        return max(0.0, min(1.0, signal_confidence))
+    salary_confidence = _as_float(row.get(SALARY_CONFIDENCE))
+    if salary_confidence is not None:
+        return max(0.0, min(1.0, salary_confidence))
+    return 0.5
+
+
 def _role_alignment_score(row: pd.Series, profile: CandidateProfile) -> float:
     target_roles = [role.lower().strip() for role in profile.target_roles if role.strip()]
     if not target_roles:
@@ -247,6 +285,7 @@ def _score_components(
     profile: CandidateProfile,
     columns: Any,
     *,
+    ranking_profile: Literal["job_seeker_v2", "legacy"] = "job_seeker_v2",
     component_overrides: dict[str, ComponentScorer] | None = None,
 ) -> tuple[dict[str, float], list[str]]:
     skills, missing_skills = _skill_score(row, profile, columns)
@@ -254,13 +293,17 @@ def _score_components(
         "skills": skills,
         "entry_level": _entry_level_score(row, columns),
         "experience": _experience_score(row, profile, columns),
-        "visa": _visa_score(row, profile, columns),
+        "visa": _visa_score(row, profile, columns, ranking_profile=ranking_profile),
         "role_alignment": _role_alignment_score(row, profile),
         "graduation_alignment": _graduation_alignment_score(row, profile, columns),
         "salary": _salary_score(row, profile),
         "location": _location_score(row, profile),
         "quality": _quality_score(row, columns),
     }
+    if ranking_profile == "job_seeker_v2":
+        components["active"] = _active_score(row, columns)
+        components["friction"] = _friction_score(row, columns)
+        components["confidence"] = _confidence_score(row, columns)
     if component_overrides:
         for name, scorer in component_overrides.items():
             if name not in components:
@@ -276,6 +319,23 @@ def _score_components(
         missing.append(f"missing_skills:{','.join(missing_skills)}")
     if profile.needs_visa_sponsorship is True and row.get(columns.visa_sponsorship_signal) is False:
         missing.append("visa_sponsorship_not_available")
+    if (
+        ranking_profile == "job_seeker_v2"
+        and profile.needs_visa_sponsorship is True
+        and row.get(columns.work_authorization_required) is True
+        and row.get(columns.visa_sponsorship_signal) is not True
+    ):
+        missing.append("work_authorization_constraint")
+    if (
+        ranking_profile == "job_seeker_v2"
+        and profile.needs_visa_sponsorship is True
+        and row.get(columns.citizenship_required) is True
+    ):
+        missing.append("citizenship_constraint")
+    if ranking_profile == "job_seeker_v2":
+        active_value = _as_float(row.get(columns.active_likelihood))
+        if active_value is not None and active_value < 0.35:
+            missing.append("likely_stale_posting")
 
     min_exp = row.get(columns.experience_years_min)
     if min_exp is not None and not (isinstance(min_exp, float) and pd.isna(min_exp)):
@@ -320,8 +380,10 @@ def rank_jobs(
     use_llm_signals: bool = False,
     model: str = "llama3",
     ollama_url: str = "http://localhost:11434",
+    as_of: str | pd.Timestamp | None = None,
     weights: dict[str, float] | None = None,
     component_overrides: dict[str, ComponentScorer] | None = None,
+    ranking_profile: Literal["job_seeker_v2", "legacy"] = "job_seeker_v2",
     sort_desc: bool = True,
     top_n: int | None = None,
 ) -> pd.DataFrame:
@@ -333,6 +395,7 @@ def rank_jobs(
         use_llm=use_llm_signals,
         model=model,
         ollama_url=ollama_url,
+        as_of=as_of,
     )
 
     weight_map = MatchWeights().as_dict()
@@ -349,6 +412,7 @@ def rank_jobs(
             row,
             candidate,
             columns,
+            ranking_profile=ranking_profile,
             component_overrides=component_overrides,
         )
         fit_score = _weighted_score(components, weight_map)
@@ -375,17 +439,31 @@ def build_application_plan(
     *,
     profile: CandidateProfile | None = None,
     top_n: int = 20,
+    max_actions_per_job: int = 4,
+    include_diagnostics: bool = True,
 ) -> pd.DataFrame:
     """Build concise next actions for top-ranked jobs."""
     candidate = profile or CandidateProfile.mds_new_grad()
     columns = DEFAULT_RESULT_COLUMNS
     result = ranked_df.copy()
     if columns.fit_score not in result.columns:
-        result = rank_jobs(result, profile=candidate, use_llm_signals=False, top_n=None)
+        result = rank_jobs(
+            result,
+            profile=candidate,
+            use_llm_signals=False,
+            ranking_profile="job_seeker_v2",
+            top_n=None,
+        )
 
     actions_all: list[list[str]] = []
+    red_flags_all: list[list[str]] = []
+    questions_all: list[list[str]] = []
+    offer_risk_all: list[str] = []
+    effort_all: list[int] = []
     for _, row in result.iterrows():
         actions: list[str] = []
+        red_flags: list[str] = []
+        ask_recruiter: list[str] = []
         missing = row.get(columns.missing_requirements, [])
         if isinstance(missing, list):
             missing_items = [str(item) for item in missing]
@@ -400,21 +478,82 @@ def build_application_plan(
         if skill_gaps:
             actions.append(f"Highlight projects/coursework covering: {skill_gaps[0]}.")
         actions.append("Tailor resume bullets to listed responsibilities and impact metrics.")
+
+        role_category = str(row.get("role_category", "")).strip().lower()
+        if role_category in {"engineering", "data"}:
+            actions.append("Lead with quantified technical outcomes in the first 3 resume bullets.")
+        elif role_category == "product":
+            actions.append("Emphasize roadmap prioritization and cross-functional delivery examples.")
+
         if "experience_requirement_above_profile" in missing_items:
             actions.append("Use a summary section to frame equivalent internship/research depth.")
         if candidate.needs_visa_sponsorship is True:
             visa_signal = row.get(columns.visa_sponsorship_signal)
             if visa_signal is None:
                 actions.append("Confirm sponsorship policy during recruiter screen.")
+                ask_recruiter.append("Does this role support visa sponsorship for this location?")
             elif visa_signal is False:
                 actions.append("Deprioritize unless a referral can validate sponsorship.")
+                red_flags.append("visa_sponsorship_not_available")
+        if row.get(columns.citizenship_required) is True:
+            red_flags.append("citizenship_constraint")
+            ask_recruiter.append("Is there any flexibility on citizenship or permanent residency requirements?")
+        if row.get(columns.work_authorization_required) is True and row.get(columns.visa_sponsorship_signal) is not True:
+            red_flags.append("work_authorization_constraint")
+            ask_recruiter.append("Is employer-sponsored work authorization available for this role?")
+        if "likely_stale_posting" in missing_items:
+            red_flags.append("likely_stale_posting")
+            ask_recruiter.append("Is this requisition still actively hiring and at what stage?")
         if "salary_below_minimum" in missing_items:
             actions.append("Prioritize only if brand/network upside outweighs compensation gap.")
+            red_flags.append("salary_below_minimum")
+
+        active_likelihood = _as_float(row.get(columns.active_likelihood))
+        if active_likelihood is not None and active_likelihood < 0.55:
+            ask_recruiter.append("What is the expected hiring timeline for this role?")
+            if active_likelihood < 0.35:
+                red_flags.append("likely_stale_posting")
+
+        friction_value = _as_float(row.get(columns.application_friction_score))
+        if friction_value is not None and friction_value < 0.45:
+            actions.append("Prepare for higher-friction process steps (assessment/case/extra rounds).")
+
         if not missing_items:
             actions.append("Apply now; strong profile alignment for an early-career candidate.")
-        actions_all.append(actions)
+        deduped_actions = list(dict.fromkeys(actions))
+        if max_actions_per_job >= 0:
+            deduped_actions = deduped_actions[:max_actions_per_job]
+        actions_all.append(deduped_actions)
+
+        deduped_flags = list(dict.fromkeys(red_flags))
+        deduped_questions = list(dict.fromkeys(ask_recruiter))
+        red_flags_all.append(deduped_flags)
+        questions_all.append(deduped_questions)
+
+        confidence_value = _as_float(row.get(columns.signal_confidence))
+        risk_points = len(deduped_flags) * 2
+        if confidence_value is not None and confidence_value < 0.55:
+            risk_points += 1
+        if active_likelihood is not None and active_likelihood < 0.55:
+            risk_points += 1
+        if risk_points >= 5:
+            risk_band = "high"
+        elif risk_points >= 3:
+            risk_band = "medium"
+        else:
+            risk_band = "low"
+        offer_risk_all.append(risk_band)
+
+        normalized_friction = 0.6 if friction_value is None else max(0.0, min(1.0, friction_value))
+        effort = int(round(20 + (1.0 - normalized_friction) * 40 + min(len(missing_items), 4) * 6))
+        effort_all.append(max(10, effort))
 
     result[columns.next_actions] = actions_all
+    if include_diagnostics:
+        result[columns.red_flags] = red_flags_all
+        result[columns.must_ask_recruiter] = questions_all
+        result[columns.offer_risk] = offer_risk_all
+        result[columns.application_effort_minutes] = effort_all
     if top_n >= 0:
         return result.head(top_n).reset_index(drop=True)
     return result
