@@ -53,7 +53,7 @@ print(report.to_dict())
 Streaming report for large parquet files:
 
 ```bash
-python scripts/report_data_quality.py jobs_historical.parquet --stream --format json
+honestroles-report-quality jobs_historical.parquet --stream --format json
 ```
 
 ## Smoke testing

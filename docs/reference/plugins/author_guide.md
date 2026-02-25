@@ -18,7 +18,7 @@ It includes:
 You can scaffold directly from this repository:
 
 ```bash
-python scripts/scaffold_plugin.py --name honestroles-plugin-myorg --output-dir .
+honestroles-scaffold-plugin --name honestroles-plugin-myorg --output-dir .
 ```
 
 ## 2. Implement Plugin Functions

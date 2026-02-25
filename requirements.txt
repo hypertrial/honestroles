@@ -1,1 +1,4 @@
-duckdb
+# For local development, prefer:
+#   pip install honestroles
+#   pip install -e ".[dev]"
+-e .

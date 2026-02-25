@@ -6,7 +6,8 @@ from pathlib import Path
 
 
 def test_scaffold_plugin_script_generates_package(tmp_path) -> None:
-    script = Path(__file__).resolve().parents[1] / "scripts" / "scaffold_plugin.py"
+    repo_root = Path(__file__).resolve().parents[1]
+    script = repo_root / "scripts" / "scaffold_plugin.py"
     output_dir = tmp_path / "out"
     output_dir.mkdir()
 
@@ -42,7 +43,8 @@ def test_scaffold_plugin_script_generates_package(tmp_path) -> None:
 
 
 def test_scaffold_plugin_script_refuses_overwrite_without_force(tmp_path) -> None:
-    script = Path(__file__).resolve().parents[1] / "scripts" / "scaffold_plugin.py"
+    repo_root = Path(__file__).resolve().parents[1]
+    script = repo_root / "scripts" / "scaffold_plugin.py"
     output_dir = tmp_path / "out"
     output_dir.mkdir()
     target = output_dir / "honestroles-plugin-existing"

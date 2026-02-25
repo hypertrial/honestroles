@@ -13,6 +13,9 @@ utility for filtering job DataFrames.
 
 #### `filter_jobs(...) -> pd.DataFrame`
 
+Exact signatures are generated in `reference/api/reference.md` via `mkdocstrings`.
+This page focuses on parameter intent and behavior.
+
 ```
 filter_jobs(
     df: pd.DataFrame,
@@ -33,6 +36,14 @@ filter_jobs(
     posted_within_days: int | None = None,
     seen_within_days: int | None = None,
     as_of: str | pd.Timestamp | None = None,
+    employment_types: list[str] | None = None,
+    entry_level_only: bool = False,
+    max_experience_years: int | None = None,
+    needs_visa_sponsorship: bool | None = None,
+    include_unknown_visa: bool = True,
+    max_application_friction: float | None = None,
+    active_within_days: int | None = None,
+    min_active_likelihood: float | None = None,
     plugin_filters: list[str] | None = None,
     plugin_filter_kwargs: dict[str, dict[str, object]] | None = None,
     plugin_filter_mode: str = "and",
@@ -40,10 +51,12 @@ filter_jobs(
 ```
 
 Builds a `FilterChain` in AND mode with `by_location`, `by_salary`,
-`by_skills`, `by_keywords`, `by_completeness`, and optional `by_recency`.
-Predicate families are skipped entirely when their inputs are inactive. If
-`plugin_filters` are provided, registered filter plugins are applied after the
-built-in chain.
+`by_skills`, `by_keywords`, `by_completeness`, and optional `by_recency`,
+`by_employment_type`, `by_entry_level`, `by_experience`,
+`by_visa_requirements`, `by_application_friction`, and
+`by_active_likelihood`. Predicate families are skipped entirely when their
+inputs are inactive. If `plugin_filters` are provided, registered filter
+plugins are applied after the built-in chain.
 
 #### `FilterChain`
 
@@ -65,6 +78,12 @@ built-in chain.
 - `by_recency(...) -> pd.Series`: Filters by `posted_at`/`last_seen` recency windows with
   fallback to `ingested_at`.
 - `by_completeness(...) -> pd.Series`: Filters by required field presence.
+- `by_employment_type(...) -> pd.Series`: Filters normalized employment type values.
+- `by_entry_level(...) -> pd.Series`: Keeps likely entry-level jobs using entry/experience signals.
+- `by_experience(...) -> pd.Series`: Filters jobs by max acceptable minimum years experience.
+- `by_visa_requirements(...) -> pd.Series`: Filters for sponsorship-aware scenarios.
+- `by_application_friction(...) -> pd.Series`: Filters by max application friction.
+- `by_active_likelihood(...) -> pd.Series`: Filters by recency and/or active likelihood score.
 
 ### Usage examples
 

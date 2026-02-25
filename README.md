@@ -26,32 +26,42 @@ cd honestroles
 pip install -e ".[dev]"
 ```
 
+## Choose Your Entry Point
+
+- Library API (recommended for pipelines and notebooks): import `honestroles` and compose stages in Python.
+- CLI commands (recommended for quick checks and plugin scaffolding):
+  - `honestroles-report-quality`
+  - `honestroles-scaffold-plugin`
+
 ## Quickstart
 
 ```python
 import honestroles as hr
 from honestroles import schema
 
-# Load raw job data (Parquet or DuckDB)
-df = hr.read_parquet("jobs_current.parquet")
+# 1. Read source data without strict validation
+df = hr.read_parquet("jobs_current.parquet", validate=False)
 
-# 1. Clean and normalize data
+# 2. Normalize and validate source-data contract
+df = hr.normalize_source_data_contract(df)
+df = hr.validate_source_data_contract(df)
+
+# 3. Clean and normalize derived fields
 df = hr.clean_jobs(df)
 
-# 2. Apply complex filtering
-chain = hr.FilterChain()
-chain.add(hr.filter.by_location, regions=["California", "New York"])
-chain.add(hr.filter.by_salary, min_salary=120_000, currency="USD")
-chain.add(hr.filter.by_skills, required=["Python", "React"])
-df = chain.apply(df)
+# 4. Filter rows
+df = hr.filter_jobs(
+    df,
+    remote_only=True,
+    min_salary=120_000,
+    required_skills=["Python"],
+)
 
-# 3. Label roles (Heuristics + LLM)
-df = hr.label_jobs(df, use_llm=True, model="llama3")
+# 5. Label and rate
+df = hr.label_jobs(df, use_llm=False)
+df = hr.rate_jobs(df, use_llm=False)
 
-# 4. Rate job quality
-df = hr.rate_jobs(df)
-
-# 5. Rank for a candidate profile
+# 6. Rank and plan next actions
 profile = hr.CandidateProfile.mds_new_grad()
 ranked = hr.rank_jobs(df, profile=profile, use_llm_signals=False, top_n=100)
 plan = hr.build_application_plan(ranked, profile=profile, top_n=20)
@@ -61,23 +71,6 @@ print(df[[schema.TITLE, schema.CITY, schema.COUNTRY]].head())
 
 # Save structured results
 hr.write_parquet(df, "jobs_scored.parquet")
-```
-
-## Contract-First Flow
-
-For source data, use contract normalization + validation before processing:
-
-```python
-import honestroles as hr
-
-df = hr.read_parquet("jobs_current.parquet", validate=False)
-df = hr.normalize_source_data_contract(df)
-df = hr.validate_source_data_contract(df)
-
-df = hr.clean_jobs(df)
-df = hr.filter_jobs(df, remote_only=True)
-df = hr.label_jobs(df, use_llm=False)
-df = hr.rate_jobs(df, use_llm=False)
 ```
 
 For historical snapshots, use the opt-in historical workflow:
@@ -93,7 +86,7 @@ df = hr.rate_jobs(df, use_llm=False)
 Generate a quality report:
 
 ```bash
-python scripts/report_data_quality.py jobs_historical.parquet --stream --format json
+honestroles-report-quality jobs_historical.parquet --stream --format json
 ```
 
 See `/docs/start/quickstart.md` and `/docs/reference/source_data_contract_v1.md`.
@@ -127,19 +120,23 @@ from honestroles import schema
 ### Filtering with `FilterChain`
 The `FilterChain` allows you to compose multiple filtering rules efficiently:
 ```python
-from honestroles import FilterChain, filter_jobs
+import honestroles as hr
+from honestroles import schema
 
 # Functional approach:
-df = filter_jobs(df, remote_only=True, min_salary=100_000)
+df = hr.filter_jobs(df, remote_only=True, min_salary=100_000)
 
 # Composable approach:
-chain = FilterChain()
+chain = hr.FilterChain()
 chain.add(hr.filter.by_keywords, include=["Engineer"], exclude=["Manager"])
 chain.add(hr.filter.by_completeness, required_fields=[schema.DESCRIPTION_TEXT, schema.APPLY_URL])
 filtered_df = chain.apply(df)
 ```
 
 ### Local LLM Usage (Ollama)
+LLM integration uses built-in runtime dependencies (`requests`) plus a local Ollama server.
+No separate package extra is required.
+
 Ensure [Ollama](https://ollama.com/) is running locally:
 ```bash
 ollama serve

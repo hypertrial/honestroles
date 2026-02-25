@@ -62,5 +62,5 @@ historical = hr.rate_jobs(historical, use_llm=False)
 Generate a quality report:
 
 ```bash
-python scripts/report_data_quality.py jobs_historical.parquet --stream --format json
+honestroles-report-quality jobs_historical.parquet --stream --format json
 ```

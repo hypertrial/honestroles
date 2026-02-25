@@ -1,18 +1,11 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pandas as pd
-
-
-def _env_with_pythonpath(repo_root: Path) -> dict[str, str]:
-    env = dict(os.environ)
-    env["PYTHONPATH"] = str(repo_root / "src")
-    return env
 
 
 def test_report_data_quality_script_json_output(tmp_path) -> None:
@@ -41,7 +34,6 @@ def test_report_data_quality_script_json_output(tmp_path) -> None:
         capture_output=True,
         text=True,
         check=False,
-        env=_env_with_pythonpath(repo_root),
     )
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
@@ -96,7 +88,6 @@ def test_report_data_quality_script_stream_mode(tmp_path) -> None:
         capture_output=True,
         text=True,
         check=False,
-        env=_env_with_pythonpath(repo_root),
     )
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
@@ -114,7 +105,6 @@ def test_report_data_quality_script_missing_input_fails(tmp_path) -> None:
         capture_output=True,
         text=True,
         check=False,
-        env=_env_with_pythonpath(repo_root),
     )
     assert result.returncode != 0
     assert "Input file not found" in result.stderr

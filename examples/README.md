@@ -10,7 +10,7 @@ Install dependencies from the repo root:
 pip install -e ".[dev]"
 ```
 
-### Run the parquet pipeline
+### Minimal pipeline
 
 ```bash
 python examples/run_parquet.py "jobs_current.parquet" "jobs_scored.parquet"
@@ -19,10 +19,17 @@ python examples/run_parquet.py "jobs_current.parquet" "jobs_scored.parquet"
 The script reads the input parquet, cleans, filters, labels, and rates the data,
 then writes the output parquet.
 
-### Build a new-grad shortlist
+### Full pipeline (ranking + next actions)
 
 ```bash
 python examples/shortlist_mds_new_grad.py "jobs_current.parquet" "jobs_shortlist.parquet" --top-n 50
 ```
 
 The script cleans, labels, rates, ranks, and adds next actions for a Master's in Data Science new-grad profile.
+
+### Built-in CLI helpers
+
+```bash
+honestroles-report-quality jobs_current.parquet --format text
+honestroles-scaffold-plugin --name honestroles-plugin-myorg --output-dir .
+```

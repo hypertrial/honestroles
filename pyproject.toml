@@ -23,7 +23,11 @@ dependencies = [
 Homepage = "https://github.com/hypertrial/honestroles"
 Repository = "https://github.com/hypertrial/honestroles"
 Issues = "https://github.com/hypertrial/honestroles/issues"
-Documentation = "https://github.com/hypertrial/honestroles/tree/main/docs"
+Documentation = "https://hypertrial.github.io/honestroles/"
+
+[project.scripts]
+honestroles-scaffold-plugin = "honestroles.cli.scaffold_plugin:main"
+honestroles-report-quality = "honestroles.cli.report_data_quality:main"
 
 [project.optional-dependencies]
 dev = [

@@ -65,4 +65,6 @@ prompt = build_job_signal_prompt(
 ### Design notes
 
 - These helpers are intentionally thin wrappers. They do not retry or batch.
+- LLM features use runtime dependencies already included with `honestroles`; no additional
+  package extra is required.
 - You must run an Ollama server locally (`ollama serve`) for calls to succeed.
