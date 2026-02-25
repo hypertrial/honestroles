@@ -13,16 +13,24 @@ Use these symbols to keep downstream pipelines consistent.
 
 These constants are strings used as DataFrame column names:
 
-- `JOB_KEY`, `COMPANY`, `SOURCE`, `JOB_ID`
-- `TITLE`, `TEAM`
-- `LOCATION_RAW`, `REMOTE_FLAG`, `REMOTE_TYPE`
-- `EMPLOYMENT_TYPE`, `POSTED_AT`, `UPDATED_AT`
-- `APPLY_URL`
-- `DESCRIPTION_HTML`, `DESCRIPTION_TEXT`
-- `INGESTED_AT`, `CONTENT_HASH`, `LAST_SEEN`
-- `SALARY_TEXT`, `SALARY_MIN`, `SALARY_MAX`, `SALARY_CURRENCY`, `SALARY_INTERVAL`
-- `CITY`, `REGION`, `COUNTRY`
-- `SKILLS`, `LANGUAGES`, `BENEFITS`, `VISA_SPONSORSHIP`
+- Core/source + cleaned fields:
+  - `JOB_KEY`, `COMPANY`, `SOURCE`, `JOB_ID`
+  - `TITLE`, `TEAM`
+  - `LOCATION_RAW`, `CITY`, `REGION`, `COUNTRY`, `REMOTE_FLAG`, `REMOTE_TYPE`
+  - `EMPLOYMENT_TYPE`, `POSTED_AT`, `UPDATED_AT`, `LAST_SEEN`
+  - `APPLY_URL`
+  - `DESCRIPTION_HTML`, `DESCRIPTION_TEXT`
+  - `INGESTED_AT`, `CONTENT_HASH`
+  - `SALARY_TEXT`, `SALARY_MIN`, `SALARY_MAX`, `SALARY_CURRENCY`, `SALARY_INTERVAL`
+  - `SKILLS`, `LANGUAGES`, `BENEFITS`, `VISA_SPONSORSHIP`
+- Label/rating fields:
+  - `TECH_STACK`, `QUALITY_SCORE`, `RATING`
+- Match/ranking signal/output fields:
+  - `FIT_SCORE`, `FIT_BREAKDOWN`, `MISSING_REQUIREMENTS`, `WHY_MATCH`, `NEXT_ACTIONS`
+  - `REQUIRED_SKILLS_EXTRACTED`, `PREFERRED_SKILLS_EXTRACTED`
+  - `EXPERIENCE_YEARS_MIN`, `EXPERIENCE_YEARS_MAX`, `ENTRY_LEVEL_LIKELY`
+  - `VISA_SPONSORSHIP_SIGNAL`, `APPLICATION_FRICTION_SCORE`, `ROLE_CLARITY_SCORE`
+  - `SIGNAL_CONFIDENCE`, `SIGNAL_SOURCE`, `SIGNAL_REASON`
 
 #### `REQUIRED_COLUMNS`
 
@@ -33,7 +41,9 @@ These constants are strings used as DataFrame column names:
 
 #### `ALL_COLUMNS`
 
-`ALL_COLUMNS: list[str]` is a stable list of all known columns, in canonical order.
+`ALL_COLUMNS: list[str]` is the canonical base-schema column order used for
+core/source + cleaned fields. Match/ranking outputs are defined as constants
+but are not included in `ALL_COLUMNS`.
 
 #### `JobsCurrentRow`
 

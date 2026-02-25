@@ -1,6 +1,11 @@
 # DuckDB Source Schema
 
-This document defines the schema for the DuckDB database used by the scraper. It serves as the source-of-truth for downstream transformations.
+This document defines the schema for the DuckDB database used by the scraper.
+It serves as the source-of-truth for downstream transformations.
+
+For `jobs_current` and `jobs_historical`, this page lists the core columns.
+Additional optional/extended source fields are documented in
+`reference/source_data_contract_v1.md`.
 
 ## Tables
 
@@ -41,12 +46,13 @@ Stores the current state of active jobs.
 | `description_html` | `TEXT` | | HTML description |
 | `description_text` | `TEXT` | | Plain text description |
 | `ingested_at` | `TIMESTAMP` | `NOT NULL` | Ingestion timestamp |
-| `content_hash` | `VARCHAR` | `NOT NULL` | Hash of stable content content |
+| `content_hash` | `VARCHAR` | `NOT NULL` | Hash of stable content |
 | `salary_min` | `DOUBLE` | | Minimum salary |
 | `salary_max` | `DOUBLE` | | Maximum salary |
 | `salary_currency` | `VARCHAR` | | Salary currency |
 | `salary_interval` | `VARCHAR` | | Salary interval |
 | `city` | `VARCHAR` | | Enriched city |
+| `region` | `VARCHAR` | | Enriched region/state |
 | `country` | `VARCHAR` | | Enriched country |
 | `remote_type` | `VARCHAR` | | Enriched remote type |
 | `skills` | `VARCHAR[]` | | Extracted skills |

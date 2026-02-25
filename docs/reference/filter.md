@@ -55,7 +55,8 @@ built-in chain.
 
 #### Predicate helpers
 
-- `by_location(...) -> pd.Series`: Filters by `city`, `region`, `country`, and `remote_flag`.
+- `by_location(...) -> pd.Series`: Filters by `city`, `region`, `country`, and remote
+  signals (`remote_flag` and `remote_type == "remote"`).
 - `by_salary(...) -> pd.Series`: Filters by `salary_min`/`salary_max` and currency.
 - `by_skills(...) -> pd.Series`: Filters by required/excluded skills across the union of
   `skills`, `tech_stack`, and `required_skills_extracted`.

@@ -58,10 +58,12 @@ Marks likely listing/landing rows using:
 Drops duplicate rows. Defaults to `CONTENT_HASH` when present. Uses `keep` with
 `pandas.DataFrame.drop_duplicates`.
 
-#### `strip_html(df: pd.DataFrame, *, html_column: str = DESCRIPTION_HTML, text_column: str = DESCRIPTION_TEXT) -> pd.DataFrame`
+#### `strip_html(df: pd.DataFrame, *, html_column: str = DESCRIPTION_HTML, text_column: str = DESCRIPTION_TEXT, overwrite_existing: bool = True) -> pd.DataFrame`
 
 Converts HTML in `html_column` to plain text, removes common boilerplate lines,
 and writes to `text_column`. Logs a warning if the HTML column is missing.
+When `overwrite_existing=False`, existing non-empty `text_column` values are
+preserved and only missing/blank rows are filled from HTML.
 
 #### `normalize_locations(...) -> pd.DataFrame`
 
