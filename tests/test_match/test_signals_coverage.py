@@ -10,10 +10,10 @@ from honestroles.match.models import DEFAULT_RESULT_COLUMNS
 
 
 def test_signal_helpers_text_and_list_variants() -> None:
-    assert signals_module._as_text(None) == ""
-    assert signals_module._as_text(float("nan")) == ""
+    assert signals_module._list_from_value(None) == []
     assert signals_module._list_from_value(float("nan")) == []
     assert signals_module._list_from_value("   ") == []
+    assert signals_module._list_from_value("python") == ["python"]
     assert signals_module._list_from_value(42) == ["42"]
 
 
@@ -29,6 +29,22 @@ def test_extract_skills_unhinted_terms_default_to_required() -> None:
     assert "python" in required
     assert "sql" in required
     assert preferred == []
+
+
+def test_extract_skills_required_and_preferred_hints_and_series_edges(monkeypatch) -> None:
+    required, preferred = signals_module._extract_skills(
+        "Required: Python. Preferred: SQL.",
+        [],
+    )
+    assert "python" in required
+    assert "sql" in preferred
+
+    empty_series = signals_module._extract_required_skills_series(pd.Series([], dtype="string"))
+    assert empty_series.empty
+
+    monkeypatch.setattr(signals_module, "_canonical_skill_from_match", lambda _: None)
+    dropped = signals_module._extract_required_skills_series(pd.Series(["python"], dtype="string"))
+    assert dropped.loc[0] == []
 
 
 def test_signal_boolean_and_numeric_parsers_edge_cases() -> None:

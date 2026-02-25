@@ -7,7 +7,7 @@ utility for filtering job DataFrames.
 
 - `__init__.py`: `filter_jobs` orchestrator and re-exports.
 - `chain.py`: `FilterChain` for AND/OR predicate composition.
-- `predicates.py`: `by_*` predicate helpers (location, salary, skills, keywords).
+- `predicates.py`: `by_*` predicate helpers (location, salary, skills, keywords, recency).
 
 ### Public API reference
 
@@ -30,6 +30,9 @@ filter_jobs(
     exclude_keywords: list[str] | None = None,
     keyword_columns: list[str] | None = None,
     required_fields: list[str] | None = None,
+    posted_within_days: int | None = None,
+    seen_within_days: int | None = None,
+    as_of: str | pd.Timestamp | None = None,
     plugin_filters: list[str] | None = None,
     plugin_filter_kwargs: dict[str, dict[str, object]] | None = None,
     plugin_filter_mode: str = "and",
@@ -37,8 +40,10 @@ filter_jobs(
 ```
 
 Builds a `FilterChain` in AND mode with `by_location`, `by_salary`,
-`by_skills`, `by_keywords`, and `by_completeness`. If `plugin_filters` are
-provided, registered filter plugins are applied after the built-in chain.
+`by_skills`, `by_keywords`, `by_completeness`, and optional `by_recency`.
+Predicate families are skipped entirely when their inputs are inactive. If
+`plugin_filters` are provided, registered filter plugins are applied after the
+built-in chain.
 
 #### `FilterChain`
 
@@ -52,8 +57,12 @@ provided, registered filter plugins are applied after the built-in chain.
 
 - `by_location(...) -> pd.Series`: Filters by `city`, `region`, `country`, and `remote_flag`.
 - `by_salary(...) -> pd.Series`: Filters by `salary_min`/`salary_max` and currency.
-- `by_skills(...) -> pd.Series`: Filters by required/excluded skills.
-- `by_keywords(...) -> pd.Series`: Filters by include/exclude terms in columns.
+- `by_skills(...) -> pd.Series`: Filters by required/excluded skills across the union of
+  `skills`, `tech_stack`, and `required_skills_extracted`.
+- `by_keywords(...) -> pd.Series`: Filters by include/exclude terms in columns, with
+  short-token precision guards for single include terms.
+- `by_recency(...) -> pd.Series`: Filters by `posted_at`/`last_seen` recency windows with
+  fallback to `ingested_at`.
 - `by_completeness(...) -> pd.Series`: Filters by required field presence.
 
 ### Usage examples

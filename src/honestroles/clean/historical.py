@@ -14,6 +14,7 @@ from honestroles.clean.normalize import (
     normalize_employment_types,
     normalize_locations,
     normalize_salaries,
+    normalize_skills,
 )
 from honestroles.io.contract import normalize_source_data_contract
 from honestroles.schema import CONTENT_HASH, INGESTED_AT, JOB_ID, JOB_KEY, LOCATION_RAW, TITLE
@@ -110,6 +111,7 @@ def clean_historical_jobs(
     cleaned = normalize_locations(cleaned)
     cleaned = enrich_country_from_context(cleaned)
     cleaned = normalize_salaries(cleaned)
+    cleaned = normalize_skills(cleaned)
     cleaned = normalize_employment_types(cleaned)
 
     LOGGER.info(

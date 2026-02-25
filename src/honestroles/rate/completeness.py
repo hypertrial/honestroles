@@ -43,7 +43,8 @@ def rate_completeness(
         if is_object_dtype(series.dtype):
             is_list = series.map(lambda value: isinstance(value, list))
             if bool(is_list.any()):
-                present &= ~(is_list & series.map(lambda value: len(value) == 0))
+                empty_list = series.map(lambda value: isinstance(value, list) and len(value) == 0)
+                present &= ~(is_list & empty_list)
             is_string = series.map(lambda value: isinstance(value, str))
             if bool(is_string.any()):
                 stripped = series.astype("string").fillna("").str.strip()

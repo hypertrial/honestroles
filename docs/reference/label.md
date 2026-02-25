@@ -23,18 +23,19 @@ plugins are applied after built-in labeling.
 
 Adds a `seniority` column based on job title patterns
 (`intern`, `junior`, `mid`, `senior`, `staff`, `principal`, `lead`, `director`,
-`vp`, `c_level`).
+`vp`, `c_level`). Existing non-empty `seniority` values are preserved.
 
 #### `label_role_category(df: pd.DataFrame, *, title_column: str = TITLE, description_column: str = DESCRIPTION_TEXT) -> pd.DataFrame`
 
 Adds a `role_category` column by scanning title and description keywords
 (`engineering`, `data`, `design`, `product`, `marketing`, `sales`, `operations`,
-`finance`, `hr`, `legal`, `support`).
+`finance`, `hr`, `legal`, `support`) using boundary-aware regexes. Matching is
+title-first, then description fallback for unresolved rows.
 
 #### `label_tech_stack(df: pd.DataFrame, *, skills_column: str = SKILLS, description_column: str = DESCRIPTION_TEXT) -> pd.DataFrame`
 
-Adds a `tech_stack` column containing a sorted list of detected terms
-from the configured `_TECH_TERMS` list.
+Adds a `tech_stack` column containing a sorted list of detected terms from
+alias-normalized `skills` values plus boundary-aware description extraction.
 
 #### `label_with_llm(...) -> pd.DataFrame`
 

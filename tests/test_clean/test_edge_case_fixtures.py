@@ -24,5 +24,5 @@ def test_edge_case_fixture_pack_normalization_regression() -> None:
     assert by_key.loc["edge::ashby::3", "remote_type"] == "remote"
     assert by_key.loc["edge::ashby::3", "salary_min"] == 120000.0
     assert by_key.loc["edge::ashby::3", "salary_max"] == 140000.0
-    assert pd.isna(by_key.loc["edge::lever::2", "salary_min"])
-    assert pd.isna(by_key.loc["edge::lever::2", "salary_max"])
+    assert by_key.loc["edge::lever::2", "salary_min"] == 70000.0
+    assert by_key.loc["edge::lever::2", "salary_max"] == 90000.0

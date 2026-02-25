@@ -37,6 +37,7 @@ def _historical_fixture() -> pd.DataFrame:
                 "ingested_at": "2025-01-01T01:00:00Z",
                 "content_hash": "role-1",
                 "remote_flag": True,
+                "salary_text": None,
             },
             {
                 "job_key": "acme::greenhouse::1",
@@ -50,6 +51,7 @@ def _historical_fixture() -> pd.DataFrame:
                 "ingested_at": "2025-01-02T01:00:00Z",
                 "content_hash": "role-1",
                 "remote_flag": True,
+                "salary_text": None,
             },
         ]
     )
@@ -127,3 +129,15 @@ def test_clean_historical_jobs_prefers_existing_description_text_by_default() ->
     cleaned = clean_historical_jobs(df)
 
     assert cleaned.loc[0, "description_text"] == "From source text"
+
+
+def test_clean_historical_jobs_backfills_skills_and_salary_from_description() -> None:
+    df = _historical_fixture().copy()
+    df.loc[1, "description_text"] = (
+        "Must have Python and SQL. Nice to have Spark. "
+        "Compensation range: $100k - $130k per year."
+    )
+    cleaned = clean_historical_jobs(df)
+    assert "python" in cleaned.loc[0, "skills"]
+    assert cleaned.loc[0, "salary_min"] == 100000.0
+    assert cleaned.loc[0, "salary_max"] == 130000.0

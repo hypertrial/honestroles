@@ -9,7 +9,11 @@ from honestroles.schema import (
     CITY,
     COUNTRY,
     DESCRIPTION_TEXT,
+    INGESTED_AT,
+    LAST_SEEN,
     LOCATION_RAW,
+    POSTED_AT,
+    REQUIRED_SKILLS_EXTRACTED,
     REGION,
     REMOTE_FLAG,
     REMOTE_TYPE,
@@ -17,12 +21,42 @@ from honestroles.schema import (
     SALARY_MAX,
     SALARY_MIN,
     SKILLS,
+    TECH_STACK,
     TITLE,
 )
 
 
 def _series_or_true(df: pd.DataFrame) -> pd.Series:
     return pd.Series([True] * len(df), index=df.index)
+
+
+def _skills_from_value(value: object) -> set[str]:
+    if value is None:
+        return set()
+    if isinstance(value, float) and pd.isna(value):
+        return set()
+    if isinstance(value, str):
+        stripped = value.strip().lower()
+        return {stripped} if stripped else set()
+    if isinstance(value, (list, tuple, set)):
+        return {str(item).strip().lower() for item in value if str(item).strip()}
+    return {str(value).strip().lower()}
+
+
+def _short_token_pattern(term: str) -> re.Pattern[str] | None:
+    if term.isalpha() and len(term) <= 3:
+        escaped = re.escape(term)
+        return re.compile(rf"(?<![a-z0-9]){escaped}(?![a-z0-9])", re.IGNORECASE)
+    return None
+
+
+def _resolve_as_of(as_of: str | pd.Timestamp | None) -> pd.Timestamp:
+    if as_of is None:
+        return pd.Timestamp.now(tz="UTC")
+    parsed = pd.to_datetime(as_of, errors="coerce", utc=True)
+    if pd.isna(parsed):
+        return pd.Timestamp.now(tz="UTC")
+    return pd.Timestamp(parsed)
 
 
 def by_location(
@@ -91,30 +125,31 @@ def by_skills(
     required: Iterable[str] | None = None,
     excluded: Iterable[str] | None = None,
 ) -> pd.Series:
-    if SKILLS not in df.columns:
+    skill_columns = [
+        column
+        for column in (SKILLS, TECH_STACK, REQUIRED_SKILLS_EXTRACTED)
+        if column in df.columns
+    ]
+    if not skill_columns:
         return _series_or_true(df)
     required_set = {skill.lower() for skill in required or []}
     excluded_set = {skill.lower() for skill in excluded or []}
     if not required_set and not excluded_set:
         return _series_or_true(df)
 
-    def matches(skills: object) -> bool:
-        if skills is None:
-            skill_list: list[str] = []
-        elif isinstance(skills, float) and pd.isna(skills):
-            skill_list = []
-        elif isinstance(skills, list):
-            skill_list = [str(skill) for skill in skills]
-        else:
-            skill_list = [str(skills)]
-        skill_set = {skill.lower() for skill in skill_list}
+    combined = pd.Series([set() for _ in range(len(df))], index=df.index, dtype="object")
+    for column in skill_columns:
+        current = df[column].map(_skills_from_value)
+        combined = combined.combine(current, lambda left, right: left.union(right))
+
+    def matches(skill_set: set[str]) -> bool:
         if required_set and not required_set.issubset(skill_set):
             return False
         if excluded_set and excluded_set.intersection(skill_set):
             return False
         return True
 
-    return df[SKILLS].apply(matches)
+    return combined.map(matches)
 
 
 def by_keywords(
@@ -137,17 +172,21 @@ def by_keywords(
         term = include_terms[0]
         if not term:
             return _series_or_true(df)
+        short_pattern = _short_token_pattern(term)
         include_mask = pd.Series(False, index=df.index, dtype="bool")
         string_columns: list[pd.Series] = []
         for column in existing:
             column_text = df[column].astype("string")
             string_columns.append(column_text)
-            include_mask |= column_text.str.contains(
-                term,
-                case=False,
-                regex=False,
-                na=False,
-            )
+            if short_pattern is not None:
+                include_mask |= column_text.str.contains(short_pattern, na=False)
+            else:
+                include_mask |= column_text.str.contains(
+                    term,
+                    case=False,
+                    regex=False,
+                    na=False,
+                )
 
         # Preserve previous behavior where concatenated column boundaries could match spaced terms.
         if " " in term and len(string_columns) > 1:
@@ -175,6 +214,35 @@ def by_keywords(
         exclude_pattern = "|".join(re.escape(term) for term in exclude_terms if term)
         if exclude_pattern:
             mask &= ~texts.str.contains(exclude_pattern, regex=True)
+    return mask
+
+
+def by_recency(
+    df: pd.DataFrame,
+    *,
+    posted_within_days: int | None = None,
+    seen_within_days: int | None = None,
+    as_of: str | pd.Timestamp | None = None,
+) -> pd.Series:
+    if posted_within_days is None and seen_within_days is None:
+        return _series_or_true(df)
+    anchor = _resolve_as_of(as_of)
+    mask = _series_or_true(df)
+
+    if posted_within_days is not None:
+        posted_column = POSTED_AT if POSTED_AT in df.columns else INGESTED_AT
+        if posted_column in df.columns:
+            posted = pd.to_datetime(df[posted_column], errors="coerce", utc=True, format="mixed")
+            cutoff = anchor - pd.Timedelta(days=posted_within_days)
+            mask &= posted.ge(cutoff).fillna(False)
+
+    if seen_within_days is not None:
+        seen_column = LAST_SEEN if LAST_SEEN in df.columns else INGESTED_AT
+        if seen_column in df.columns:
+            seen = pd.to_datetime(df[seen_column], errors="coerce", utc=True, format="mixed")
+            cutoff = anchor - pd.Timedelta(days=seen_within_days)
+            mask &= seen.ge(cutoff).fillna(False)
+
     return mask
 
 

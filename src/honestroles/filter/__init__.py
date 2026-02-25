@@ -7,6 +7,7 @@ from honestroles.filter.predicates import (
     by_completeness,
     by_keywords,
     by_location,
+    by_recency,
     by_salary,
     by_skills,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "by_salary",
     "by_skills",
     "by_keywords",
+    "by_recency",
     "by_completeness",
 ]
 
@@ -39,6 +41,9 @@ def filter_jobs(
     exclude_keywords: list[str] | None = None,
     keyword_columns: list[str] | None = None,
     required_fields: list[str] | None = None,
+    posted_within_days: int | None = None,
+    seen_within_days: int | None = None,
+    as_of: str | pd.Timestamp | None = None,
     plugin_filters: list[str] | None = None,
     plugin_filter_kwargs: dict[str, dict[str, object]] | None = None,
     plugin_filter_mode: str = "and",
@@ -70,6 +75,14 @@ def filter_jobs(
         has_predicate = True
     if bool(required_fields):
         chain.add(by_completeness, required_fields=required_fields)
+        has_predicate = True
+    if posted_within_days is not None or seen_within_days is not None:
+        chain.add(
+            by_recency,
+            posted_within_days=posted_within_days,
+            seen_within_days=seen_within_days,
+            as_of=as_of,
+        )
         has_predicate = True
 
     filtered = chain.apply(df) if has_predicate else df.reset_index(drop=True)

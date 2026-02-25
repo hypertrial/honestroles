@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+import honestroles.match.rank as rank_module
 from honestroles.match import CandidateProfile, build_application_plan, rank_jobs
 from honestroles.match.models import DEFAULT_RESULT_COLUMNS
 
@@ -134,3 +135,13 @@ def test_rank_jobs_uses_target_roles_and_graduation_year() -> None:
     assert ranked.iloc[0]["job_key"] == "data-role"
     assert "role_alignment" in ranked.iloc[0][columns.fit_breakdown]
     assert "graduation_alignment" in ranked.iloc[0][columns.fit_breakdown]
+
+
+def test_experience_score_defaults_when_years_min_missing() -> None:
+    row = pd.Series({DEFAULT_RESULT_COLUMNS.experience_years_min: None})
+    score = rank_module._experience_score(
+        row,
+        CandidateProfile(max_years_experience=2),
+        DEFAULT_RESULT_COLUMNS,
+    )
+    assert score == 0.6

@@ -7,6 +7,7 @@ from honestroles.clean.normalize import (
     normalize_employment_types,
     normalize_locations,
     normalize_salaries,
+    normalize_skills,
 )
 
 
@@ -82,12 +83,63 @@ def test_parse_location_string_empty_value() -> None:
     assert parsed.remote_type is None
 
 
+def test_parse_location_string_unknown_variants_cover_city_cleanup_branches() -> None:
+    parsed_unknown = normalize_module._parse_location_string("Unknown")
+    parsed_unknown_city = normalize_module._parse_location_string("Unknown, CA")
+    parsed_comma_city = normalize_module._parse_location_string("HQ, San Francisco, CA")
+
+    assert parsed_unknown.city is None
+    assert parsed_unknown.region is None
+    assert parsed_unknown.country is None
+    assert parsed_unknown_city.city is None
+    assert parsed_unknown_city.region == "California"
+    assert parsed_unknown_city.country == "US"
+    assert parsed_comma_city.city == "HQ"
+    assert parsed_comma_city.region == "California"
+    assert parsed_comma_city.country == "US"
+
+
 def test_normalize_locations_single_unknown_token_becomes_city() -> None:
     df = pd.DataFrame({"location_raw": ["Atlantis"], "remote_flag": [False]})
     normalized = normalize_locations(df)
     assert normalized.loc[0, "city"] == "Atlantis"
     assert normalized.loc[0, "region"] is None
     assert normalized.loc[0, "country"] is None
+
+
+def test_normalize_locations_unknown_token_becomes_null_fields() -> None:
+    df = pd.DataFrame({"location_raw": ["Unknown"], "remote_flag": [False]})
+    normalized = normalize_locations(df)
+    assert normalized.loc[0, "city"] is None
+    assert normalized.loc[0, "region"] is None
+    assert normalized.loc[0, "country"] is None
+
+
+def test_normalize_locations_infers_remote_from_context_columns() -> None:
+    df = pd.DataFrame(
+        {
+            "location_raw": ["San Francisco, CA"],
+            "title": ["Software Engineer (Remote)"],
+            "description_text": ["Work from home across US timezones."],
+            "remote_flag": [False],
+        }
+    )
+    normalized = normalize_locations(df)
+    assert normalized.loc[0, "remote_type"] == "remote"
+
+
+def test_normalize_locations_infers_remote_from_remote_allowed_signal() -> None:
+    df = pd.DataFrame(
+        {
+            "location_raw": ["Austin, TX"],
+            "title": ["Backend Engineer"],
+            "description_text": ["Hybrid role with office collaboration."],
+            "remote_allowed": ["yes"],
+            "remote_flag": [False],
+        }
+    )
+    normalized = normalize_locations(df)
+    assert normalized.loc[0, "remote_type"] == "remote"
 
 
 @pytest.mark.parametrize(
@@ -254,6 +306,114 @@ def test_normalize_salaries_swapped_range() -> None:
     normalized = normalize_salaries(df)
     assert normalized.loc[0, "salary_min"] == 120000.0
     assert normalized.loc[0, "salary_max"] == 150000.0
+
+
+def test_normalize_salaries_falls_back_to_description_text() -> None:
+    df = pd.DataFrame(
+        {
+            "salary_text": [None],
+            "description_text": ["Compensation: CAD 120k - CAD 150k per year."],
+        }
+    )
+    normalized = normalize_salaries(df)
+    assert normalized.loc[0, "salary_min"] == 120000.0
+    assert normalized.loc[0, "salary_max"] == 150000.0
+    assert normalized.loc[0, "salary_currency"] == "CAD"
+    assert normalized.loc[0, "salary_interval"] == "year"
+
+
+def test_normalize_salaries_preserves_existing_numeric_values() -> None:
+    df = pd.DataFrame(
+        {
+            "salary_text": ["$90,000 - $120,000 per year"],
+            "salary_min": [100000.0],
+            "salary_max": [140000.0],
+            "salary_currency": ["USD"],
+            "salary_interval": ["year"],
+        }
+    )
+    normalized = normalize_salaries(df)
+    assert normalized.loc[0, "salary_min"] == 100000.0
+    assert normalized.loc[0, "salary_max"] == 140000.0
+    assert normalized.loc[0, "salary_currency"] == "USD"
+    assert normalized.loc[0, "salary_interval"] == "year"
+
+
+def test_extract_salary_from_text_rejects_non_positive_or_tiny_ranges() -> None:
+    assert normalize_module._extract_salary_from_text("$00 - $10 per year") == (None, None, None, None)
+    assert normalize_module._extract_salary_from_text("$05 - $09 per hour") == (None, None, None, None)
+
+
+def test_extract_salary_from_text_infers_currency_from_trailing_text() -> None:
+    cad = normalize_module._extract_salary_from_text("100000 - 120000 CAD per year")
+    usd = normalize_module._extract_salary_from_text("90000 - 110000 USD annually")
+    assert cad == (100000.0, 120000.0, "CAD", "year")
+    assert usd == (90000.0, 110000.0, "USD", "year")
+
+
+def test_extract_salary_from_text_parses_single_amount_only_with_salary_context() -> None:
+    parsed = normalize_module._extract_salary_from_text("Base salary: $120k annually")
+    no_context = normalize_module._extract_salary_from_text("401k match up to $5k")
+    assert parsed == (120000.0, 120000.0, "USD", "year")
+    assert no_context == (None, None, None, None)
+
+
+def test_extract_salary_from_text_handles_empty_contextless_and_ambiguous_single_values() -> None:
+    assert normalize_module._extract_salary_from_text("") == (None, None, None, None)
+    assert normalize_module._extract_salary_from_text("Compensation available upon request.") == (
+        None,
+        None,
+        None,
+        None,
+    )
+    assert normalize_module._extract_salary_from_text(
+        "Base salary: $100k with $15k bonus and $25k equity."
+    ) == (None, None, None, None)
+    assert normalize_module._infer_salary_currency("", "compensation details to be discussed") is None
+
+
+def test_normalize_skills_backfills_from_text_and_preserves_existing() -> None:
+    df = pd.DataFrame(
+        {
+            "title": ["Data Engineer", "Frontend Engineer"],
+            "description_text": [
+                "Requirements: Python, SQL, and Airflow. Nice to have Spark.",
+                "Build products with React and TypeScript.",
+            ],
+            "skills": [None, ["JavaScript"]],
+        }
+    )
+    normalized = normalize_skills(df)
+    assert normalized.loc[0, "skills"] == ["airflow", "python", "spark", "sql"]
+    assert "javascript" in normalized.loc[1, "skills"]
+    assert "react" not in normalized.loc[1, "skills"]
+
+
+def test_normalize_skills_returns_input_when_no_text_or_skills_columns() -> None:
+    df = pd.DataFrame({"title_only": ["Role"]})
+    normalized = normalize_skills(df, skills_column="skills", title_column="title", description_column="description_text")
+    assert normalized.equals(df)
+
+
+def test_normalize_skill_helpers_cover_scalar_nan_and_empty_inputs() -> None:
+    assert normalize_module._normalize_skills_value(None) == []
+    assert normalize_module._normalize_skills_value(float("nan")) == []
+    assert normalize_module._normalize_skills_value("") == []
+    assert normalize_module._normalize_skills_value("Python; SQL") == ["python", "sql"]
+    assert normalize_module._normalize_skills_value(123) == []
+    assert normalize_module._extract_skills_from_text("") == []
+
+
+def test_extract_skills_from_text_and_series_helper_edges(monkeypatch) -> None:
+    assert normalize_module._extract_skills_from_text("Must have Python and SQL") == ["python", "sql"]
+    empty_series = normalize_module._extract_skills_from_text_series(pd.Series([], dtype="string"))
+    assert empty_series.empty
+
+    monkeypatch.setattr(normalize_module, "_normalize_skill_token", lambda _: None)
+    all_dropped = normalize_module._extract_skills_from_text_series(
+        pd.Series(["python and sql"], dtype="string")
+    )
+    assert all_dropped.loc[0] == []
 
 
 def test_normalize_employment_types(sample_df: pd.DataFrame) -> None:

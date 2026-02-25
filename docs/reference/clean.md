@@ -9,7 +9,7 @@ including HTML stripping, location normalization, salary parsing, and deduping.
 - `dedup.py`: row-level deduplication by content hash or custom columns.
 - `historical.py`: opt-in historical cleaning and snapshot compaction.
 - `html.py`: HTML to text conversion and boilerplate removal.
-- `normalize.py`: location, salary, and employment type normalization.
+- `normalize.py`: location, salary, skills, and employment type normalization.
 - `location_data.py`: static lookup tables used by location normalization.
 
 ### Public API reference
@@ -18,14 +18,15 @@ including HTML stripping, location normalization, salary parsing, and deduping.
 
 Runs the standard cleaning pipeline in order:
 `strip_html` -> `normalize_locations` -> `enrich_country_from_context` ->
-`normalize_salaries` -> `normalize_employment_types` -> `deduplicate`.
+`normalize_salaries` -> `normalize_skills` -> `normalize_employment_types` ->
+`deduplicate`.
 
 #### `clean_historical_jobs(df: pd.DataFrame, *, options: HistoricalCleanOptions | None = None) -> pd.DataFrame`
 
 Runs the historical cleaning flow:
 `normalize_source_data_contract` -> listing-page detection/drop -> snapshot compaction ->
 standard cleaning steps (`strip_html`, `normalize_locations`, `enrich_country_from_context`,
-`normalize_salaries`, `normalize_employment_types`).
+`normalize_salaries`, `normalize_skills`, `normalize_employment_types`).
 
 Adds:
 - `historical_is_listing_page`
@@ -40,6 +41,7 @@ Dataclass for historical mode behavior:
 - `detect_listing_pages: bool = True`
 - `drop_listing_pages: bool = True`
 - `compact_snapshots: bool = True`
+- `prefer_existing_description_text: bool = True`
 - `snapshot_timestamp_output: Literal["iso8601", "datetime"] = "datetime"`
 - `compaction_keys: tuple[str, ...] = ("job_key", "content_hash")`
 - `ingested_at_column: str = "ingested_at"`
@@ -77,7 +79,8 @@ normalize_locations(
 ```
 
 Parses `location_raw` into `city`, `region`, `country`, and `remote_type`,
-accounting for common aliases, multi-location strings, and remote keywords.
+accounting for common aliases, multi-location strings, unknown-token cleanup,
+and remote inference from title/description and optional `remote_allowed`.
 
 #### `enrich_country_from_context(...) -> pd.DataFrame`
 
@@ -113,8 +116,25 @@ normalize_salaries(
 ) -> pd.DataFrame
 ```
 
-Parses salary ranges from text and writes `salary_min`/`salary_max`. Defaults
-currency to `USD` and interval to `year` when missing.
+Parses salary ranges (and conservative single-value salary statements) from
+`salary_text`, with fallback to `description_text` on salary-like rows, and
+writes `salary_min`/`salary_max`. Defaults currency to `USD` and interval to
+`year` when missing.
+
+#### `normalize_skills(...) -> pd.DataFrame`
+
+```
+normalize_skills(
+    df: pd.DataFrame,
+    *,
+    skills_column: str = SKILLS,
+    title_column: str = TITLE,
+    description_column: str = DESCRIPTION_TEXT,
+) -> pd.DataFrame
+```
+
+Backfills missing/empty `skills` deterministically from title+description using
+alias-normalized dictionary matching while preserving existing non-empty skills.
 
 #### `normalize_employment_types(df: pd.DataFrame, *, employment_type_column: str = EMPLOYMENT_TYPE) -> pd.DataFrame`
 

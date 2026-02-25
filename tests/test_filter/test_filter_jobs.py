@@ -47,6 +47,7 @@ def test_filter_jobs_no_active_filters_skip_predicates(sample_df: pd.DataFrame, 
     monkeypatch.setattr(filter_module, "by_skills", _raise)
     monkeypatch.setattr(filter_module, "by_keywords", _raise)
     monkeypatch.setattr(filter_module, "by_completeness", _raise)
+    monkeypatch.setattr(filter_module, "by_recency", _raise)
 
     filtered = filter_module.filter_jobs(sample_df)
     assert filtered.equals(sample_df.reset_index(drop=True))
@@ -74,4 +75,21 @@ def test_filter_jobs_required_fields_filter_active(sample_df: pd.DataFrame) -> N
     df = sample_df.copy()
     df.loc[1, "apply_url"] = None
     filtered = filter_jobs(df, required_fields=["apply_url"])
+    assert filtered["job_id"].tolist() == ["1"]
+
+
+def test_filter_jobs_recency_filter_active() -> None:
+    df = pd.DataFrame(
+        {
+            "job_id": ["1", "2"],
+            "title": ["Role 1", "Role 2"],
+            "posted_at": ["2025-01-10T00:00:00Z", "2024-11-01T00:00:00Z"],
+            "apply_url": ["https://a.example/jobs/1", "https://a.example/jobs/2"],
+        }
+    )
+    filtered = filter_jobs(
+        df,
+        posted_within_days=7,
+        as_of="2025-01-10T00:00:00Z",
+    )
     assert filtered["job_id"].tolist() == ["1"]

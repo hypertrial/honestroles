@@ -1,9 +1,11 @@
 import pandas as pd
 
+import honestroles.filter.predicates as predicates_module
 from honestroles.filter.predicates import (
     by_completeness,
     by_keywords,
     by_location,
+    by_recency,
     by_salary,
     by_skills,
 )
@@ -143,10 +145,27 @@ def test_by_skills_scalar_values() -> None:
     assert mask.tolist() == [True, False]
 
 
+def test_by_skills_non_string_scalar_values() -> None:
+    df = pd.DataFrame({"skills": [123, 456]})
+    mask = by_skills(df, required=["123"])
+    assert mask.tolist() == [True, False]
+
+
 def test_by_skills_no_constraints_fast_path() -> None:
     df = pd.DataFrame({"skills": [["Python"], []]})
     mask = by_skills(df, required=None, excluded=None)
     assert mask.tolist() == [True, True]
+
+
+def test_by_skills_uses_union_of_skills_columns() -> None:
+    df = pd.DataFrame(
+        {
+            "tech_stack": [["python"], []],
+            "required_skills_extracted": [[], ["sql"]],
+        }
+    )
+    mask = by_skills(df, required=["sql"])
+    assert mask.tolist() == [False, True]
 
 
 def test_by_keywords(sample_df: pd.DataFrame) -> None:
@@ -210,6 +229,17 @@ def test_by_keywords_multi_include_ignores_empty_terms() -> None:
     assert mask.tolist() == [False, True]
 
 
+def test_by_keywords_short_token_uses_word_boundaries() -> None:
+    df = pd.DataFrame(
+        {
+            "title": ["Product Manager", "Development Coordinator"],
+            "description_text": ["Role for PM", "Coordinate teams"],
+        }
+    )
+    mask = by_keywords(df, include=["pm"])
+    assert mask.tolist() == [True, False]
+
+
 def test_by_keywords_missing_columns(sample_df: pd.DataFrame) -> None:
     df = sample_df.drop(columns=["title", "description_text"], errors="ignore")
     mask = by_keywords(df, include=["roadmap"])
@@ -243,3 +273,33 @@ def test_by_completeness_partial_presence(sample_df: pd.DataFrame) -> None:
 def test_by_completeness_no_required_fields_returns_all(sample_df: pd.DataFrame) -> None:
     mask = by_completeness(sample_df, required_fields=None)
     assert mask.tolist() == [True, True]
+
+
+def test_by_recency_posted_and_seen_filters() -> None:
+    df = pd.DataFrame(
+        {
+            "posted_at": ["2025-01-09T00:00:00Z", "2024-12-01T00:00:00Z"],
+            "last_seen": ["2025-01-10T00:00:00Z", "2024-12-10T00:00:00Z"],
+        }
+    )
+    mask = by_recency(df, posted_within_days=7, seen_within_days=7, as_of="2025-01-10T00:00:00Z")
+    assert mask.tolist() == [True, False]
+
+
+def test_by_recency_no_filters_returns_all_rows() -> None:
+    df = pd.DataFrame({"posted_at": ["2025-01-09T00:00:00Z", "2024-12-01T00:00:00Z"]})
+    mask = by_recency(df)
+    assert mask.tolist() == [True, True]
+
+
+def test_resolve_as_of_handles_none_and_invalid_values() -> None:
+    none_anchor = predicates_module._resolve_as_of(None)
+    invalid_anchor = predicates_module._resolve_as_of("not-a-date")
+    assert none_anchor.tzinfo is not None
+    assert invalid_anchor.tzinfo is not None
+
+
+def test_by_recency_fallbacks_to_ingested_at() -> None:
+    df = pd.DataFrame({"ingested_at": ["2025-01-10T00:00:00Z", "2024-11-01T00:00:00Z"]})
+    mask = by_recency(df, posted_within_days=10, as_of="2025-01-10T00:00:00Z")
+    assert mask.tolist() == [True, False]

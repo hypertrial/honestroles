@@ -10,7 +10,11 @@ Dataclass describing candidate constraints and preferences. Use `CandidateProfil
 
 #### `extract_job_signals(...) -> pd.DataFrame`
 
-Extracts matching signals from job text (skills, experience requirements, entry-level likelihood, sponsorship signal, clarity, friction). Uses heuristic-first logic with optional Ollama enrichment.
+Extracts matching signals from job text (required/preferred skills, experience
+requirements, entry-level likelihood, sponsorship signal, clarity, friction).
+Uses a deterministic non-LLM path first (vectorized/precomputed series with
+source-field precedence for experience and visa), then optional Ollama
+enrichment for low-confidence rows.
 
 #### `rank_jobs(...) -> pd.DataFrame`
 

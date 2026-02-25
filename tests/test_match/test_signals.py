@@ -101,3 +101,74 @@ def test_extract_job_signals_does_not_false_match_single_letter_r() -> None:
     enriched = extract_job_signals(df, use_llm=False)
     columns = DEFAULT_RESULT_COLUMNS
     assert "r" not in enriched.iloc[0][columns.required_skills_extracted]
+
+
+def test_extract_job_signals_prefers_source_experience_and_visa_fields() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "title": "Software Engineer",
+                "description_text": "Entry role with 0-1 years experience. No sponsorship.",
+                "apply_url": "https://example.com/jobs/1",
+                "experience_years_min": 3,
+                "experience_years_max": 5,
+                "visa_sponsorship": True,
+            }
+        ]
+    )
+    enriched = extract_job_signals(df, use_llm=False)
+    columns = DEFAULT_RESULT_COLUMNS
+    assert enriched.loc[0, columns.experience_years_min] == 3
+    assert enriched.loc[0, columns.experience_years_max] == 5
+    assert enriched.loc[0, columns.visa_sponsorship_signal] is True
+
+
+def test_extract_job_signals_handles_scalar_title_and_none_skills() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "title": 123,
+                "description_text": None,
+                "apply_url": None,
+                "skills": None,
+            }
+        ]
+    )
+    enriched = extract_job_signals(df, use_llm=False)
+    columns = DEFAULT_RESULT_COLUMNS
+    assert enriched.loc[0, columns.signal_source] == "heuristic"
+    assert enriched.loc[0, columns.required_skills_extracted] == []
+
+
+def test_extract_job_signals_infers_experience_from_seniority_when_no_years_present() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "title": "Senior Software Engineer",
+                "description_text": "Build and maintain internal tools.",
+                "apply_url": "https://example.com/jobs/2",
+            }
+        ]
+    )
+    enriched = extract_job_signals(df, use_llm=False)
+    columns = DEFAULT_RESULT_COLUMNS
+    assert enriched.loc[0, columns.experience_years_min] == 4
+    assert enriched.loc[0, columns.experience_years_max] == 8
+
+
+def test_extract_job_signals_normalizes_seed_skill_aliases() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "title": "Platform Engineer",
+                "description_text": "",
+                "skills": ["Amazon Web Services", "Node.js"],
+                "apply_url": "https://example.com/jobs/3",
+            }
+        ]
+    )
+    enriched = extract_job_signals(df, use_llm=False)
+    columns = DEFAULT_RESULT_COLUMNS
+    required = enriched.loc[0, columns.required_skills_extracted]
+    assert "aws" in required
+    assert "node" in required

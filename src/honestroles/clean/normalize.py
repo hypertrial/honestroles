@@ -23,6 +23,7 @@ from honestroles.schema import (
     SALARY_MAX,
     SALARY_MIN,
     SALARY_TEXT,
+    SKILLS,
     TITLE,
 )
 from honestroles.clean.location_data import (
@@ -39,6 +40,9 @@ from honestroles.clean.location_data import (
 
 LOGGER = logging.getLogger(__name__)
 
+_SALARY_PARSE_TEXT_MAX_CHARS = 3200
+_SKILL_PARSE_TEXT_MAX_CHARS = 800
+
 _EMPLOYMENT_MAP = {
     "full-time": "full_time",
     "full time": "full_time",
@@ -54,10 +58,32 @@ _SALARY_RANGE_RE = re.compile(
     r"\$?\s*(\d{2,3}(?:[,\d]{0,6})?)\s*(?:-|to|–)\s*\$?\s*(\d{2,3}(?:[,\d]{0,6})?)",
     re.IGNORECASE,
 )
+_SALARY_CAPTURE_RE = re.compile(
+    r"(?P<prefix>[$€£]|usd|cad|gbp|eur)?\s*"
+    r"(?P<low>\d{2,6}(?:,\d{3})*(?:\.\d+)?)\s*(?P<low_k>[kK]?)\s*"
+    r"(?:-|to|–)\s*"
+    r"(?P<prefix2>[$€£]|usd|cad|gbp|eur)?\s*"
+    r"(?P<high>\d{2,6}(?:,\d{3})*(?:\.\d+)?)\s*(?P<high_k>[kK]?)",
+    re.IGNORECASE,
+)
+_SALARY_SINGLE_RE = re.compile(
+    r"(?P<prefix>[$€£]|usd|cad|gbp|eur)\s*"
+    r"(?P<amount>\d{2,6}(?:,\d{3})*(?:\.\d+)?)\s*(?P<amount_k>[kK]?)",
+    re.IGNORECASE,
+)
 
 _MULTI_LOCATION_RE = re.compile(r"\s*(?:/|;|\||\bor\b)\s*", re.IGNORECASE)
 _CITY_PREFIX_RE = re.compile(r"^.+\s+-\s+", re.IGNORECASE)
 _ZIP_RE = re.compile(r"\b\d{5}\b")
+_UNKNOWN_LOCATION_VALUES = {"unknown", "n/a", "na", "none", "null", "unspecified", "tbd"}
+_REMOTE_CONTEXT_RE = re.compile(
+    r"\b(?:remote|work\s*from\s*home|wfh|distributed|anywhere|home[- ]based)\b",
+    re.IGNORECASE,
+)
+_REMOTE_NEGATIVE_RE = re.compile(
+    r"\b(?:not remote|non-remote|on[- ]site|onsite only|in-office only|hybrid only)\b",
+    re.IGNORECASE,
+)
 _CANADIAN_POSTAL_RE = re.compile(CANADIAN_POSTAL_RE_PATTERN, re.IGNORECASE)
 _CANADA_CONTEXT_RE = re.compile(
     r"(?:based in|located in|position in|role in|work in|working in|must be in|"
@@ -74,6 +100,71 @@ _CANADIAN_CURRENCY_KEYWORDS_RE = re.compile(
     "|".join(re.escape(keyword) for keyword in sorted(CANADIAN_CURRENCY_KEYWORDS)),
     re.IGNORECASE,
 )
+_SALARY_INTERVAL_PATTERNS = [
+    (re.compile(r"(?:per|/)\s*hour|hourly", re.IGNORECASE), "hour"),
+    (re.compile(r"(?:per|/)\s*day|daily", re.IGNORECASE), "day"),
+    (re.compile(r"(?:per|/)\s*week|weekly", re.IGNORECASE), "week"),
+    (re.compile(r"(?:per|/)\s*month|monthly", re.IGNORECASE), "month"),
+    (re.compile(r"(?:per|/)\s*year|annually|annual|yearly", re.IGNORECASE), "year"),
+]
+_SALARY_CURRENCY_MAP = {
+    "$": "USD",
+    "usd": "USD",
+    "cad": "CAD",
+    "gbp": "GBP",
+    "eur": "EUR",
+    "£": "GBP",
+    "€": "EUR",
+}
+_SALARY_CONTEXT_RE = re.compile(
+    r"\b(?:salary|compensation|base pay|pay range|hourly rate|annual salary|annual pay)\b",
+    re.IGNORECASE,
+)
+_SALARY_PARSE_CANDIDATE_RE = re.compile(
+    r"[$€£]|\b(?:usd|cad|gbp|eur)\b|"
+    r"\b\d{2,6}(?:,\d{3})*(?:\.\d+)?\s*[kK]?\s*(?:-|to|–)\s*\d{2,6}(?:,\d{3})*(?:\.\d+)?\s*[kK]?\b|"
+    r"\b(?:salary|compensation|base pay|pay range|hourly rate|annual salary|annual pay)\b",
+    re.IGNORECASE,
+)
+_SKILL_ALIASES = {
+    "python": ("python",),
+    "sql": ("sql",),
+    "javascript": ("javascript", "js"),
+    "typescript": ("typescript", "ts"),
+    "react": ("react", "reactjs"),
+    "node": ("node", "nodejs", "node.js"),
+    "aws": ("aws", "amazon web services"),
+    "gcp": ("gcp", "google cloud", "google cloud platform"),
+    "azure": ("azure", "microsoft azure"),
+    "docker": ("docker",),
+    "kubernetes": ("kubernetes", "k8s"),
+    "spark": ("spark", "apache spark", "pyspark"),
+    "airflow": ("airflow", "apache airflow"),
+    "dbt": ("dbt",),
+    "tableau": ("tableau",),
+    "power bi": ("power bi", "powerbi"),
+    "excel": ("excel", "microsoft excel"),
+    "java": ("java",),
+    "c++": ("c++", "cpp"),
+    "c#": ("c#", "csharp"),
+    "go": ("go", "golang"),
+    "rust": ("rust",),
+    "postgres": ("postgres", "postgresql"),
+    "mysql": ("mysql",),
+    "snowflake": ("snowflake",),
+    "bigquery": ("bigquery",),
+    "tensorflow": ("tensorflow",),
+    "pytorch": ("pytorch",),
+    "machine learning": ("machine learning", "ml"),
+    "nlp": ("nlp", "natural language processing"),
+}
+_SKILL_ALIAS_TO_CANONICAL = {
+    alias: canonical
+    for canonical, aliases in _SKILL_ALIASES.items()
+    for alias in aliases
+}
+_SKILL_REQUIRED_HINTS = ("required", "must have", "must-haves", "minimum qualifications")
+_SKILL_PREFERRED_HINTS = ("preferred", "nice to have", "plus", "bonus")
 
 
 @dataclass(frozen=True)
@@ -170,6 +261,190 @@ def _detect_provinces(text: str) -> set[str]:
     return provinces
 
 
+def _looks_unknown_location(value: str) -> bool:
+    normalized = _normalize_token(value)
+    return normalized in _UNKNOWN_LOCATION_VALUES
+
+
+def _normalize_skill_token(value: str) -> str | None:
+    normalized = _normalize_token(value).replace("-", " ")
+    return _SKILL_ALIAS_TO_CANONICAL.get(normalized)
+
+
+def _compile_skill_pattern(alias: str) -> re.Pattern[str]:
+    escaped = re.escape(alias).replace(r"\ ", r"\s+")
+    return re.compile(rf"(?<![a-z0-9+#]){escaped}(?![a-z0-9+#])", re.IGNORECASE)
+
+
+_SKILL_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    (canonical, _compile_skill_pattern(alias))
+    for alias, canonical in sorted(_SKILL_ALIAS_TO_CANONICAL.items())
+]
+_SKILL_EXTRACT_ALIASES = sorted(_SKILL_ALIAS_TO_CANONICAL, key=len, reverse=True)
+_SKILL_EXTRACT_RE = re.compile(
+    r"(?<![a-z0-9+#])("
+    + "|".join(re.escape(alias).replace(r"\ ", r"\s+") for alias in _SKILL_EXTRACT_ALIASES)
+    + r")(?![a-z0-9+#])",
+    re.IGNORECASE,
+)
+
+
+def _normalize_skills_value(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, float) and pd.isna(value):
+        return []
+    values: list[str]
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return []
+        delimiter = ";" if ";" in stripped else ("," if "," in stripped else None)
+        values = [part.strip() for part in stripped.split(delimiter)] if delimiter else [stripped]
+    elif isinstance(value, (list, tuple, set)):
+        values = [str(item).strip() for item in value if str(item).strip()]
+    else:
+        values = [str(value).strip()]
+
+    normalized = {
+        canonical
+        for item in values
+        for canonical in [_normalize_skill_token(item)]
+        if canonical is not None
+    }
+    return sorted(normalized)
+
+
+def _extract_skills_from_text(text: str) -> list[str]:
+    if not text:
+        return []
+    detected: set[str] = set()
+    for match in _SKILL_EXTRACT_RE.finditer(text):
+        canonical = _normalize_skill_token(match.group(0))
+        if canonical is not None:
+            detected.add(canonical)
+    return sorted(detected)
+
+
+def _extract_skills_from_text_series(text: pd.Series) -> pd.Series:
+    lowered = text.astype("string").fillna("").str.lower()
+    extracted = pd.Series([[] for _ in range(len(lowered))], index=lowered.index, dtype="object")
+    if lowered.empty:
+        return extracted
+    matches = lowered.str.extractall(_SKILL_EXTRACT_RE)
+    if matches.empty:
+        return extracted
+    canonical = matches[0].map(_normalize_skill_token).dropna()
+    if canonical.empty:
+        return extracted
+    grouped = canonical.groupby(level=0).agg(lambda values: sorted(set(values)))
+    extracted.loc[grouped.index] = grouped.astype("object")
+    return extracted
+
+
+def _parse_salary_number(value: str, has_k_suffix: bool) -> float:
+    normalized = value.replace(",", "")
+    if "." in normalized and normalized.replace(".", "").isdigit():
+        parts = normalized.split(".")
+        if len(parts) > 1 and all(len(part) == 3 for part in parts[1:]):
+            normalized = "".join(parts)
+    parsed = float(normalized)
+    if has_k_suffix:
+        parsed *= 1000.0
+    return parsed
+
+
+def _infer_salary_currency(currency_token: str, lowered: str) -> str | None:
+    currency = _SALARY_CURRENCY_MAP.get(currency_token) if currency_token else None
+    if currency is not None:
+        return currency
+    if " cad" in lowered or " canadian dollar" in lowered:
+        return "CAD"
+    if " usd" in lowered or " us dollar" in lowered:
+        return "USD"
+    return None
+
+
+def _extract_salary_from_text(value: str) -> tuple[float | None, float | None, str | None, str | None]:
+    if not value:
+        return None, None, None, None
+    match = _SALARY_CAPTURE_RE.search(value)
+    low: float
+    high: float
+    currency_token = ""
+    lowered = value.lower()
+    if match:
+        low = _parse_salary_number(match.group("low"), bool(match.group("low_k")))
+        high = _parse_salary_number(match.group("high"), bool(match.group("high_k")))
+        currency_token = (match.group("prefix") or match.group("prefix2") or "").strip().lower()
+    else:
+        if not _SALARY_CONTEXT_RE.search(value):
+            return None, None, None, None
+        single_matches = list(_SALARY_SINGLE_RE.finditer(value))
+        if not single_matches:
+            return None, None, None, None
+        parsed_values = [
+            _parse_salary_number(single.group("amount"), bool(single.group("amount_k")))
+            for single in single_matches
+        ]
+        if len({round(amount, 2) for amount in parsed_values}) > 2:
+            return None, None, None, None
+        low = min(parsed_values)
+        high = max(parsed_values)
+        currency_token = (single_matches[0].group("prefix") or "").strip().lower()
+
+    if low <= 0 or high <= 0:
+        return None, None, None, None
+    low, high = min(low, high), max(low, high)
+    if high < 10:
+        return None, None, None, None
+    currency = _infer_salary_currency(currency_token, lowered)
+    interval: str | None = None
+    for pattern, label in _SALARY_INTERVAL_PATTERNS:
+        if pattern.search(value):
+            interval = label
+            break
+    return low, high, currency, interval
+
+
+def _extract_salary_from_text_series(
+    text: pd.Series,
+) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
+    parsed = text.astype("string").fillna("").map(_extract_salary_from_text)
+    mins = parsed.map(lambda value: value[0]).astype("float64")
+    maxs = parsed.map(lambda value: value[1]).astype("float64")
+    currencies = parsed.map(lambda value: value[2]).astype("object")
+    intervals = parsed.map(lambda value: value[3]).astype("object")
+    return mins, maxs, currencies, intervals
+
+
+def _infer_remote_from_context(
+    df: pd.DataFrame,
+    *,
+    title_column: str = TITLE,
+    description_column: str = DESCRIPTION_TEXT,
+    location_column: str = LOCATION_RAW,
+    remote_allowed_column: str = "remote_allowed",
+    remote_scope_column: str = "remote_scope",
+) -> pd.Series:
+    columns = [title_column, description_column, location_column, remote_scope_column]
+    text = _combined_lower_text(df, columns)
+    positive = text.str.contains(_REMOTE_CONTEXT_RE, na=False)
+    negative = text.str.contains(_REMOTE_NEGATIVE_RE, na=False)
+    inferred = positive & ~negative
+    if remote_allowed_column in df.columns:
+        allowed = (
+            df[remote_allowed_column]
+            .astype("string")
+            .fillna("")
+            .str.strip()
+            .str.lower()
+            .isin({"true", "1", "yes", "remote"})
+        )
+        inferred |= allowed
+    return inferred.astype("bool")
+
+
 def _classify_parts(parts: list[str]) -> tuple[str | None, str | None, str | None]:
     tokens = [(part, _normalize_token(part)) for part in parts if part.strip()]
     tokens = [(orig, norm) for orig, norm in tokens if not _is_remote_token(norm)]
@@ -244,10 +519,17 @@ def _parse_location_string(value: str) -> LocationResult:
     cleaned = value.strip()
     if not cleaned:
         return LocationResult(None, None, None, None)
+    if _looks_unknown_location(cleaned):
+        return LocationResult(None, None, None, None)
     remote_type = "remote" if _detect_remote(cleaned) else None
     primary = _extract_primary_location(cleaned)
     parts = [part.strip() for part in primary.split(",") if part.strip()]
     city, region, country = _classify_parts(parts)
+    if city is not None and _looks_unknown_location(city):
+        city = None
+    if city and (region is not None or country is not None) and "," in city:
+        if not city.strip()[:1].isdigit():
+            city = city.split(",", 1)[0].strip()
     return LocationResult(city, region, country, remote_type)
 
 
@@ -272,7 +554,8 @@ def normalize_locations(
     if bool(string_mask.any()):
         stripped.loc[string_mask] = raw.loc[string_mask].astype("string").fillna("").str.strip()
     non_empty_mask = stripped.ne("").fillna(False).astype("bool")
-    parse_mask = string_mask & non_empty_mask
+    unknown_mask = stripped.str.lower().isin(_UNKNOWN_LOCATION_VALUES).fillna(False).astype("bool")
+    parse_mask = string_mask & non_empty_mask & ~unknown_mask
 
     parsed = pd.Series(
         [LocationResult(None, None, None, None)] * len(result),
@@ -299,15 +582,20 @@ def normalize_locations(
     result[region_column] = result[region_column].where(result[region_column].notna(), None)
     result[country_column] = result[country_column].where(result[country_column].notna(), None)
 
+    context_remote = _infer_remote_from_context(result, location_column=location_column)
     if remote_flag_column in result.columns:
         remote_flags = result[remote_flag_column].fillna(False).astype(bool).tolist()
         remote_values = [
-            "remote" if (flag or remote == "remote") else None
-            for flag, remote in zip(remote_flags, remote_types)
+            "remote" if (flag or remote == "remote" or context) else None
+            for flag, remote, context in zip(remote_flags, remote_types, context_remote.tolist())
         ]
         result[remote_type_column] = pd.Series(remote_values, dtype="object")
     else:
-        result[remote_type_column] = pd.Series(remote_types, dtype="object")
+        remote_values = [
+            "remote" if (remote == "remote" or context) else None
+            for remote, context in zip(remote_types, context_remote.tolist())
+        ]
+        result[remote_type_column] = pd.Series(remote_values, dtype="object")
     result[remote_type_column] = result[remote_type_column].where(
         result[remote_type_column].notna(), None
     )
@@ -424,6 +712,7 @@ def normalize_salaries(
     df: pd.DataFrame,
     *,
     salary_text_column: str = SALARY_TEXT,
+    description_column: str = DESCRIPTION_TEXT,
     salary_min_column: str = SALARY_MIN,
     salary_max_column: str = SALARY_MAX,
     salary_currency_column: str = SALARY_CURRENCY,
@@ -433,33 +722,130 @@ def normalize_salaries(
         return df
     result = df.copy()
 
-    def parse_range(value: str | float | None) -> tuple[float | None, float | None]:
-        if value is None or (isinstance(value, float) and pd.isna(value)):
-            return None, None
-        if not isinstance(value, str):
-            return None, None
-        if not value:
-            return None, None
-        match = _SALARY_RANGE_RE.search(value.replace(",", ""))
-        if not match:
-            return None, None
-        low = float(match.group(1))
-        high = float(match.group(2))
-        return min(low, high), max(low, high)
+    salary_text = (
+        result[salary_text_column].astype("string").fillna("")
+        if salary_text_column in result.columns
+        else pd.Series("", index=result.index, dtype="string")
+    )
+    description_text = (
+        result[description_column]
+        .astype("string")
+        .fillna("")
+        .str.slice(0, _SALARY_PARSE_TEXT_MAX_CHARS)
+        if description_column in result.columns
+        else pd.Series("", index=result.index, dtype="string")
+    )
+    salary_present = salary_text.str.strip().ne("")
+    source_text = pd.Series("", index=result.index, dtype="string")
+    if bool(salary_present.any()):
+        source_text.loc[salary_present] = salary_text.loc[salary_present]
+    description_candidates = (~salary_present) & description_text.str.contains(
+        _SALARY_PARSE_CANDIDATE_RE, na=False
+    )
+    if bool(description_candidates.any()):
+        source_text.loc[description_candidates] = description_text.loc[description_candidates]
+    parse_candidates = source_text.str.strip().ne("")
+    parsed_min = pd.Series(float("nan"), index=result.index, dtype="float64")
+    parsed_max = pd.Series(float("nan"), index=result.index, dtype="float64")
+    parsed_currency = pd.Series([None] * len(result), index=result.index, dtype="object")
+    parsed_interval = pd.Series([None] * len(result), index=result.index, dtype="object")
+    if bool(parse_candidates.any()):
+        subset_min, subset_max, subset_currency, subset_interval = _extract_salary_from_text_series(
+            source_text.loc[parse_candidates]
+        )
+        parsed_min.loc[parse_candidates] = subset_min
+        parsed_max.loc[parse_candidates] = subset_max
+        parsed_currency.loc[parse_candidates] = subset_currency
+        parsed_interval.loc[parse_candidates] = subset_interval
 
-    mins: list[float | None] = []
-    maxs: list[float | None] = []
-    for value in result[salary_text_column].tolist():
-        low, high = parse_range(value)
-        mins.append(low)
-        maxs.append(high)
-    result[salary_min_column] = mins
-    result[salary_max_column] = maxs
+    existing_min = (
+        pd.to_numeric(result[salary_min_column], errors="coerce")
+        if salary_min_column in result.columns
+        else pd.Series(float("nan"), index=result.index, dtype="float64")
+    )
+    existing_max = (
+        pd.to_numeric(result[salary_max_column], errors="coerce")
+        if salary_max_column in result.columns
+        else pd.Series(float("nan"), index=result.index, dtype="float64")
+    )
+    result[salary_min_column] = existing_min.where(existing_min.notna(), parsed_min)
+    result[salary_max_column] = existing_max.where(existing_max.notna(), parsed_max)
+    result[salary_min_column] = result[salary_min_column].astype("object").where(
+        pd.notna(result[salary_min_column]),
+        None,
+    )
+    result[salary_max_column] = result[salary_max_column].astype("object").where(
+        pd.notna(result[salary_max_column]),
+        None,
+    )
 
-    if salary_currency_column not in result.columns:
-        result[salary_currency_column] = "USD"
-    if salary_interval_column not in result.columns:
-        result[salary_interval_column] = "year"
+    if salary_currency_column in result.columns:
+        existing_currency = result[salary_currency_column].astype("string").fillna("").str.strip()
+        result[salary_currency_column] = existing_currency.where(
+            existing_currency.ne(""),
+            parsed_currency,
+        ).astype("object")
+        result[salary_currency_column] = result[salary_currency_column].where(
+            result[salary_currency_column].notna(), None
+        )
+    else:
+        result[salary_currency_column] = parsed_currency.where(
+            parsed_currency.notna(),
+            "USD",
+        ).astype("object")
+
+    if salary_interval_column in result.columns:
+        existing_interval = result[salary_interval_column].astype("string").fillna("").str.strip()
+        result[salary_interval_column] = existing_interval.where(
+            existing_interval.ne(""),
+            parsed_interval,
+        ).astype("object")
+        result[salary_interval_column] = result[salary_interval_column].where(
+            result[salary_interval_column].notna(), None
+        )
+    else:
+        result[salary_interval_column] = parsed_interval.where(
+            parsed_interval.notna(),
+            "year",
+        ).astype("object")
+    return result
+
+
+def normalize_skills(
+    df: pd.DataFrame,
+    *,
+    skills_column: str = SKILLS,
+    title_column: str = TITLE,
+    description_column: str = DESCRIPTION_TEXT,
+) -> pd.DataFrame:
+    if skills_column not in df.columns and title_column not in df.columns and description_column not in df.columns:
+        return df
+    result = df.copy()
+    existing = (
+        result[skills_column].map(_normalize_skills_value)
+        if skills_column in result.columns
+        else pd.Series([[] for _ in range(len(result))], index=result.index, dtype="object")
+    )
+    missing_skills = existing.map(len).eq(0)
+
+    text = pd.Series("", index=result.index, dtype="string")
+    if title_column in result.columns:
+        text = text.str.cat(result[title_column].astype("string").fillna(""), sep=" ")
+    if description_column in result.columns:
+        text = text.str.cat(
+            result[description_column]
+            .astype("string")
+            .fillna("")
+            .str.slice(0, _SKILL_PARSE_TEXT_MAX_CHARS),
+            sep=" ",
+        )
+
+    extracted = pd.Series([[] for _ in range(len(result))], index=result.index, dtype="object")
+    if bool(missing_skills.any()):
+        extracted.loc[missing_skills] = _extract_skills_from_text_series(text.loc[missing_skills])
+    merged = existing.where(~missing_skills, extracted)
+    result[skills_column] = merged.map(lambda value: value if value else []).astype("object")
+
     return result
 
 
