@@ -55,6 +55,15 @@ def test_custom_404_supports_md_path_redirects() -> None:
     assert "window.location.hash" in redirect_js
 
 
+def test_repo_widget_override_disables_release_api_fetch_component() -> None:
+    mkdocs_config = _read("mkdocs.yml")
+    source_override = _read("docs/overrides/partials/source.html")
+
+    assert "custom_dir: docs/overrides" in mkdocs_config
+    assert "data-md-component=\"source\"" not in source_override
+    assert "class=\"md-source\"" in source_override
+
+
 def test_custom_404_redirect_examples() -> None:
     def normalize(path: str) -> str:
         if path.endswith(".md"):

@@ -20,6 +20,7 @@ plugins:
 
 theme:
   name: material
+  custom_dir: docs/overrides
   language: en
   font:
     text: IBM Plex Sans
