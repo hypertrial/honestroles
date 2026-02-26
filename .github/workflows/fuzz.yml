@@ -12,6 +12,20 @@ jobs:
   fuzz-smoke:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: clean_filter
+            paths: "tests/fuzz/test_fuzz_clean_*.py tests/fuzz/test_fuzz_filter_*.py"
+          - shard: label_rate
+            paths: "tests/fuzz/test_fuzz_label_*.py tests/fuzz/test_fuzz_rate_*.py"
+          - shard: io
+            paths: "tests/fuzz/test_fuzz_io_*.py tests/fuzz/test_fuzz_duckdb_query_validation.py"
+          - shard: match
+            paths: "tests/fuzz/test_fuzz_match_*.py"
+          - shard: plugins_cli_llm
+            paths: "tests/fuzz/test_fuzz_plugins_*.py tests/fuzz/test_fuzz_cli_*.py tests/fuzz/test_fuzz_llm_*.py tests/fuzz/test_fuzz_init_surface.py"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,12 +41,26 @@ jobs:
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/python -m pip install -e ".[dev]"
 
-      - name: Run fuzz smoke profile
-        run: HYPOTHESIS_PROFILE=ci_smoke .venv/bin/python -m pytest -m "fuzz" -q -o addopts="-n auto"
+      - name: Run fuzz smoke profile (${{ matrix.shard }})
+        run: HYPOTHESIS_PROFILE=ci_smoke .venv/bin/python -m pytest -m "fuzz" -q -o addopts="-n auto" ${{ matrix.paths }}
 
   fuzz-nightly:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: clean_filter
+            paths: "tests/fuzz/test_fuzz_clean_*.py tests/fuzz/test_fuzz_filter_*.py"
+          - shard: label_rate
+            paths: "tests/fuzz/test_fuzz_label_*.py tests/fuzz/test_fuzz_rate_*.py"
+          - shard: io
+            paths: "tests/fuzz/test_fuzz_io_*.py tests/fuzz/test_fuzz_duckdb_query_validation.py"
+          - shard: match
+            paths: "tests/fuzz/test_fuzz_match_*.py"
+          - shard: plugins_cli_llm
+            paths: "tests/fuzz/test_fuzz_plugins_*.py tests/fuzz/test_fuzz_cli_*.py tests/fuzz/test_fuzz_llm_*.py tests/fuzz/test_fuzz_init_surface.py"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,6 +76,5 @@ jobs:
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/python -m pip install -e ".[dev]"
 
-      - name: Run fuzz nightly profile
-        run: HYPOTHESIS_PROFILE=nightly_deep .venv/bin/python -m pytest -m "fuzz" -q -o addopts="-n auto"
-
+      - name: Run fuzz nightly profile (${{ matrix.shard }})
+        run: HYPOTHESIS_PROFILE=nightly_deep .venv/bin/python -m pytest -m "fuzz" -q -o addopts="-n auto" ${{ matrix.paths }}

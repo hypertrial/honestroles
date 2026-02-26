@@ -93,8 +93,9 @@ def minimal_df() -> pd.DataFrame:
     )
 
 
-@pytest.fixture(autouse=True)
-def _reset_plugin_registry() -> None:
+def pytest_runtest_setup(item: pytest.Item) -> None:
     reset_plugins()
-    yield
+
+
+def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> None:
     reset_plugins()

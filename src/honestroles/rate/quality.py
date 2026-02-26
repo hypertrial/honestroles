@@ -68,6 +68,8 @@ def rate_quality(
         response = client.generate(prompt, model=model)
         try:
             payload = json.loads(response)
+            if not isinstance(payload, dict):
+                raise TypeError("LLM quality payload must be a JSON object.")
             score = _parse_llm_score(payload.get("score", 0.0))
             llm_scores.append(score)
             llm_reasons.append(str(payload.get("reason", "")))

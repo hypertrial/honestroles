@@ -50,8 +50,10 @@ def strip_html(
         return text.strip() or None
 
     html_values = result[html_column]
-    parse_mask = html_values.map(
-        lambda value: isinstance(value, str) and value.strip() != ""
+    parse_mask = (
+        html_values.map(lambda value: isinstance(value, str) and value.strip() != "")
+        .fillna(False)
+        .astype("bool")
     )
 
     if overwrite_existing:
@@ -60,7 +62,7 @@ def strip_html(
         if text_column not in result.columns:
             result[text_column] = pd.Series([None] * len(result), index=result.index, dtype="object")
         existing_text = result[text_column].astype("string").fillna("").str.strip()
-        needs_text = existing_text.eq("")
+        needs_text = existing_text.eq("").fillna(False).astype("bool")
         parse_mask &= needs_text
 
     if not bool(parse_mask.any()):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+import string
 
 import pandas as pd
 from hypothesis import strategies as st
@@ -12,23 +13,67 @@ _TEXT_ALPHABET = (
     " \t\n\r-_/.,:;()[]{}<>!?@#$%^&*+=|\\'\""
 )
 
-BOOL_LIKE_STRINGS = st.sampled_from(
-    [
-        "true",
-        "false",
-        "True",
-        "False",
-        " yes ",
-        " no ",
-        "1",
-        "0",
-        "remote",
-        "on-site",
-        "",
-    ]
-)
+_BOOL_LIKE_VALUES = [
+    "true",
+    "false",
+    "True",
+    "False",
+    " yes ",
+    " no ",
+    "1",
+    "0",
+    "remote",
+    "on-site",
+    "",
+]
+
+BOOL_LIKE_STRINGS = st.sampled_from(_BOOL_LIKE_VALUES)
 
 TEXT_VALUES = st.text(alphabet=_TEXT_ALPHABET, min_size=0, max_size=128)
+
+PLUGIN_NAME_VALUES = st.text(
+    alphabet=string.ascii_letters + string.digits + "_-",
+    min_size=1,
+    max_size=32,
+).filter(lambda value: any(ch.isalnum() for ch in value))
+
+MODULE_REF_VALUES = st.one_of(
+    st.text(
+        alphabet=string.ascii_lowercase + string.digits + "_.",
+        min_size=3,
+        max_size=48,
+    ).filter(lambda value: "." in value and not value.startswith(".") and not value.endswith(".")),
+    st.text(
+        alphabet=string.ascii_letters + string.digits + "_/-.",
+        min_size=5,
+        max_size=64,
+    ).map(lambda value: f"{value}.py"),
+)
+
+SQLISH_TEXT = st.one_of(
+    st.sampled_from(
+        [
+            "select * from jobs",
+            "with cte as (select 1) select * from cte",
+            "select title from jobs where salary_max > 100000",
+            "select * from jobs -- comment",
+            "select * from jobs /* block */",
+            "drop table jobs",
+            "",
+            "   ",
+            "select 1; select 2",
+        ]
+    ),
+    TEXT_VALUES,
+)
+
+CLI_ARG_TOKEN = st.text(
+    alphabet=string.ascii_letters + string.digits + "-_/.:=+",
+    min_size=0,
+    max_size=40,
+)
+
+CLI_ARG_VECTORS = st.lists(CLI_ARG_TOKEN, min_size=0, max_size=10)
 
 MIXED_SCALARS = st.one_of(
     st.none(),
@@ -38,6 +83,14 @@ MIXED_SCALARS = st.one_of(
     BOOL_LIKE_STRINGS,
     TEXT_VALUES,
     st.builds(object),
+)
+
+PARQUET_SAFE_SCALARS = st.one_of(
+    st.none(),
+    st.booleans(),
+    st.integers(min_value=-1_000_000, max_value=1_000_000),
+    st.floats(min_value=-1_000_000, max_value=1_000_000, allow_nan=False, allow_infinity=False),
+    TEXT_VALUES,
 )
 
 TIMESTAMP_LIKE_VALUES = st.one_of(
@@ -75,6 +128,15 @@ URL_LIKE_VALUES = st.one_of(
     st.integers(min_value=-1000, max_value=1000),
 )
 
+JSONISH_VALUES = st.recursive(
+    st.one_of(st.none(), st.booleans(), st.integers(-1000, 1000), TEXT_VALUES),
+    lambda children: st.one_of(
+        st.lists(children, min_size=0, max_size=5),
+        st.dictionaries(st.text(min_size=1, max_size=8), children, min_size=0, max_size=4),
+    ),
+    max_leaves=20,
+)
+
 ARRAY_LIKE_VALUES = st.one_of(
     st.none(),
     TEXT_VALUES,
@@ -88,6 +150,8 @@ ARRAY_LIKE_VALUES = st.one_of(
         max_size=4,
     ),
 )
+
+WEIGHT_VALUES = st.floats(min_value=-2.0, max_value=2.0, allow_nan=False, allow_infinity=False)
 
 
 @st.composite
@@ -109,4 +173,53 @@ def dataframe_for_columns(
     data: dict[str, list[object]] = {}
     for column, strategy in column_strategies.items():
         data[column] = draw(st.lists(strategy, min_size=row_count, max_size=row_count))
+    return pd.DataFrame(data, index=index)
+
+
+@st.composite
+def column_subsets(draw, columns: Sequence[str]) -> list[str]:
+    if not columns:
+        return []
+    size = draw(st.integers(min_value=0, max_value=len(columns)))
+    return draw(st.lists(st.sampled_from(list(columns)), min_size=size, max_size=size, unique=True))
+
+
+@st.composite
+def parquet_dataframe(
+    draw,
+    *,
+    columns: Sequence[str] = ("c1", "c2", "c3", "c4"),
+    min_rows: int = 0,
+    max_rows: int = 20,
+) -> pd.DataFrame:
+    row_count = draw(st.integers(min_value=min_rows, max_value=max_rows))
+    index = draw(
+        st.lists(
+            st.integers(min_value=-1000, max_value=1000),
+            min_size=row_count,
+            max_size=row_count,
+        )
+    )
+    kind_to_strategy: dict[str, st.SearchStrategy[object]] = {
+        "int": st.integers(min_value=-1_000_000, max_value=1_000_000),
+        "float": st.floats(
+            min_value=-1_000_000,
+            max_value=1_000_000,
+            allow_nan=False,
+            allow_infinity=False,
+        ),
+        "bool": st.booleans(),
+        "text": TEXT_VALUES,
+    }
+
+    data: dict[str, list[object]] = {}
+    for column in columns:
+        kind = draw(st.sampled_from(sorted(kind_to_strategy)))
+        data[column] = draw(
+            st.lists(
+                kind_to_strategy[kind],
+                min_size=row_count,
+                max_size=row_count,
+            )
+        )
     return pd.DataFrame(data, index=index)

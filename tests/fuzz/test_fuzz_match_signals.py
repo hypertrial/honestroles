@@ -7,6 +7,7 @@ from hypothesis import given
 from honestroles.match.models import DEFAULT_RESULT_COLUMNS
 from honestroles.match.signals import extract_job_signals
 
+from .invariants import assert_index_preserved, assert_numeric_between
 from .strategies import (
     ARRAY_LIKE_VALUES,
     MIXED_SCALARS,
@@ -38,8 +39,7 @@ def test_fuzz_extract_job_signals_no_crash_and_numeric_bounds(df: pd.DataFrame) 
     result = extract_job_signals(df, use_llm=False)
     columns = DEFAULT_RESULT_COLUMNS
 
-    assert len(result) == len(df)
-    assert result.index.equals(df.index)
+    assert_index_preserved(df, result)
 
     for column in [
         columns.required_skills_extracted,
@@ -63,6 +63,4 @@ def test_fuzz_extract_job_signals_no_crash_and_numeric_bounds(df: pd.DataFrame) 
         columns.signal_confidence,
         columns.active_likelihood,
     ]:
-        numeric = pd.to_numeric(result[score_column], errors="coerce").dropna()
-        assert ((numeric >= 0.0) & (numeric <= 1.0)).all()
-
+        assert_numeric_between(result[score_column], minimum=0.0, maximum=1.0)

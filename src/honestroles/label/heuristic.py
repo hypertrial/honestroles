@@ -273,6 +273,10 @@ def label_tech_stack(
         if description_column in result.columns
         else pd.Series([set() for _ in range(len(result))], index=result.index, dtype="object")
     )
-    merged = skills_terms.combine(description_terms, lambda left, right: left.union(right))
+    merged = pd.Series(
+        [left.union(right) for left, right in zip(skills_terms.tolist(), description_terms.tolist())],
+        index=result.index,
+        dtype="object",
+    )
     result["tech_stack"] = merged.map(lambda terms: sorted(terms)).astype("object")
     return result

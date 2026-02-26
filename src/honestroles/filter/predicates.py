@@ -316,7 +316,11 @@ def by_skills(
     combined = pd.Series([set() for _ in range(len(df))], index=df.index, dtype="object")
     for column in skill_columns:
         current = df[column].map(_skills_from_value)
-        combined = combined.combine(current, lambda left, right: left.union(right))
+        combined = pd.Series(
+            [left.union(right) for left, right in zip(combined.tolist(), current.tolist())],
+            index=df.index,
+            dtype="object",
+        )
 
     def matches(skill_set: set[str]) -> bool:
         if required_set and not required_set.issubset(skill_set):

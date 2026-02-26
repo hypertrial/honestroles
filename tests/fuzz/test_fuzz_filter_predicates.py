@@ -12,6 +12,7 @@ from honestroles.filter.predicates import (
     by_salary,
 )
 
+from .invariants import assert_mask_shape
 from .strategies import (
     MIXED_SCALARS,
     TEXT_VALUES,
@@ -43,8 +44,7 @@ NUMERIC_SALARY = st.one_of(
 )
 def test_fuzz_by_location_remote_only_returns_mask(df: pd.DataFrame) -> None:
     mask = by_location(df, remote_only=True, cities=["new york"], countries=["US"])
-    assert len(mask) == len(df)
-    assert mask.index.equals(df.index)
+    assert_mask_shape(df, mask)
 
 
 @pytest.mark.fuzz
@@ -67,8 +67,7 @@ def test_fuzz_by_salary_numeric_inputs_return_mask(
     max_salary: float | None,
 ) -> None:
     mask = by_salary(df, min_salary=min_salary, max_salary=max_salary, currency="USD")
-    assert len(mask) == len(df)
-    assert mask.index.equals(df.index)
+    assert_mask_shape(df, mask)
 
 
 @pytest.mark.fuzz
@@ -81,7 +80,7 @@ def test_by_salary_mixed_type_cells_do_not_raise() -> None:
         }
     )
     mask = by_salary(df, min_salary=150000)
-    assert len(mask) == len(df)
+    assert_mask_shape(df, mask)
 
 
 @pytest.mark.fuzz
@@ -100,8 +99,7 @@ def test_fuzz_by_keywords_no_exception_and_shape(
     exclude: list[str],
 ) -> None:
     mask = by_keywords(df, include=include, exclude=exclude)
-    assert len(mask) == len(df)
-    assert mask.index.equals(df.index)
+    assert_mask_shape(df, mask)
 
 
 @pytest.mark.fuzz
@@ -132,5 +130,4 @@ def test_fuzz_by_recency_no_exception_and_shape(
         seen_within_days=seen_within_days,
         as_of=as_of,  # type: ignore[arg-type]
     )
-    assert len(mask) == len(df)
-    assert mask.index.equals(df.index)
+    assert_mask_shape(df, mask)

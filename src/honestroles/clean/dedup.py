@@ -105,7 +105,21 @@ def compact_snapshots(
             metadata[first_seen_column] = None
             metadata[last_seen_column] = None
 
-    representative = representative.merge(metadata, on=present_keys, how="left")
+    # Merge on object-typed key copies to avoid dtype mismatch errors, while preserving
+    # the original representative key dtypes in the final output.
+    original_key_values = representative[present_keys].copy()
+    representative_for_merge = representative.copy()
+    metadata_for_merge = metadata.copy()
+    for column in present_keys:
+        representative_for_merge[column] = representative_for_merge[column].astype("object")
+        metadata_for_merge[column] = metadata_for_merge[column].astype("object")
+    representative = representative_for_merge.merge(
+        metadata_for_merge,
+        on=present_keys,
+        how="left",
+    )
+    for column in present_keys:
+        representative[column] = original_key_values[column].to_numpy()
     representative = representative.drop(columns=["__row_order"], errors="ignore")
     representative = representative.drop(columns=["__parsed_ts"], errors="ignore")
 
