@@ -56,6 +56,7 @@ honestroles-report-quality = "honestroles.cli.report_data_quality:main"
 dev = [
   "build",
   "hatchling",
+  "hypothesis",
   "pre-commit",
   "pytest",
   "pytest-xdist",
@@ -87,9 +88,10 @@ path = "src/honestroles/__about__.py"
 [tool.pytest.ini_options]
 pythonpath = ["src", "plugin_template/src"]
 testpaths = ["tests", "plugin_template/tests"]
-addopts = ["-n", "auto", "-m", "not performance"]
+addopts = ["-n", "auto", "-m", "not performance and not fuzz"]
 markers = [
   "performance: runtime guardrail checks for hot paths",
+  "fuzz: property/fuzz tests for malformed and adversarial inputs",
   "historical_smoke: opt-in smoke checks that require local historical datasets",
 ]
 

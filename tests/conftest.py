@@ -1,8 +1,33 @@
+import os
+
 import pandas as pd
 import pytest
 
 from honestroles.plugins import reset_plugins
 from honestroles.schema import REQUIRED_COLUMNS
+
+try:
+    from hypothesis import HealthCheck, settings
+except ModuleNotFoundError:  # pragma: no cover - test dependency guard
+    settings = None
+else:
+    settings.register_profile(
+        "ci_smoke",
+        max_examples=25,
+        derandomize=True,
+        deadline=None,
+        suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large],
+    )
+    settings.register_profile(
+        "nightly_deep",
+        max_examples=250,
+        derandomize=False,
+        deadline=None,
+        suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large],
+    )
+    profile = os.getenv("HYPOTHESIS_PROFILE")
+    if profile:
+        settings.load_profile(profile)
 
 
 @pytest.fixture()

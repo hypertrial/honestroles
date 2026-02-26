@@ -18,6 +18,7 @@ NEW_DOC_PATHS = [
     "reference/faq.md",
     "maintainers/packaging.md",
     "maintainers/release_process.md",
+    "maintainers/fuzzing.md",
 ]
 
 

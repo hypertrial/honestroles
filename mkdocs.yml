@@ -125,6 +125,7 @@ nav:
       - Docs Stack: maintainers/docs_stack.md
       - Page Template: maintainers/page_template.md
       - Performance Guardrails: maintainers/performance.md
+      - Fuzz Testing: maintainers/fuzzing.md
       - Historical Data Workflow: maintainers/historical_data.md
       - Packaging: maintainers/packaging.md
       - Release Process: maintainers/release_process.md

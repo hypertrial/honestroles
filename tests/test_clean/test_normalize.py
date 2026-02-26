@@ -691,3 +691,34 @@ def test_enrich_country_from_context_existing_ca_region_fill_from_single_provinc
     enriched = enrich_country_from_context(df)
     assert enriched.loc[0, "country"] == "CA"
     assert enriched.loc[0, "region"] == "British Columbia"
+
+
+def test_normalize_locations_preserves_non_default_index_alignment() -> None:
+    df = pd.DataFrame(
+        {
+            "location_raw": ["New York, NY", "Toronto, ON"],
+            "remote_flag": [False, False],
+        },
+        index=[10, 11],
+    )
+
+    normalized = normalize_locations(df)
+
+    assert normalized.index.tolist() == [10, 11]
+    assert normalized.loc[10, "city"] == "New York"
+    assert normalized.loc[11, "city"] == "Toronto"
+    assert normalized.loc[10, "region"] == "New York"
+    assert normalized.loc[11, "region"] == "Ontario"
+
+
+def test_normalize_locations_string_falsey_remote_flags_do_not_force_remote() -> None:
+    df = pd.DataFrame(
+        {
+            "location_raw": ["Austin, TX", "Seattle, WA"],
+            "remote_flag": ["False", "0"],
+        }
+    )
+
+    normalized = normalize_locations(df)
+
+    assert normalized["remote_type"].tolist() == [None, None]

@@ -52,6 +52,17 @@ def test_by_location_remote_only_combines_remote_flag_and_remote_type(sample_df:
     assert mask.tolist() == [False, True]
 
 
+def test_by_location_remote_only_ignores_string_false_remote_flags() -> None:
+    df = pd.DataFrame(
+        {
+            "remote_flag": ["False", "0", "true"],
+            "remote_type": [None, None, None],
+        }
+    )
+    mask = by_location(df, remote_only=True)
+    assert mask.tolist() == [False, False, True]
+
+
 def test_by_location_fallback_location_raw(sample_df: pd.DataFrame) -> None:
     df = sample_df.drop(columns=["city"], errors="ignore")
     mask = by_location(df, cities=["new york"])
@@ -109,6 +120,18 @@ def test_by_salary_bounds_and_currency(sample_df: pd.DataFrame) -> None:
     df["salary_max"] = [150000, 90000]
     df["salary_currency"] = ["USD", "CAD"]
     mask = by_salary(df, min_salary=100000, max_salary=160000, currency="USD")
+    assert mask.tolist() == [True, False]
+
+
+def test_by_salary_handles_mixed_type_cells_without_type_error() -> None:
+    df = pd.DataFrame(
+        {
+            "salary_min": ["100000", None],
+            "salary_max": ["200000", "bad"],
+            "salary_currency": ["USD", "USD"],
+        }
+    )
+    mask = by_salary(df, min_salary=150000)
     assert mask.tolist() == [True, False]
 
 

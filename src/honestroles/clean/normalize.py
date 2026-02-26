@@ -456,6 +456,31 @@ def _infer_remote_from_context(
     return inferred.astype("bool")
 
 
+def _parse_bool_like(value: object) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "y", "remote"}:
+            return True
+        if lowered in {"false", "0", "no", "n", "", "none", "null"}:
+            return False
+        return False
+    if isinstance(value, (int, float)):
+        try:
+            return float(value) != 0.0
+        except (TypeError, ValueError):
+            return False
+    try:
+        if bool(pd.isna(value)):
+            return False
+    except (TypeError, ValueError):
+        pass
+    return False
+
+
 def _classify_parts(parts: list[str]) -> tuple[str | None, str | None, str | None]:
     tokens = [(part, _normalize_token(part)) for part in parts if part.strip()]
     tokens = [(orig, norm) for orig, norm in tokens if not _is_remote_token(norm)]
@@ -586,27 +611,27 @@ def normalize_locations(
     regions = [item.region for item in parsed_values]
     countries = [item.country for item in parsed_values]
     remote_types = [item.remote_type for item in parsed_values]
-    result[city_column] = pd.Series(cities, dtype="object")
-    result[region_column] = pd.Series(regions, dtype="object")
-    result[country_column] = pd.Series(countries, dtype="object")
+    result[city_column] = pd.Series(cities, index=result.index, dtype="object")
+    result[region_column] = pd.Series(regions, index=result.index, dtype="object")
+    result[country_column] = pd.Series(countries, index=result.index, dtype="object")
     result[city_column] = result[city_column].where(result[city_column].notna(), None)
     result[region_column] = result[region_column].where(result[region_column].notna(), None)
     result[country_column] = result[country_column].where(result[country_column].notna(), None)
 
     context_remote = _infer_remote_from_context(result, location_column=location_column)
     if remote_flag_column in result.columns:
-        remote_flags = result[remote_flag_column].fillna(False).astype(bool).tolist()
+        remote_flags = result[remote_flag_column].map(_parse_bool_like).tolist()
         remote_values = [
             "remote" if (flag or remote == "remote" or context) else None
             for flag, remote, context in zip(remote_flags, remote_types, context_remote.tolist())
         ]
-        result[remote_type_column] = pd.Series(remote_values, dtype="object")
+        result[remote_type_column] = pd.Series(remote_values, index=result.index, dtype="object")
     else:
         remote_values = [
             "remote" if (remote == "remote" or context) else None
             for remote, context in zip(remote_types, context_remote.tolist())
         ]
-        result[remote_type_column] = pd.Series(remote_values, dtype="object")
+        result[remote_type_column] = pd.Series(remote_values, index=result.index, dtype="object")
     result[remote_type_column] = result[remote_type_column].where(
         result[remote_type_column].notna(), None
     )

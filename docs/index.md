@@ -70,4 +70,5 @@
 - [Packaging](maintainers/packaging.md)
 - [Release Process](maintainers/release_process.md)
 - [Performance Guardrails](maintainers/performance.md)
+- [Fuzz Testing](maintainers/fuzzing.md)
 - [Docs Stack](maintainers/docs_stack.md)

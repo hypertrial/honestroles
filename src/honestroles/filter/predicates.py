@@ -85,6 +85,29 @@ def _normalize_employment(value: object) -> str:
     return canonical.replace("-", "_").replace(" ", "_")
 
 
+def _parse_bool_like(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "y", "remote"}:
+            return True
+        if lowered in {"false", "0", "no", "n", "", "none", "null"}:
+            return False
+        return False
+    if isinstance(value, (int, float)):
+        try:
+            return float(value) != 0.0
+        except (TypeError, ValueError):
+            return False
+    try:
+        return not bool(pd.isna(value))
+    except (TypeError, ValueError):
+        return False
+
+
 def by_location(
     df: pd.DataFrame,
     *,
@@ -113,7 +136,7 @@ def by_location(
         remote_mask = _series_or_true(df)
         has_remote_signal = False
         if REMOTE_FLAG in df.columns:
-            remote_mask = df[REMOTE_FLAG].fillna(False).astype(bool)
+            remote_mask = df[REMOTE_FLAG].map(_parse_bool_like).astype("bool")
             has_remote_signal = True
         if REMOTE_TYPE in df.columns:
             remote_type_mask = (
@@ -137,11 +160,19 @@ def by_salary(
         return _series_or_true(df)
     mask = _series_or_true(df)
     if currency and SALARY_CURRENCY in df.columns:
-        mask &= df[SALARY_CURRENCY].fillna("").str.upper().eq(currency.upper())
+        mask &= (
+            df[SALARY_CURRENCY]
+            .astype("string")
+            .fillna("")
+            .str.upper()
+            .eq(currency.upper())
+        )
+    salary_min_series = pd.to_numeric(df[SALARY_MIN], errors="coerce").fillna(0.0)
+    salary_max_series = pd.to_numeric(df[SALARY_MAX], errors="coerce").fillna(0.0)
     if min_salary is not None:
-        mask &= df[SALARY_MAX].fillna(0) >= min_salary
+        mask &= salary_max_series >= min_salary
     if max_salary is not None:
-        mask &= df[SALARY_MIN].fillna(0) <= max_salary
+        mask &= salary_min_series <= max_salary
     return mask
 
 
