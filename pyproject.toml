@@ -55,6 +55,7 @@ honestroles-report-quality = "honestroles.cli.report_data_quality:main"
 [project.optional-dependencies]
 dev = [
   "build",
+  "hatchling",
   "pre-commit",
   "pytest",
   "pytest-xdist",
