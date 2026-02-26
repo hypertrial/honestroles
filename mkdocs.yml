@@ -72,9 +72,19 @@ extra_css:
 nav:
   - Start:
       - Welcome: index.md
+      - Installation: start/installation.md
+      - Entry Points: start/entry_points.md
       - Quickstart: start/quickstart.md
+  - Guides:
+      - CLI Guide: guides/cli.md
+      - Troubleshooting: guides/troubleshooting.md
+      - End-to-End Pipeline: guides/end_to_end_pipeline.md
+      - Output Columns by Stage: guides/output_columns.md
+      - LLM Operations: guides/llm_operations.md
   - Concepts:
       - Framework Boundary: concepts/framework.md
+      - Architecture: concepts/architecture.md
+      - Compatibility and Versioning: concepts/compatibility_and_versioning.md
   - Reference:
       - Runtime Objects Overview: reference/objects.md
       - Data Schema: reference/schema.md
@@ -96,9 +106,12 @@ nav:
       - API Reference:
           - API Index: reference/api/index.md
           - Python API: reference/api/reference.md
+      - FAQ: reference/faq.md
   - Maintainers:
       - Docs Stack: maintainers/docs_stack.md
       - Page Template: maintainers/page_template.md
       - Performance Guardrails: maintainers/performance.md
       - Historical Data Workflow: maintainers/historical_data.md
+      - Packaging: maintainers/packaging.md
+      - Release Process: maintainers/release_process.md
       - Agent-First Roadmap: maintainers/roadmap_agent_first.md

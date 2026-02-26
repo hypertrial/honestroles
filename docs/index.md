@@ -2,11 +2,23 @@
 
 ## Start
 
+- `start/installation.md`
+- `start/entry_points.md`
 - `start/quickstart.md`
+
+## Guides
+
+- `guides/cli.md`
+- `guides/troubleshooting.md`
+- `guides/end_to_end_pipeline.md`
+- `guides/output_columns.md`
+- `guides/llm_operations.md`
 
 ## Concepts
 
 - `concepts/framework.md`
+- `concepts/architecture.md`
+- `concepts/compatibility_and_versioning.md`
 
 ## Reference
 
@@ -25,6 +37,7 @@
 - `reference/plugins/api_contract.md`
 - `reference/plugins/author_guide.md`
 - `reference/plugins/compatibility.md`
+- `reference/faq.md`
 
 ## API
 
@@ -36,4 +49,6 @@
 - `maintainers/docs_stack.md`
 - `maintainers/page_template.md`
 - `maintainers/performance.md`
+- `maintainers/packaging.md`
+- `maintainers/release_process.md`
 - `maintainers/roadmap_agent_first.md`

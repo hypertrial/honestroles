@@ -90,7 +90,14 @@ Generate a quality report:
 honestroles-report-quality jobs_historical.parquet --stream --format json
 ```
 
-See `/docs/start/quickstart.md` and `/docs/reference/source_data_contract_v1.md`.
+See:
+
+- `/docs/start/installation.md`
+- `/docs/start/entry_points.md`
+- `/docs/start/quickstart.md`
+- `/docs/guides/cli.md`
+- `/docs/guides/troubleshooting.md`
+- `/docs/reference/source_data_contract_v1.md`
 
 Documentation index: `/docs/index.md`.
 Docs stack: `/docs/maintainers/docs_stack.md`.
