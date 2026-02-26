@@ -1,37 +1,23 @@
 # FAQ
 
-## Purpose
+## When to use this
 
-This page answers common usage and maintainer questions for `honestroles`.
+Use this page for quick answers to common `honestroles` usage questions before diving into deeper reference docs.
 
-## Public API / Interface
+<div class="hr-callout">
+  <strong>At a glance:</strong> validate after normalize, prefer installed CLIs for normal usage, and treat plugin loading as environment-bound.
+</div>
+
+## Prerequisites
+
+- Basic familiarity with the contract-first flow
+- Awareness of whether you are using CLI commands or Python APIs
+
+## Happy path
 
 ### When should I validate source data?
 
-Use `validate=False` at initial read boundaries, then run:
-
-1. `normalize_source_data_contract`
-2. `validate_source_data_contract`
-
-before clean/filter/label/rate stages.
-
-### When should I use historical cleaning?
-
-Use `clean_historical_jobs` for historical snapshot datasets where compaction and historical-specific handling are expected.
-
-### Do I need an extra package for LLM features?
-
-No extra dependency is required for the current local Ollama integration. You still need a running Ollama service.
-
-### How are plugins loaded?
-
-Plugins can be registered directly in code or discovered via entry points (`honestroles.filter_plugins`, `honestroles.label_plugins`, `honestroles.rate_plugins`).
-
-### Should I use console commands or script shims?
-
-Use installed commands (`honestroles-scaffold-plugin`, `honestroles-report-quality`) for normal usage. Script shims in `scripts/` are compatibility helpers for repository contributors.
-
-## Usage Example
+Read with `validate=False`, then run normalize and validate explicitly:
 
 ```python
 import honestroles as hr
@@ -41,15 +27,42 @@ df = hr.normalize_source_data_contract(df)
 df = hr.validate_source_data_contract(df)
 ```
 
-## Edge Cases and Errors
+### When should I use historical cleaning?
 
-- Skipping normalization before validation often causes avoidable format failures.
-- Entry-point plugin loading requires plugin package installation in the same environment.
-- CLI script shims may work from source tree even when package installation is missing; treat them as contributor tooling only.
+Use `clean_historical_jobs` for historical snapshots that require snapshot-aware compaction behavior.
 
-## Related Pages
+### Do I need an extra package for LLM features?
 
-- [Quickstart](../start/quickstart.md)
+No additional package extra is required for current local Ollama integration. You still need a running Ollama service.
+
+### How are plugins loaded?
+
+Plugins can be registered in code or discovered via entry points:
+
+- `honestroles.filter_plugins`
+- `honestroles.label_plugins`
+- `honestroles.rate_plugins`
+
+### Should I use console commands or script shims?
+
+Use installed commands for normal usage. Use `scripts/*.py` shims as contributor compatibility helpers in repo workflows.
+
+## Failure modes
+
+- Validation called before normalize can produce avoidable format errors.
+- Plugin discovery fails if plugin package is not installed in the active environment.
+- Script shims can mask installation issues if used in place of public commands.
+
+Failure example:
+
+```text
+Error: Input file not found: ...
+```
+
+## Related pages
+
+- [Contract-First Quickstart](../start/quickstart.md)
 - [CLI Guide](../guides/cli.md)
 - [Plugin Overview](plugins.md)
 - [Source Data Contract](source_data_contract_v1.md)
+- [Troubleshooting](../guides/troubleshooting.md)

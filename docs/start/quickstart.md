@@ -1,66 +1,89 @@
 # Contract-First Quickstart
 
-This quickstart shows the recommended flow for processing source data with `honestroles`.
+## When to use this
 
-## 1) Read source data
+Use this page to run the canonical `honestroles` flow from raw source data to ranked opportunities.
+
+<div class="hr-callout">
+  <strong>At a glance:</strong> `read(validate=False) -> normalize -> validate -> clean/filter/label/rate -> rank/plan`.
+</div>
+
+## Prerequisites
+
+- Installed package and working Python environment
+- Input parquet or duckdb dataset aligned to source-data contract intent
+- Optional: local Ollama service for LLM branches
+
+## Happy path
+
+### Baseline deterministic branch
 
 ```python
 import honestroles as hr
 
-df = hr.read_parquet("jobs_current.parquet", validate=False)
-```
+# Read source data without strict validation at ingest boundary
+jobs = hr.read_parquet("jobs_current.parquet", validate=False)
 
-## 2) Normalize contract shape
+# Normalize then validate contract
+jobs = hr.normalize_source_data_contract(jobs)
+jobs = hr.validate_source_data_contract(jobs)
 
-Use this step to normalize common source-data issues such as timestamp formats and list-like fields encoded as strings.
+# Core processing
+jobs = hr.clean_jobs(jobs)
+jobs = hr.filter_jobs(jobs, remote_only=True, min_salary=100_000)
+jobs = hr.label_jobs(jobs, use_llm=False)
+jobs = hr.rate_jobs(jobs, use_llm=False)
 
-```python
-df = hr.normalize_source_data_contract(df)
-```
-
-## 3) Validate contract
-
-```python
-df = hr.validate_source_data_contract(df)
-```
-
-## 4) Process data
-
-```python
-df = hr.clean_jobs(df)
-df = hr.filter_jobs(df, remote_only=True, min_salary=100_000)
-df = hr.label_jobs(df, use_llm=False)
-df = hr.rate_jobs(df, use_llm=False)
-```
-
-## 5) Write output
-
-```python
-hr.write_parquet(df, "jobs_processed.parquet")
-```
-
-## 6) Rank for a candidate profile
-
-```python
 profile = hr.CandidateProfile.mds_new_grad()
-ranked = hr.rank_jobs(df, profile=profile, use_llm_signals=False, top_n=100)
+ranked = hr.rank_jobs(jobs, profile=profile, use_llm_signals=False, top_n=100)
 plan = hr.build_application_plan(ranked, profile=profile, top_n=20)
 ```
 
-## Historical snapshots (opt-in)
+### Choose this path if...
 
-For `jobs_historical`-style inputs:
+- Use deterministic path (`use_llm=False`) if you need reproducibility, CI consistency, or baseline benchmarking.
+- Use LLM path if you need richer semantic enrichment and accept external service dependency.
+
+Optional LLM branch:
 
 ```python
-historical = hr.read_parquet("jobs_historical.parquet", validate=False)
-historical = hr.clean_historical_jobs(historical)
-historical = hr.filter_jobs(historical, remote_only=False)
-historical = hr.label_jobs(historical, use_llm=False)
-historical = hr.rate_jobs(historical, use_llm=False)
+jobs = hr.label_jobs(jobs, use_llm=True, model="llama3")
+jobs = hr.rate_jobs(jobs, use_llm=True, model="llama3")
+ranked = hr.rank_jobs(jobs, profile=profile, use_llm_signals=True, model="llama3")
 ```
 
-Generate a quality report:
+Expected output (success):
 
-```bash
-honestroles-report-quality jobs_historical.parquet --stream --format json
+- processed DataFrame with derived label/rating columns
+- ranked DataFrame with `fit_score`, `fit_breakdown`, `why_match`
+- plan DataFrame with `next_actions`
+
+## Failure modes
+
+- Validation fails after read:
+  - fix: run `normalize_source_data_contract` before validation
+- Historical data behaves unexpectedly in standard clean path:
+  - fix: use `clean_historical_jobs` for snapshot workflows
+- LLM columns missing:
+  - fix: verify Ollama availability and model pull
+
+Failure example:
+
+```text
+ValueError: required columns are missing: ...
 ```
+
+## Related pages
+
+- [Installation](installation.md)
+- [End-to-End Pipeline](../guides/end_to_end_pipeline.md)
+- [Output Columns by Stage](../guides/output_columns.md)
+- [Troubleshooting](../guides/troubleshooting.md)
+
+<div class="hr-next-steps">
+  <h2>Next actions</h2>
+  <ul>
+    <li>Run an expanded scenario in <a href="../guides/end_to_end_pipeline.md">End-to-End Pipeline</a>.</li>
+    <li>Audit schema changes with <a href="../guides/output_columns.md">Output Columns by Stage</a>.</li>
+  </ul>
+</div>

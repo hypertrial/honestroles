@@ -2,13 +2,7 @@
 
 `honestroles` supports a stable plugin system for custom filtering, labeling, and rating logic without modifying core package code.
 
-For the complete plugin contract and author workflow:
-
-- `reference/plugins/api_contract.md`
-- `reference/plugins/author_guide.md`
-- `reference/plugins/compatibility.md`
-
-## Filter Plugins
+## Filter plugins
 
 1. Register a filter plugin.
 2. Apply by name through `filter_jobs(..., plugin_filters=[...])`.
@@ -18,14 +12,16 @@ import pandas as pd
 from honestroles.filter import filter_jobs
 from honestroles.plugins import register_filter_plugin
 
+
 def only_backend(df: pd.DataFrame) -> pd.Series:
     return df["title"].fillna("").str.contains("Backend", case=False)
+
 
 register_filter_plugin("only_backend", only_backend)
 df = filter_jobs(df, plugin_filters=["only_backend"])
 ```
 
-## Label Plugins
+## Label plugins
 
 1. Register a label transform plugin.
 2. Apply by name through `label_jobs(..., plugin_labelers=[...])`.
@@ -35,16 +31,18 @@ import pandas as pd
 from honestroles.label import label_jobs
 from honestroles.plugins import register_label_plugin
 
+
 def add_region_group(df: pd.DataFrame) -> pd.DataFrame:
     result = df.copy()
     result["region_group"] = result["country"].fillna("UNK")
     return result
 
+
 register_label_plugin("region_group", add_region_group)
 df = label_jobs(df, use_llm=False, plugin_labelers=["region_group"])
 ```
 
-## Rate Plugins
+## Rate plugins
 
 Register a post-rating transform plugin and apply it through `rate_jobs(..., plugin_raters=[...])`.
 
@@ -53,10 +51,12 @@ import pandas as pd
 from honestroles.rate import rate_jobs
 from honestroles.plugins import register_rate_plugin
 
+
 def mark_top_tier(df: pd.DataFrame, threshold: float = 0.8) -> pd.DataFrame:
     result = df.copy()
     result["is_top_tier"] = result["rating"].fillna(0).ge(threshold)
     return result
+
 
 register_rate_plugin("mark_top_tier", mark_top_tier)
 df = rate_jobs(df, use_llm=False, plugin_raters=["mark_top_tier"])
@@ -78,3 +78,11 @@ df = rate_jobs(df, use_llm=False, plugin_raters=["mark_top_tier"])
 - `apply_rate_plugins`
 - `load_plugins_from_entrypoints`
 - `load_plugins_from_module`
+
+## See also
+
+- [Plugin API Contract](plugins/api_contract.md)
+- [Plugin Author Guide](plugins/author_guide.md)
+- [Plugin Compatibility](plugins/compatibility.md)
+- [CLI Guide](../guides/cli.md)
+- [FAQ](faq.md)

@@ -1,22 +1,20 @@
 # LLM Operations
 
-## Purpose
+## When to use this
 
-This guide covers operational use of local LLM features in `honestroles` for labeling, quality scoring, and match-signal enrichment.
+Use this guide when enabling local Ollama-backed labeling, rating, or matching signals.
 
-## Public API / Interface
+<div class="hr-callout">
+  <strong>Choose this path if:</strong> you need deeper semantic enrichment and accept local model/runtime dependencies.
+</div>
 
-LLM-enabled call sites:
+## Prerequisites
 
-- `label_jobs(..., use_llm=True, model=..., ollama_url=...)`
-- `rate_jobs(..., use_llm=True, model=..., ollama_url=...)`
-- `rank_jobs(..., use_llm_signals=True, model=..., ollama_url=...)`
+- Running local Ollama server
+- Pulled model (for example, `llama3`)
+- A deterministic baseline run for comparison
 
-Runtime requirement:
-
-- local Ollama server reachable at `http://localhost:11434` by default
-
-## Usage Example
+## Happy path
 
 ```bash
 ollama serve
@@ -36,16 +34,36 @@ profile = hr.CandidateProfile.mds_new_grad()
 ranked = hr.rank_jobs(df, profile=profile, use_llm_signals=True, model="llama3")
 ```
 
-## Edge Cases and Errors
+Expected output (success):
 
-- For deterministic baselines in CI, keep LLM features disabled.
-- If Ollama is unavailable, LLM-specific columns may be absent or unchanged; check service health first.
-- Use small batches first when testing new models to control latency.
-- No additional package extra is required for current Ollama integration.
+- LLM-related label/rating/match signal fields included where applicable
 
-## Related Pages
+## Failure modes
+
+- Ollama unreachable:
+  - fix by starting server and verifying model availability
+- Results too variable:
+  - reduce scope to deterministic path for baseline comparison
+- Long runtimes:
+  - reduce batch size and evaluate fewer rows first
+
+Failure example:
+
+```text
+ConnectionError: Failed to connect to Ollama endpoint
+```
+
+## Related pages
 
 - [LLM Reference](../reference/llm.md)
 - [Troubleshooting](troubleshooting.md)
 - [End-to-End Pipeline](end_to_end_pipeline.md)
-- [Quickstart](../start/quickstart.md)
+- [FAQ](../reference/faq.md)
+
+<div class="hr-next-steps">
+  <h2>Next actions</h2>
+  <ul>
+    <li>Compare LLM and deterministic outputs in <a href="end_to_end_pipeline.md">End-to-End Pipeline</a>.</li>
+    <li>Use <a href="troubleshooting.md">Troubleshooting</a> when runtime availability is unstable.</li>
+  </ul>
+</div>

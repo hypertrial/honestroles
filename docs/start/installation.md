@@ -1,28 +1,21 @@
 # Installation
 
-## Purpose
+## When to use this
 
-This page explains how to install `honestroles` for normal use, development, and docs work.
+Use this page when setting up `honestroles` for the first time or validating environment setup in CI/dev workflows.
 
-## Public API / Interface
+<div class="hr-callout">
+  <strong>At a glance:</strong> install package, run CLI sanity checks, then choose runtime-only or contributor setup.
+</div>
 
-Supported Python versions:
+## Prerequisites
 
-- Minimum: `>=3.10`
-- Classifier targets: `3.10`, `3.11`, `3.12`
+- Python `>=3.10` (classifier targets: `3.10`, `3.11`, `3.12`)
+- A virtual environment is strongly recommended.
 
-Install modes:
+## Happy path
 
-- Runtime install: `pip install honestroles`
-- Development install: `pip install -e ".[dev]"`
-- Docs install: `pip install -e ".[docs]"`
-
-Sanity-check commands:
-
-- `honestroles-scaffold-plugin --help`
-- `honestroles-report-quality --help`
-
-## Usage Example
+### Runtime install
 
 ```bash
 python -m venv .venv
@@ -34,22 +27,48 @@ honestroles-scaffold-plugin --help
 honestroles-report-quality --help
 ```
 
-Development and docs setup:
+Expected output (success):
+
+```text
+usage: honestroles-scaffold-plugin ...
+usage: honestroles-report-quality ...
+```
+
+### Contributor/dev install
 
 ```bash
 pip install -e ".[dev]"
 pip install -e ".[docs]"
 ```
 
-## Edge Cases and Errors
+## Failure modes
 
-- If `python -m build --no-isolation` fails with backend import errors, ensure build backend tooling is installed in the active environment (covered by `.[dev]`).
-- If CLI commands are not found after install, confirm the environment is activated and run `python -m pip show honestroles`.
-- If you are installing from source and commands are unavailable, reinstall with `pip install -e .`.
+- CLI command not found:
+  - cause: wrong environment or PATH
+  - fix: activate venv and verify with `python -m pip show honestroles`
+- Backend import error during no-isolation build (`hatchling.build` not available):
+  - cause: build backend not installed in active environment
+  - fix: `pip install -e ".[dev]"` or `pip install build hatchling`
+- Editable install not exposing expected command updates:
+  - fix: reinstall with `pip install -e .`
 
-## Related Pages
+Failure example:
 
-- [Entry Points](entry_points.md)
-- [Quickstart](quickstart.md)
+```text
+ERROR Backend 'hatchling.build' is not available.
+```
+
+## Related pages
+
+- [Choose Your Entry Point](entry_points.md)
+- [Contract-First Quickstart](quickstart.md)
 - [CLI Guide](../guides/cli.md)
 - [Maintainer Packaging](../maintainers/packaging.md)
+
+<div class="hr-next-steps">
+  <h2>Next actions</h2>
+  <ul>
+    <li>Pick usage mode in <a href="entry_points.md">Choose Your Entry Point</a>.</li>
+    <li>Run the baseline pipeline in <a href="quickstart.md">Contract-First Quickstart</a>.</li>
+  </ul>
+</div>

@@ -1,51 +1,71 @@
 # Troubleshooting
 
-## Purpose
+## When to use this
 
-This page lists common `honestroles` failures and concrete fixes for users and maintainers.
+Use this page when `honestroles` commands or pipeline stages fail and you need fast diagnosis with deterministic fixes.
 
-## Public API / Interface
+<div class="hr-callout">
+  <strong>At a glance:</strong> validate install first, reproduce with minimal command, map symptom to targeted fix.
+</div>
 
-Troubleshooting targets:
+## Prerequisites
 
-- source-data validation (`normalize_source_data_contract`, `validate_source_data_contract`)
-- CLI command execution
-- DuckDB/parquet input handling
-- local LLM/Ollama features
-- packaging/build checks
-- plugin loading through entry points
+- Access to failing command or script
+- Local environment details (input path, file type, model/runtime settings)
 
-## Usage Example
+## Happy path
 
-Typical debug flow:
+Minimal debug sequence:
 
 ```bash
-# 1) Confirm installation and CLI availability
+# 1) Verify command surfaces
 honestroles-scaffold-plugin --help
 honestroles-report-quality --help
 
-# 2) Run a deterministic data-quality command first
+# 2) Reproduce with smallest deterministic input
 honestroles-report-quality jobs_current.parquet --format text
 
-# 3) Build docs and run checks if you changed docs
+# 3) Run docs/build checks if changes were made
 bash scripts/check_docs_refs.sh
 mkdocs build --strict
 ```
 
-## Edge Cases and Errors
+Expected output (success):
 
-| Symptom | Likely Cause | Fix |
+```text
+usage: honestroles-scaffold-plugin ...
+usage: honestroles-report-quality ...
+```
+
+## Failure modes
+
+| Symptom | Likely cause | Fix |
 |---|---|---|
-| `ValueError` from contract validation | Missing required fields or invalid formats | Run `normalize_source_data_contract` before validation and check required source fields in `reference/source_data_contract_v1.md`. |
-| `Error: Input file not found: ...` | Wrong path or working directory | Use absolute paths or confirm the file exists before running CLI command. |
-| DuckDB CLI error about missing table/query | `.duckdb` input without `--table` and without `--query` | Pass `--table <name>` or `--query "select ..."`. |
-| LLM labels/ratings are missing or unchanged | Ollama server unavailable or `use_llm=False` | Start Ollama (`ollama serve`), verify model availability, set `use_llm=True`. |
-| `ERROR Backend 'hatchling.build' is not available` during local build | Backend tooling not installed in active env for `--no-isolation` build | Install `.[dev]` or `pip install build hatchling` before `python -m build --no-isolation`. |
-| Plugin entry points do not load | Wrong entry point group or package not installed | Use supported groups (`honestroles.filter_plugins`, `honestroles.label_plugins`, `honestroles.rate_plugins`) and reinstall plugin package. |
+| `ValueError` in source contract validation | Missing required columns or invalid formats | Run normalize first, then validate; verify contract-required fields. |
+| `Error: Input file not found: ...` | Wrong path or wrong working directory | Use absolute path or verify file presence before running command. |
+| DuckDB error requiring `--table` | `.duckdb` input without `--table` or `--query` | Add `--table <name>` or `--query "select ..."`. |
+| LLM fields missing | Ollama unavailable, model missing, or `use_llm=False` | Start Ollama, pull model, rerun with LLM flags. |
+| `Backend 'hatchling.build' is not available` | Backend tooling absent in active env for no-isolation build | Install `.[dev]` or install `build` + `hatchling`. |
+| Plugins not discovered | Wrong entrypoint group or plugin not installed | Use supported groups and reinstall plugin package in active env. |
 
-## Related Pages
+Failure example:
 
-- [Quickstart](../start/quickstart.md)
+```text
+Error: --table is required for duckdb input when --query is not provided
+```
+
+## Related pages
+
 - [CLI Guide](cli.md)
 - [LLM Operations](llm_operations.md)
 - [Plugin Author Guide](../reference/plugins/author_guide.md)
+- [Source Data Contract](../reference/source_data_contract_v1.md)
+- [FAQ](../reference/faq.md)
+
+<div class="hr-next-steps">
+  <h2>Next actions</h2>
+  <ul>
+    <li>After fixing issues, run the full path in <a href="end_to_end_pipeline.md">End-to-End Pipeline</a>.</li>
+    <li>For persistent contract issues, revisit <a href="../start/quickstart.md">Quickstart</a>.</li>
+  </ul>
+</div>

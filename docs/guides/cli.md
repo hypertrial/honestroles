@@ -1,79 +1,97 @@
 # CLI Guide
 
-## Purpose
+## When to use this
 
-This page documents the two supported `honestroles` CLI commands, including options, examples, and failure behavior.
+Use this page when running public `honestroles` CLI commands for quality diagnostics or plugin scaffolding.
 
-## Public API / Interface
+<div class="hr-callout">
+  <strong>At a glance:</strong> one command for quality checks, one for plugin scaffolding, both with stable exit semantics.
+</div>
+
+## Prerequisites
+
+- Installed package (`honestroles`) or contributor script shims in source tree
+- Input parquet/duckdb files for quality reports
+
+## Happy path
 
 ### `honestroles-scaffold-plugin`
 
-Create a new plugin package from the built-in template.
-
-Options:
-
-- `--help`: Show help and exit `0`.
-- `--name` (required): Plugin distribution name.
-- `--package`: Optional Python package name override.
-- `--output-dir`: Output directory for generated package (default `.`).
-- `--force`: Overwrite destination directory if it exists.
-
-### `honestroles-report-quality`
-
-Build a quality report for parquet or duckdb inputs.
-
-Arguments and options:
-
-- `input` (required positional): Path to `.parquet`, `.duckdb`, or `.db` file.
-- `--help`: Show help and exit `0`.
-- `--format`: `text` or `json` (default `text`).
-- `--dataset-name`: Optional label override for report output.
-- `--stream`: Stream parquet row groups instead of loading full file.
-- `--table`: DuckDB table name (required for duckdb input unless `--query` is set).
-- `--query`: Read-only DuckDB query to analyze.
-- `--top-n-duplicates`: Number of duplicate values to include (default `10`).
-
-Installed package and contributor script shims:
-
-- Installed commands: `honestroles-scaffold-plugin`, `honestroles-report-quality`
-- Contributor fallbacks: `python scripts/scaffold_plugin.py`, `python scripts/report_data_quality.py`
-
-## Usage Example
-
-Valid examples:
+- `--help`: Show help and exit `0`
+- `--name` (required): Plugin distribution name
+- `--package`: Optional Python package override
+- `--output-dir`: Output directory (default `.`)
+- `--force`: Overwrite destination if it exists
 
 ```bash
 honestroles-scaffold-plugin \
   --name honestroles-plugin-acme \
   --output-dir ./plugins
-
-honestroles-report-quality jobs_historical.parquet --stream --format json
-honestroles-report-quality jobs.duckdb --table jobs_current --format text
-honestroles-report-quality jobs.duckdb --query "select * from jobs_current" --top-n-duplicates 20
 ```
 
-Invalid examples and expected failures:
+Expected output (success):
+
+```text
+Scaffold created at: /.../plugins/honestroles-plugin-acme
+```
+
+### `honestroles-report-quality`
+
+- `input` (required positional): path to `.parquet`, `.duckdb`, or `.db`
+- `--help`: Show help and exit `0`
+- `--format`: `text|json` (default `text`)
+- `--dataset-name`: Optional report label
+- `--stream`: Stream parquet row groups
+- `--table`: DuckDB table name (required when `--query` is absent)
+- `--query`: Read-only DuckDB query
+- `--top-n-duplicates`: duplicate hotspot count (default `10`)
 
 ```bash
-# Missing file path -> non-zero exit with:
-# Error: Input file not found: missing.parquet
-honestroles-report-quality missing.parquet
-
-# DuckDB input without --table or --query -> non-zero exit with:
-# Error: --table is required for duckdb input when --query is not provided
-honestroles-report-quality jobs.duckdb
+honestroles-report-quality jobs_historical.parquet --stream --format json
+honestroles-report-quality jobs.duckdb --table jobs_current --format text
 ```
 
-## Edge Cases and Errors
+Choose this path if...
 
-- `--help` should always exit with code `0`.
-- Parser/argument failures (for example, missing required `--name`) exit non-zero via argparse.
-- Runtime failures print `Error: ...` to stderr and exit `1`.
-- For duckdb inputs, prefer `--query` for filtered slices and `--table` for full-table checks.
+- Use CLI for reproducible one-shot operations and shell-friendly exit codes.
+- Use Python API for custom branching, row-level debugging, or pipeline composition.
 
-## Related Pages
+Contributor fallback shims:
+
+```bash
+python scripts/scaffold_plugin.py --name honestroles-plugin-myorg --output-dir .
+python scripts/report_data_quality.py jobs_historical.parquet --stream --format json
+```
+
+## Failure modes
+
+Invalid examples and deterministic failures:
+
+```bash
+# Missing input file
+honestroles-report-quality missing.parquet
+# Error: Input file not found: missing.parquet
+
+# DuckDB input without --table or --query
+honestroles-report-quality jobs.duckdb
+# Error: --table is required for duckdb input when --query is not provided
+```
+
+- argparse-level input errors return non-zero immediately
+- runtime errors print `Error: ...` and exit `1`
+
+## Related pages
 
 - [Installation](../start/installation.md)
-- [Entry Points](../start/entry_points.md)
+- [Choose Your Entry Point](../start/entry_points.md)
 - [Troubleshooting](troubleshooting.md)
 - [IO Reference](../reference/io.md)
+- [FAQ](../reference/faq.md)
+
+<div class="hr-next-steps">
+  <h2>Next actions</h2>
+  <ul>
+    <li>Need a full data flow? Continue to <a href="end_to_end_pipeline.md">End-to-End Pipeline</a>.</li>
+    <li>Investigating failures? Use <a href="troubleshooting.md">Troubleshooting</a>.</li>
+  </ul>
+</div>

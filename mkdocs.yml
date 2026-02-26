@@ -28,6 +28,15 @@ theme:
     - scheme: honestroles-dark
       primary: black
       accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - scheme: honestroles-light
+      primary: blue grey
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
   features:
     - navigation.tabs
     - navigation.sections
@@ -70,12 +79,13 @@ extra_css:
   - stylesheets/extra.css
 
 nav:
-  - Start:
+  - Get Started:
       - Welcome: index.md
       - Installation: start/installation.md
-      - Entry Points: start/entry_points.md
+      - Choose Your Entry Point: start/entry_points.md
       - Quickstart: start/quickstart.md
-  - Guides:
+  - Workflows:
+      - Overview: guides/index.md
       - CLI Guide: guides/cli.md
       - Troubleshooting: guides/troubleshooting.md
       - End-to-End Pipeline: guides/end_to_end_pipeline.md

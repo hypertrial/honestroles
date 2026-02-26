@@ -1,23 +1,33 @@
 # Docs Page Template
 
-Use this structure for new docs pages to keep content consistent and scannable.
+Use this template to keep pages consistent, scannable, and task-first.
 
-## Purpose
+## Required structure
 
-Describe what this page covers and when to use it.
+1. `When to use this`
+2. `Prerequisites`
+3. `Happy path`
+4. `Failure modes`
+5. `Related pages`
 
-## Public API / Interface
+## UX guardrails
 
-List the key functions, commands, or concepts with concrete signatures/examples.
+- Keep at most 6 primary top-level sections per page.
+- Include the first code sample in the first screenful when practical.
+- Add an at-a-glance callout near the top on longer pages.
+- Include at least 3 related links.
+- Use semantic link text (task intent), not raw path labels.
+- Avoid landing pages that primarily list backticked file paths.
 
-## Usage Example
+## Content standards
 
-Provide one minimal example and one realistic example.
+- Prefer short paragraphs and decision-oriented subsections.
+- Include one golden-path output expectation.
+- Include at least one deterministic failure example where relevant.
+- End guide/start pages with a “Next actions” block.
 
-## Edge Cases and Errors
+## Related pages
 
-Call out common failure modes, validation behavior, and defaults.
-
-## Related Pages
-
-Link to neighboring docs (upstream/downstream concepts).
+- [Welcome](../index.md)
+- [Workflow Guides](../guides/index.md)
+- [Framework Boundary](../concepts/framework.md)

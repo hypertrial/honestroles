@@ -118,3 +118,10 @@ for chunk in iter_parquet_row_groups("jobs_historical.parquet"):
 - Contract validation is strict by default for known field types/formats.
 - `read_duckdb_table` and `read_duckdb_query` are the preferred explicit APIs.
 - `write_duckdb` uses a temporary registered DataFrame and validates table names.
+
+### See also
+
+- [Contract-First Quickstart](../start/quickstart.md)
+- [CLI Guide](../guides/cli.md)
+- [Troubleshooting](../guides/troubleshooting.md)
+- [FAQ](faq.md)
