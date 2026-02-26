@@ -1,9 +1,9 @@
 [input]
 kind = "parquet"
-path = "./jobs.parquet"
+path = "./examples/jobs_sample.parquet"
 
 [output]
-path = "./jobs_scored.parquet"
+path = "./examples/jobs_scored.parquet"
 
 [stages.clean]
 enabled = true

@@ -6,15 +6,52 @@ repo_name: hypertrial/honestroles
 
 theme:
   name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.tabs
+    - toc.follow
+    - content.code.copy
+    - content.code.annotate
 
 plugins:
   - search
 
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
 nav:
   - Home: index.md
-  - Quickstart: start/quickstart.md
-  - Framework Boundary: framework.md
-  - Runtime API: reference/runtime.md
-  - Plugins: reference/plugins.md
-  - Maintainers:
-      - Fuzzing: maintainers/fuzzing.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quickstart (First Run): getting-started/quickstart-first-run.md
+      - First Pipeline Config: getting-started/first-pipeline-config.md
+  - Guides:
+      - Configure Pipeline: guides/configure-pipeline.md
+      - Run via CLI: guides/run-via-cli.md
+      - Run via Python API: guides/run-via-python-api.md
+      - Understand Output: guides/understand-output.md
+      - Non-Fail-Fast and Recovery: guides/non-fail-fast-and-recovery.md
+      - Author Plugins: guides/author-plugins.md
+  - Reference:
+      - CLI: reference/cli.md
+      - Runtime API: reference/runtime-api.md
+      - Pipeline Config Schema: reference/pipeline-config-schema.md
+      - Plugin Manifest Schema: reference/plugin-manifest-schema.md
+      - Stage Contracts: reference/stage-contracts.md
+      - Error Model: reference/error-model.md
+  - Troubleshooting:
+      - Common Errors: troubleshooting/common-errors.md
+      - FAQ: troubleshooting/faq.md
+  - Examples:
+      - End-to-End: examples/end-to-end.md
+      - Plugin Patterns: examples/plugin-patterns.md
+  - For Maintainers:
+      - Fuzzing: for-maintainers/fuzzing.md
+      - Docs Style Guide: style-guide.md

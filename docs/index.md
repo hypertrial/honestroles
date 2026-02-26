@@ -1,22 +1,31 @@
-# HonestRoles
+# HonestRoles Documentation
 
-HonestRoles is a deterministic, config-driven pipeline runtime for job data.
+HonestRoles is a deterministic, config-driven runtime for processing job datasets with Polars and optional plugins.
 
-## Architecture
+## Start Here
 
-- Polars-only in-memory model
-- Explicit `HonestRolesRuntime`
-- Instance-scoped `PluginRegistry` loaded from TOML manifest
-- Fail-fast plugin and stage errors with typed exceptions
+1. Install HonestRoles: [Installation](getting-started/installation.md)
+2. Get a guaranteed first successful run: [Quickstart (First Run)](getting-started/quickstart-first-run.md)
+3. Understand and customize your pipeline: [Configure Pipeline](guides/configure-pipeline.md)
 
-## CLI
+## Core Paths
 
-```bash
-honestroles run --pipeline-config pipeline.toml --plugins plugins.toml
-honestroles plugins validate --manifest plugins.toml
-honestroles config validate --pipeline pipeline.toml
-honestroles report-quality --pipeline-config pipeline.toml
-honestroles scaffold-plugin --name my-plugin --output-dir .
-```
+- Run with the CLI: [Run via CLI](guides/run-via-cli.md)
+- Run with Python: [Run via Python API](guides/run-via-python-api.md)
+- Read outputs and diagnostics: [Understand Output](guides/understand-output.md)
+- Handle failures and recovery: [Non-Fail-Fast and Recovery](guides/non-fail-fast-and-recovery.md)
+- Build custom plugins: [Author Plugins](guides/author-plugins.md)
 
-See [Quickstart](start/quickstart.md) and [Plugin Manifest](reference/plugins.md).
+## Reference
+
+- CLI commands and exit codes: [CLI Reference](reference/cli.md)
+- Runtime API: [Runtime API](reference/runtime-api.md)
+- Pipeline schema: [Pipeline Config Schema](reference/pipeline-config-schema.md)
+- Plugin schema and ABI: [Plugin Manifest Schema](reference/plugin-manifest-schema.md)
+- Stage contracts and behavior: [Stage Contracts](reference/stage-contracts.md)
+- Errors and failure model: [Error Model](reference/error-model.md)
+
+## Need Help?
+
+- Frequent issues: [Common Errors](troubleshooting/common-errors.md)
+- Short answers: [FAQ](troubleshooting/faq.md)

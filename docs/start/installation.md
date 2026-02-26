@@ -1,11 +1,3 @@
-# Installation
+# Installation (Legacy Path)
 
-```bash
-pip install honestroles
-```
-
-Development:
-
-```bash
-pip install -e ".[dev]"
-```
+This page moved to [Getting Started / Installation](../getting-started/installation.md).

@@ -48,3 +48,30 @@ jobs:
           .venv/bin/python -m pip install -e ".[dev]"
           .venv/bin/python -m build --sdist --wheel --no-isolation
           .venv/bin/python -m twine check dist/*
+
+  docs_quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -e ".[dev,docs]"
+
+      - name: Docs style and reference checks
+        run: |
+          bash scripts/check_docs_refs.sh
+          .venv/bin/python scripts/check_markdown_style.py
+          .venv/bin/python scripts/check_markdown_links.py
+
+      - name: Docs snippet tests
+        run: |
+          PYTHONPATH=src:plugin_template/src .venv/bin/python -m pytest tests/docs -q

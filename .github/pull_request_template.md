@@ -20,6 +20,7 @@ If plugin API changed, describe compatibility impact:
 ## Checklist
 
 - [ ] Added/updated tests for changed behavior
-- [ ] Updated docs (`docs/plugins/*`) if relevant
+- [ ] Updated user docs (`README.md`, `docs/`, `examples/README.md`) if relevant
+- [ ] Ran docs quality checks (`check_docs_refs`, markdown style/link checks, `pytest tests/docs -q`)
 - [ ] Updated `plugins-index/plugins.toml` if adding a new ecosystem plugin
 - [ ] Added changelog note for user-facing behavior

@@ -1,32 +1,39 @@
 # HonestRoles
 
-HonestRoles is a Polars-first, config-driven runtime for deterministic job-data processing.
-
-## What Changed
-
-This repository now uses a hard-replace architecture:
-
-- No process-global plugin registry
-- Explicit `PluginRegistry` loaded from TOML manifests
-- Explicit `HonestRolesRuntime` lifecycle
-- Polars-only stage execution model
-- Config-driven CLI (`honestroles`)
-
-Backward compatibility with the old API is intentionally removed.
+HonestRoles is a deterministic, config-driven pipeline runtime for job data with Polars and explicit plugin manifests.
 
 ## Install
 
 ```bash
-pip install honestroles
+$ python -m venv .venv
+$ . .venv/bin/activate
+$ python -m pip install --upgrade pip
+$ pip install honestroles
 ```
 
-For development:
+## 5-Minute First Run
+
+From the repository root:
 
 ```bash
-pip install -e ".[dev]"
+$ python examples/create_sample_dataset.py
+$ honestroles run --pipeline-config examples/sample_pipeline.toml --plugins examples/sample_plugins.toml
+$ ls -lh examples/jobs_scored.parquet
 ```
 
-## Runtime API
+Expected CLI diagnostics include `stage_rows`, `plugin_counts`, and `final_rows`.
+
+## CLI
+
+```bash
+$ honestroles run --pipeline-config pipeline.toml --plugins plugins.toml
+$ honestroles plugins validate --manifest plugins.toml
+$ honestroles config validate --pipeline pipeline.toml
+$ honestroles report-quality --pipeline-config pipeline.toml
+$ honestroles scaffold-plugin --name my-plugin --output-dir .
+```
+
+## Python API
 
 ```python
 from honestroles import HonestRolesRuntime
@@ -39,103 +46,24 @@ result = runtime.run()
 
 print(result.diagnostics)
 print(result.dataframe.head())
+print(result.application_plan[:3])
 ```
 
-## CLI
+## Documentation
+
+- Site: https://hypertrial.github.io/honestroles/
+- Local docs source: `docs/`
+- Start here in docs: `docs/index.md`
+
+## Development
 
 ```bash
-honestroles run --pipeline-config pipeline.toml --plugins plugins.toml
-honestroles plugins validate --manifest plugins.toml
-honestroles config validate --pipeline pipeline.toml
-honestroles report-quality --pipeline-config pipeline.toml
-honestroles scaffold-plugin --name my-plugin --output-dir .
+$ pip install -e ".[dev,docs]"
+$ pytest -q
+$ pytest tests/docs -q
+$ bash scripts/check_docs_refs.sh
 ```
 
-## Config Examples
+## License
 
-### `pipeline.toml`
-
-```toml
-[input]
-kind = "parquet"
-path = "./jobs.parquet"
-
-[output]
-path = "./jobs_scored.parquet"
-
-[stages.clean]
-enabled = true
-
-[stages.filter]
-enabled = true
-remote_only = true
-required_keywords = ["python"]
-
-[stages.label]
-enabled = true
-
-[stages.rate]
-enabled = true
-completeness_weight = 0.5
-quality_weight = 0.5
-
-[stages.match]
-enabled = true
-top_k = 100
-
-[runtime]
-fail_fast = true
-random_seed = 0
-```
-
-### `plugins.toml`
-
-```toml
-[[plugins]]
-name = "label_note"
-kind = "label"
-callable = "my_package.plugins:label_note"
-enabled = true
-order = 10
-
-[plugins.settings]
-note = "from-plugin"
-```
-
-## Plugin ABI
-
-- Filter: `(pl.DataFrame, FilterPluginContext) -> pl.DataFrame`
-- Label: `(pl.DataFrame, LabelPluginContext) -> pl.DataFrame`
-- Rate: `(pl.DataFrame, RatePluginContext) -> pl.DataFrame`
-
-Plugin errors are fail-fast and wrapped with plugin/stage context.
-
-## Testing
-
-Default deterministic suite:
-
-```bash
-pytest -q
-```
-
-Deterministic 100% coverage gate (core + plugin template):
-
-```bash
-PYTHONPATH=src:plugin_template/src pytest tests plugin_template/tests \
-  -m "not fuzz" -o addopts="" \
-  --cov=src --cov=plugin_template/src --cov-report=term-missing \
-  --cov-fail-under=100 -q
-```
-
-All fuzz tests:
-
-```bash
-pytest -m "fuzz" -q
-```
-
-Profiled fuzz runs:
-
-```bash
-HYPOTHESIS_PROFILE=ci_smoke pytest -m "fuzz" -q
-HYPOTHESIS_PROFILE=nightly_deep pytest -m "fuzz" -q
-```
+MIT

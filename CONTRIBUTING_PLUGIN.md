@@ -1,25 +1,29 @@
 # Contributing Plugins
 
-HonestRoles plugins are now manifest-driven and explicit.
+HonestRoles plugins are manifest-driven and loaded per runtime instance.
 
-## Steps
+## Authoring Checklist
 
-1. Implement plugin callables with the new ABI:
+1. Implement ABI-compliant callables:
    - Filter: `(pl.DataFrame, FilterPluginContext) -> pl.DataFrame`
    - Label: `(pl.DataFrame, LabelPluginContext) -> pl.DataFrame`
    - Rate: `(pl.DataFrame, RatePluginContext) -> pl.DataFrame`
 2. Reference callables in `plugins.toml` with `module:function`.
-3. Validate before runtime execution:
+3. Validate manifest:
 
 ```bash
-honestroles plugins validate --manifest plugins.toml
+$ honestroles plugins validate --manifest plugins.toml
 ```
 
-4. Run deterministic and fuzz tests:
+4. Run tests:
 
 ```bash
-pytest -q
-pytest -m "fuzz" -q
+$ pytest -q
+$ pytest -m "fuzz" -q
 ```
 
-Plugins are fail-fast. Any plugin exception is wrapped as `PluginExecutionError`.
+## Related Docs
+
+- User-facing plugin guide: `docs/guides/author-plugins.md`
+- Manifest and ABI reference: `docs/reference/plugin-manifest-schema.md`
+- Maintainer fuzzing guide: `docs/for-maintainers/fuzzing.md`
