@@ -34,6 +34,12 @@ def test_contract_normalize_and_validate(sample_jobs_df: pl.DataFrame) -> None:
     assert ok.height == sample_jobs_df.height
 
 
+def test_contract_validate_requires_description_columns(sample_jobs_df: pl.DataFrame) -> None:
+    frame = sample_jobs_df.drop("description_text").drop("description_html")
+    with pytest.raises(ConfigValidationError):
+        validate_source_data_contract(frame)
+
+
 def test_query_and_table_validators() -> None:
     assert _validate_read_query("SELECT * FROM jobs") == "SELECT * FROM jobs"
     assert (
@@ -50,7 +56,17 @@ def test_query_and_table_validators() -> None:
     with pytest.raises(ConfigValidationError):
         _validate_read_query("DROP TABLE jobs")
     with pytest.raises(ConfigValidationError):
+        _validate_read_query("")
+    with pytest.raises(ConfigValidationError):
+        _validate_read_query("SELECT * FROM jobs;")
+    with pytest.raises(ConfigValidationError):
+        _validate_read_query("123")
+    with pytest.raises(ConfigValidationError):
+        _validate_read_query("SELECT * FROM jobs WHERE note='drop'")
+    with pytest.raises(ConfigValidationError):
         _validate_table_name("jobs; DROP")
+    with pytest.raises(ConfigValidationError):
+        _validate_table_name("   ")
 
 
 def test_quality_report_bounds(sample_jobs_df: pl.DataFrame) -> None:
@@ -58,3 +74,10 @@ def test_quality_report_bounds(sample_jobs_df: pl.DataFrame) -> None:
     assert 0.0 <= report.score_percent <= 100.0
     assert report.row_count == sample_jobs_df.height
     assert all(0.0 <= v <= 100.0 for v in report.null_percentages.values())
+
+
+def test_quality_report_finalize_empty_frame() -> None:
+    report = build_data_quality_report(pl.DataFrame())
+    assert report.row_count == 0
+    assert report.score_percent == 100.0
+    assert report.null_percentages == {}

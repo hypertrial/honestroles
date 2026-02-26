@@ -40,3 +40,35 @@ def test_load_plugin_manifest_requires_array_table(tmp_path: Path) -> None:
     path.write_text("[plugins]\nname='x'", encoding="utf-8")
     with pytest.raises(ConfigValidationError):
         load_plugin_manifest(path)
+
+
+def test_load_pipeline_config_schema_validation_error_wrapped(tmp_path: Path) -> None:
+    path = tmp_path / "pipeline_invalid.toml"
+    path.write_text(
+        """
+[input]
+kind = "parquet"
+path = "jobs.parquet"
+
+[stages.match]
+top_k = 0
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError):
+        load_pipeline_config(path)
+
+
+def test_load_plugin_manifest_schema_validation_error_wrapped(tmp_path: Path) -> None:
+    path = tmp_path / "plugins_invalid.toml"
+    path.write_text(
+        """
+[[plugins]]
+name = "x"
+kind = "invalid_kind"
+callable = "mod:fn"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError):
+        load_plugin_manifest(path)

@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
+import pytest
+
+from honestroles.errors import ConfigValidationError, HonestRolesError, StageExecutionError
 from honestroles.cli.main import main
+
+
+def _cli_main_module():
+    return importlib.import_module("honestroles.cli.main")
 
 
 def test_cli_run(pipeline_config_path: Path, plugin_manifest_path: Path) -> None:
@@ -91,3 +99,122 @@ def test_cli_scaffold_plugin(tmp_path: Path) -> None:
     )
     assert code == 0
     assert (tmp_path / "my-demo-plugin").exists()
+
+
+def test_cli_scaffold_plugin_target_exists_returns_config_error(tmp_path: Path) -> None:
+    target = tmp_path / "my-demo-plugin"
+    target.mkdir()
+    code = main(
+        [
+            "scaffold-plugin",
+            "--name",
+            "my-demo-plugin",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+    assert code == 2
+
+
+def test_cli_scaffold_plugin_invalid_name_returns_config_error(tmp_path: Path) -> None:
+    code = main(
+        [
+            "scaffold-plugin",
+            "--name",
+            "bad!name",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+    assert code == 2
+
+
+def test_cli_scaffold_plugin_numeric_name_returns_config_error(tmp_path: Path) -> None:
+    code = main(
+        [
+            "scaffold-plugin",
+            "--name",
+            "1plugin",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+    assert code == 2
+
+
+def test_cli_template_resolution_packaged_fallback(monkeypatch) -> None:
+    cli_main = _cli_main_module()
+
+    repo_template = Path(cli_main.__file__).resolve().parents[3] / "plugin_template"
+    packaged_template = (
+        Path(cli_main.__file__).resolve().parents[1] / "_templates" / "plugin_template"
+    )
+    original_exists = Path.exists
+
+    def fake_exists(self: Path) -> bool:
+        if self == repo_template:
+            return False
+        if self == packaged_template:
+            return True
+        return original_exists(self)
+
+    monkeypatch.setattr(Path, "exists", fake_exists)
+    resolved = cli_main._resolve_plugin_template_root()
+    assert resolved == packaged_template
+
+
+def test_cli_template_resolution_hard_failure(monkeypatch) -> None:
+    cli_main = _cli_main_module()
+
+    repo_template = Path(cli_main.__file__).resolve().parents[3] / "plugin_template"
+    packaged_template = (
+        Path(cli_main.__file__).resolve().parents[1] / "_templates" / "plugin_template"
+    )
+    original_exists = Path.exists
+
+    def fake_exists(self: Path) -> bool:
+        if self in {repo_template, packaged_template}:
+            return False
+        return original_exists(self)
+
+    monkeypatch.setattr(Path, "exists", fake_exists)
+    with pytest.raises(ConfigValidationError):
+        cli_main._resolve_plugin_template_root()
+
+
+def test_cli_stage_execution_error_mapping(monkeypatch) -> None:
+    cli_main = _cli_main_module()
+
+    def fail(_args):
+        raise StageExecutionError("filter", "boom")
+
+    monkeypatch.setattr(cli_main, "_handle_run", fail)
+    code = cli_main.main(["run", "--pipeline-config", "x.toml"])
+    assert code == 4
+
+
+def test_cli_generic_honestroles_error_mapping(monkeypatch) -> None:
+    cli_main = _cli_main_module()
+
+    def fail(_args):
+        raise HonestRolesError("oops")
+
+    monkeypatch.setattr(cli_main, "_handle_run", fail)
+    code = cli_main.main(["run", "--pipeline-config", "x.toml"])
+    assert code == 1
+
+
+def test_cli_parser_fallback_unhandled_command(monkeypatch) -> None:
+    import argparse
+    cli_main = _cli_main_module()
+
+    class FakeParser:
+        def parse_args(self, _argv):
+            return argparse.Namespace(command="unknown")
+
+        def error(self, _msg):
+            return None
+
+    monkeypatch.setattr(cli_main, "build_parser", lambda: FakeParser())
+    code = cli_main.main([])
+    assert code == 1

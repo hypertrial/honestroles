@@ -53,3 +53,25 @@ def bad_annotation_plugin(
 
 def bad_signature(df: pl.DataFrame) -> pl.DataFrame:
     return df
+
+
+NOT_CALLABLE = 123
+
+
+def kw_only_filter(*, df: pl.DataFrame, ctx: FilterPluginContext) -> pl.DataFrame:
+    _ = ctx
+    return df
+
+
+def wrong_return_annotation(
+    df: pl.DataFrame, ctx: FilterPluginContext
+) -> int:
+    _ = (df, ctx)
+    return 1
+
+
+def wrong_context_annotation(
+    df: pl.DataFrame, ctx: LabelPluginContext
+) -> pl.DataFrame:
+    _ = ctx
+    return df

@@ -23,8 +23,12 @@ jobs:
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/python -m pip install -e ".[dev]"
 
-      - name: Run deterministic test suite
-        run: .venv/bin/python -m pytest -q
+      - name: Run deterministic 100% coverage gate
+        run: |
+          PYTHONPATH=src:plugin_template/src .venv/bin/python -m pytest tests plugin_template/tests \
+            -m "not fuzz" -o addopts="" \
+            --cov=src --cov=plugin_template/src --cov-report=term-missing \
+            --cov-fail-under=100 -q
 
   packaging:
     runs-on: ubuntu-latest

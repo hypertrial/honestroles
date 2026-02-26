@@ -118,6 +118,15 @@ Default deterministic suite:
 pytest -q
 ```
 
+Deterministic 100% coverage gate (core + plugin template):
+
+```bash
+PYTHONPATH=src:plugin_template/src pytest tests plugin_template/tests \
+  -m "not fuzz" -o addopts="" \
+  --cov=src --cov=plugin_template/src --cov-report=term-missing \
+  --cov-fail-under=100 -q
+```
+
 All fuzz tests:
 
 ```bash

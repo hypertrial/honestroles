@@ -24,3 +24,16 @@ def test_plugin_examples_follow_contract() -> None:
         RatePluginContext(plugin_name="r", settings={"bonus": 0.1}),
     )
     assert rated["rate_composite"].max() <= 1.0
+
+
+def test_plugin_filter_fallback_when_remote_missing() -> None:
+    frame = pl.DataFrame({"title": ["a", "b"]})
+    filtered = example_filter(frame, FilterPluginContext(plugin_name="f"))
+    assert filtered.equals(frame)
+
+
+def test_plugin_rate_fallback_when_rate_missing() -> None:
+    frame = pl.DataFrame({"title": ["a"]})
+    rated = example_rate(frame, RatePluginContext(plugin_name="r"))
+    assert "rate_composite" in rated.columns
+    assert rated["rate_composite"].to_list() == [0.0]
