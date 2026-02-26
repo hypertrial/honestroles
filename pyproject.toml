@@ -5,20 +5,17 @@ build-backend = "hatchling.build"
 [project]
 name = "honestroles"
 dynamic = ["version"]
-description = "Clean, filter, label, and rate job description data with heuristics and local LLMs."
+description = "Deterministic, config-driven job-data runtime with Polars and explicit plugin registries."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 authors = [{ name = "Hypertrial" }]
 keywords = [
   "jobs",
-  "job-postings",
-  "data-cleaning",
-  "data-quality",
-  "ranking",
-  "llm",
-  "pandas",
+  "data-engineering",
+  "polars",
   "plugin",
+  "runtime",
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -28,17 +25,13 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
-  "Topic :: Scientific/Engineering :: Information Analysis",
-  "Topic :: Software Development :: Libraries :: Python Modules",
   "Typing :: Typed",
 ]
 dependencies = [
-  "beautifulsoup4",
-  "duckdb",
-  "numpy>=1.26,<2.0",
-  "pandas>=2.2,<2.3",
-  "pyarrow",
-  "requests",
+  "polars>=1.30,<2.0",
+  "pydantic>=2.10,<3.0",
+  "typing-extensions>=4.9",
+  "tomli; python_version < '3.11'",
 ]
 
 [project.urls]
@@ -46,53 +39,44 @@ Homepage = "https://github.com/hypertrial/honestroles"
 Repository = "https://github.com/hypertrial/honestroles"
 Issues = "https://github.com/hypertrial/honestroles/issues"
 Documentation = "https://hypertrial.github.io/honestroles/"
-Changelog = "https://github.com/hypertrial/honestroles/blob/main/CHANGELOG.md"
 
 [project.scripts]
-honestroles-scaffold-plugin = "honestroles.cli.scaffold_plugin:main"
-honestroles-report-quality = "honestroles.cli.report_data_quality:main"
+honestroles = "honestroles.cli.main:main"
 
 [project.optional-dependencies]
 dev = [
   "build",
   "hatchling",
   "hypothesis",
+  "mypy",
   "pre-commit",
   "pytest",
-  "pytest-xdist",
   "pytest-cov",
-  "mypy",
+  "pytest-xdist",
   "ruff",
-  "tomli; python_version < '3.11'",
   "twine",
-  "types-requests",
 ]
-llm = []
 docs = [
   "mkdocs",
   "mkdocs-material",
-  "mkdocstrings[python]",
-  "pymdown-extensions",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/honestroles"]
 
 [tool.hatch.build.targets.wheel.force-include]
-plugin_template = "honestroles/_templates/plugin_template"
+"plugin_template" = "honestroles/_templates/plugin_template"
 "src/honestroles/py.typed" = "honestroles/py.typed"
 
 [tool.hatch.version]
 path = "src/honestroles/__about__.py"
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "plugin_template/src"]
-testpaths = ["tests", "plugin_template/tests"]
-addopts = ["-n", "auto", "-m", "not performance and not fuzz"]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = ["-m", "not fuzz"]
 markers = [
-  "performance: runtime guardrail checks for hot paths",
   "fuzz: property/fuzz tests for malformed and adversarial inputs",
-  "historical_smoke: opt-in smoke checks that require local historical datasets",
 ]
 
 [tool.ruff]

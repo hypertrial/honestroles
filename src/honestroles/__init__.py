@@ -1,120 +1,80 @@
 from __future__ import annotations
 
-from importlib import import_module
-
 from honestroles.__about__ import __version__
+from honestroles.config import (
+    PipelineConfig,
+    PluginManifestConfig,
+    PluginManifestItem,
+    RuntimeConfig,
+    load_pipeline_config,
+    load_plugin_manifest,
+)
+from honestroles.errors import (
+    ConfigValidationError,
+    HonestRolesError,
+    RuntimeInitializationError,
+    StageExecutionError,
+)
+from honestroles.io import (
+    DataQualityAccumulator,
+    DataQualityReport,
+    _validate_read_query,
+    _validate_table_name,
+    build_data_quality_report,
+    normalize_source_data_contract,
+    read_parquet,
+    validate_source_data_contract,
+    write_parquet,
+)
+from honestroles.plugins import (
+    FilterPlugin,
+    FilterPluginContext,
+    LabelPlugin,
+    LabelPluginContext,
+    PluginExecutionError,
+    PluginKind,
+    PluginLoadError,
+    PluginRegistry,
+    PluginSpec,
+    PluginValidationError,
+    RatePlugin,
+    RatePluginContext,
+)
+from honestroles.runtime import HonestRolesRuntime, RuntimeResult
 
 __all__ = [
-    "read_parquet",
-    "write_parquet",
-    "read_duckdb_table",
-    "read_duckdb_query",
-    "write_duckdb",
-    "normalize_source_data_contract",
-    "validate_source_data_contract",
-    "clean_jobs",
-    "clean_historical_jobs",
-    "HistoricalCleanOptions",
-    "filter_jobs",
-    "FilterChain",
-    "label_jobs",
-    "rate_jobs",
-    "iter_parquet_row_groups",
-    "build_data_quality_report",
-    "DataQualityReport",
+    "ConfigValidationError",
     "DataQualityAccumulator",
-    "CandidateProfile",
-    "extract_job_signals",
-    "rank_jobs",
-    "build_application_plan",
+    "DataQualityReport",
+    "FilterPlugin",
+    "FilterPluginContext",
+    "HonestRolesError",
+    "HonestRolesRuntime",
+    "LabelPlugin",
+    "LabelPluginContext",
+    "PipelineConfig",
+    "PluginExecutionError",
+    "PluginKind",
+    "PluginLoadError",
+    "PluginManifestConfig",
+    "PluginManifestItem",
+    "PluginRegistry",
     "PluginSpec",
-    "PluginExport",
-    "register_filter_plugin",
-    "unregister_filter_plugin",
-    "list_filter_plugins",
-    "apply_filter_plugins",
-    "register_label_plugin",
-    "unregister_label_plugin",
-    "list_label_plugins",
-    "apply_label_plugins",
-    "register_rate_plugin",
-    "unregister_rate_plugin",
-    "list_rate_plugins",
-    "apply_rate_plugins",
-    "load_plugins_from_entrypoints",
-    "load_plugins_from_module",
+    "PluginValidationError",
+    "RatePlugin",
+    "RatePluginContext",
+    "RuntimeConfig",
+    "RuntimeInitializationError",
+    "RuntimeResult",
+    "StageExecutionError",
     "__version__",
+    "_validate_read_query",
+    "_validate_table_name",
+    "build_data_quality_report",
+    "load_pipeline_config",
+    "load_plugin_manifest",
+    "normalize_source_data_contract",
+    "read_parquet",
+    "validate_source_data_contract",
+    "write_parquet",
 ]
-
-_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
-    "clean_jobs": ("honestroles.clean", "clean_jobs"),
-    "clean_historical_jobs": ("honestroles.clean", "clean_historical_jobs"),
-    "HistoricalCleanOptions": ("honestroles.clean", "HistoricalCleanOptions"),
-    "FilterChain": ("honestroles.filter", "FilterChain"),
-    "filter_jobs": ("honestroles.filter", "filter_jobs"),
-    "iter_parquet_row_groups": ("honestroles.io", "iter_parquet_row_groups"),
-    "build_data_quality_report": ("honestroles.io", "build_data_quality_report"),
-    "DataQualityReport": ("honestroles.io", "DataQualityReport"),
-    "DataQualityAccumulator": ("honestroles.io", "DataQualityAccumulator"),
-    "normalize_source_data_contract": ("honestroles.io", "normalize_source_data_contract"),
-    "read_duckdb_query": ("honestroles.io", "read_duckdb_query"),
-    "read_duckdb_table": ("honestroles.io", "read_duckdb_table"),
-    "read_parquet": ("honestroles.io", "read_parquet"),
-    "validate_source_data_contract": ("honestroles.io", "validate_source_data_contract"),
-    "write_duckdb": ("honestroles.io", "write_duckdb"),
-    "write_parquet": ("honestroles.io", "write_parquet"),
-    "label_jobs": ("honestroles.label", "label_jobs"),
-    "CandidateProfile": ("honestroles.match", "CandidateProfile"),
-    "extract_job_signals": ("honestroles.match", "extract_job_signals"),
-    "rank_jobs": ("honestroles.match", "rank_jobs"),
-    "build_application_plan": ("honestroles.match", "build_application_plan"),
-    "PluginExport": ("honestroles.plugins", "PluginExport"),
-    "PluginSpec": ("honestroles.plugins", "PluginSpec"),
-    "apply_filter_plugins": ("honestroles.plugins", "apply_filter_plugins"),
-    "apply_label_plugins": ("honestroles.plugins", "apply_label_plugins"),
-    "apply_rate_plugins": ("honestroles.plugins", "apply_rate_plugins"),
-    "list_filter_plugins": ("honestroles.plugins", "list_filter_plugins"),
-    "list_label_plugins": ("honestroles.plugins", "list_label_plugins"),
-    "list_rate_plugins": ("honestroles.plugins", "list_rate_plugins"),
-    "load_plugins_from_entrypoints": ("honestroles.plugins", "load_plugins_from_entrypoints"),
-    "load_plugins_from_module": ("honestroles.plugins", "load_plugins_from_module"),
-    "register_filter_plugin": ("honestroles.plugins", "register_filter_plugin"),
-    "register_label_plugin": ("honestroles.plugins", "register_label_plugin"),
-    "register_rate_plugin": ("honestroles.plugins", "register_rate_plugin"),
-    "unregister_filter_plugin": ("honestroles.plugins", "unregister_filter_plugin"),
-    "unregister_label_plugin": ("honestroles.plugins", "unregister_label_plugin"),
-    "unregister_rate_plugin": ("honestroles.plugins", "unregister_rate_plugin"),
-    "rate_jobs": ("honestroles.rate", "rate_jobs"),
-}
-
-_SUBMODULES = {
-    "clean",
-    "filter",
-    "io",
-    "label",
-    "llm",
-    "match",
-    "plugins",
-    "rate",
-    "schema",
-}
-
-
-def __getattr__(name: str) -> object:
-    if name in _SUBMODULES:
-        module = import_module(f"honestroles.{name}")
-        globals()[name] = module
-        return module
-
-    target = _LAZY_IMPORTS.get(name)
-    if target is None:
-        raise AttributeError(f"module 'honestroles' has no attribute '{name}'")
-    module_name, attr_name = target
-    module = import_module(module_name)
-    value = getattr(module, attr_name)
-    globals()[name] = value
-    return value
-
-
-def __dir__() -> list[str]:
-    return sorted(set(globals()) | set(__all__))

@@ -5,14 +5,14 @@ import sys
 from pathlib import Path
 
 try:
-    from honestroles.cli.report_data_quality import main
+    from honestroles.cli.main import main
 except ModuleNotFoundError as exc:
     if exc.name != "honestroles":
         raise
     repo_src = Path(__file__).resolve().parents[1] / "src"
     sys.path.insert(0, str(repo_src))
-    from honestroles.cli.report_data_quality import main
+    from honestroles.cli.main import main
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(["report-quality", *sys.argv[1:]]))

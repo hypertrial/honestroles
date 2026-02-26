@@ -1,4 +1,0 @@
-job_key,company,source,job_id,title,location_raw,apply_url,ingested_at,content_hash,description_text,salary_text,remote_flag
-edge::greenhouse::1,EdgeCo,greenhouse,1,Ingenieur Logiciel,"Montréal, QC, Canada",https://example.com/a,2025-01-01T00:00:00Z,h1,"Poste bilingue: anglais et français. Expérience avec Python.",CAD 90000 - CAD 110000,false
-edge::lever::2,EdgeCo,lever,2,Data Engineer,"Berlin, Germany",https://example.com/b,2025-01-02T00:00:00Z,h2,"Build ETL in a multilingual team (Deutsch/English).","€70.000 - €90.000",false
-edge::ashby::3,EdgeCo,ashby,3,ML Engineer,"Remote, US",https://example.com/c,2025-01-03T00:00:00Z,h3,"Fully remote role across US time zones.",USD 120000 to 140000,true

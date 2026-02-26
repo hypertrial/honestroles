@@ -1,4 +1,3 @@
-# For local development, prefer:
-#   pip install honestroles
-#   pip install -e ".[dev]"
--e .
+polars>=1.30,<2.0
+pydantic>=2.10,<3.0
+typing-extensions>=4.9

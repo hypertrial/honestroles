@@ -1,0 +1,200 @@
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import sys
+from pathlib import Path
+
+from honestroles.config import load_pipeline_config
+from honestroles.errors import ConfigValidationError, HonestRolesError, StageExecutionError
+from honestroles.io import build_data_quality_report
+from honestroles.plugins.errors import (
+    PluginExecutionError,
+    PluginLoadError,
+    PluginValidationError,
+)
+from honestroles.plugins.registry import PluginRegistry
+from honestroles.runtime import HonestRolesRuntime
+
+_EXIT_OK = 0
+_EXIT_CONFIG = 2
+_EXIT_PLUGIN = 3
+_EXIT_STAGE = 4
+_EXIT_GENERIC = 1
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="honestroles")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    run_parser = sub.add_parser("run", help="Run pipeline from TOML config")
+    run_parser.add_argument("--pipeline-config", required=True)
+    run_parser.add_argument("--plugins", dest="plugin_manifest", required=False)
+
+    plugins_parser = sub.add_parser("plugins", help="Plugin manifest operations")
+    plugins_sub = plugins_parser.add_subparsers(dest="plugins_command", required=True)
+    plugins_validate = plugins_sub.add_parser("validate", help="Validate plugin manifest")
+    plugins_validate.add_argument("--manifest", required=True)
+
+    config_parser = sub.add_parser("config", help="Pipeline config operations")
+    config_sub = config_parser.add_subparsers(dest="config_command", required=True)
+    config_validate = config_sub.add_parser("validate", help="Validate pipeline config")
+    config_validate.add_argument("--pipeline", required=True)
+
+    report_parser = sub.add_parser(
+        "report-quality",
+        help="Run pipeline and emit data quality report",
+    )
+    report_parser.add_argument("--pipeline-config", required=True)
+    report_parser.add_argument("--plugins", dest="plugin_manifest", required=False)
+
+    scaffold_parser = sub.add_parser(
+        "scaffold-plugin",
+        help="Scaffold a plugin package from the bundled template",
+    )
+    scaffold_parser.add_argument("--name", required=True)
+    scaffold_parser.add_argument("--output-dir", default=".")
+
+    return parser
+
+
+def _handle_run(args: argparse.Namespace) -> int:
+    runtime = HonestRolesRuntime.from_configs(args.pipeline_config, args.plugin_manifest)
+    result = runtime.run()
+    print(json.dumps(result.diagnostics, indent=2, sort_keys=True))
+    return _EXIT_OK
+
+
+def _handle_plugins_validate(args: argparse.Namespace) -> int:
+    registry = PluginRegistry.from_manifest(args.manifest)
+    payload = {
+        "manifest": str(Path(args.manifest).expanduser().resolve()),
+        "plugins": {
+            "filter": list(registry.list("filter")),
+            "label": list(registry.list("label")),
+            "rate": list(registry.list("rate")),
+        },
+    }
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return _EXIT_OK
+
+
+def _handle_config_validate(args: argparse.Namespace) -> int:
+    cfg = load_pipeline_config(args.pipeline)
+    print(json.dumps(cfg.model_dump(mode="json"), indent=2, sort_keys=True))
+    return _EXIT_OK
+
+
+def _handle_report_quality(args: argparse.Namespace) -> int:
+    runtime = HonestRolesRuntime.from_configs(args.pipeline_config, args.plugin_manifest)
+    result = runtime.run()
+    report = build_data_quality_report(result.dataframe)
+    print(
+        json.dumps(
+            {
+                "row_count": report.row_count,
+                "score_percent": report.score_percent,
+                "null_percentages": report.null_percentages,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return _EXIT_OK
+
+
+def _replace_text(path: Path, needle: str, replacement: str) -> None:
+    content = path.read_text(encoding="utf-8")
+    path.write_text(content.replace(needle, replacement), encoding="utf-8")
+
+
+def _resolve_plugin_template_root() -> Path:
+    repo_template = Path(__file__).resolve().parents[3] / "plugin_template"
+    if repo_template.exists():
+        return repo_template
+    packaged_template = (
+        Path(__file__).resolve().parents[1] / "_templates" / "plugin_template"
+    )
+    if packaged_template.exists():
+        return packaged_template
+    raise ConfigValidationError(
+        f"plugin template directory does not exist: '{repo_template}'"
+    )
+
+
+def _handle_scaffold_plugin(args: argparse.Namespace) -> int:
+    template_root = _resolve_plugin_template_root()
+
+    output_dir = Path(args.output_dir).expanduser().resolve()
+    target = output_dir / args.name
+    if target.exists():
+        raise ConfigValidationError(f"target scaffold path already exists: '{target}'")
+
+    package_name = args.name.strip().lower().replace("-", "_")
+    if not package_name or not package_name.replace("_", "").isalnum():
+        raise ConfigValidationError(
+            "plugin name must produce a valid package name using letters/numbers/underscores"
+        )
+    if package_name[0].isdigit():
+        raise ConfigValidationError("plugin package name cannot start with a digit")
+
+    shutil.copytree(template_root, target)
+
+    src_root = target / "src"
+    default_pkg = src_root / "honestroles_plugin_example"
+    desired_pkg = src_root / package_name
+    if default_pkg.exists() and desired_pkg != default_pkg:
+        default_pkg.rename(desired_pkg)
+
+    for path in target.rglob("*"):
+        if path.is_file() and path.suffix in {".py", ".toml", ".md"}:
+            _replace_text(path, "honestroles_plugin_example", package_name)
+            _replace_text(path, "honestroles-plugin-example", args.name)
+
+    print(
+        json.dumps(
+            {
+                "scaffold_path": str(target),
+                "package_name": package_name,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return _EXIT_OK
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "run":
+            return _handle_run(args)
+        if args.command == "plugins" and args.plugins_command == "validate":
+            return _handle_plugins_validate(args)
+        if args.command == "config" and args.config_command == "validate":
+            return _handle_config_validate(args)
+        if args.command == "report-quality":
+            return _handle_report_quality(args)
+        if args.command == "scaffold-plugin":
+            return _handle_scaffold_plugin(args)
+    except ConfigValidationError as exc:
+        print(str(exc), file=sys.stderr)
+        return _EXIT_CONFIG
+    except (PluginLoadError, PluginValidationError, PluginExecutionError) as exc:
+        print(str(exc), file=sys.stderr)
+        return _EXIT_PLUGIN
+    except StageExecutionError as exc:
+        print(str(exc), file=sys.stderr)
+        return _EXIT_STAGE
+    except HonestRolesError as exc:
+        print(str(exc), file=sys.stderr)
+        return _EXIT_GENERIC
+
+    parser.error("unhandled command")
+    return _EXIT_GENERIC
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

@@ -1,20 +1,9 @@
 # Changelog
 
-All notable changes to `honestroles` are documented in this file.
+## 0.1.0
 
-The format is based on Keep a Changelog and the project follows Semantic Versioning.
-
-## [Unreleased]
-
-### Added
-- Source-data contract validation and normalization utilities.
-- Plugin registry for custom filter, label, and rate extensions.
-- Performance guardrail tests for core hot paths.
-- Source-data edge-case fixture pack and regression tests.
-- CI workflow with `ruff`, `mypy`, and `pytest` gates.
-- Release workflow for semantic tags and PyPI publication.
-
-## [0.1.0] - 2026-02-14
-
-### Added
-- Initial package release with cleaning, filtering, labeling, rating, and I/O modules.
+- Hard architectural rewrite to explicit runtime + manifest-driven plugin registry.
+- Removed process-global plugin registration API.
+- Migrated runtime data model to Polars-only.
+- Added config-driven CLI (`honestroles`) with run/validate/report flows.
+- Rebuilt deterministic and fuzz test suites around new runtime contracts.

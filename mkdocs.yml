@@ -1,132 +1,19 @@
 site_name: HonestRoles Docs
-site_description: Documentation for the HonestRoles library
+site_description: Deterministic config-driven job-data runtime with Polars
 site_url: https://hypertrial.github.io/honestroles/
 repo_url: https://github.com/hypertrial/honestroles
 repo_name: hypertrial/honestroles
-edit_uri: edit/main/docs/
-
-plugins:
-  - search
-  - mkdocstrings:
-      handlers:
-        python:
-          paths: [src]
-          options:
-            show_source: false
-            show_root_heading: true
-            show_root_full_path: false
-            show_signature_annotations: true
-            merge_init_into_class: true
 
 theme:
   name: material
-  custom_dir: docs/overrides
-  language: en
-  font:
-    text: IBM Plex Sans
-    code: JetBrains Mono
-  palette:
-    - scheme: honestroles-dark
-      primary: black
-      accent: amber
-      toggle:
-        icon: material/weather-sunny
-        name: Switch to light mode
-    - scheme: honestroles-light
-      primary: blue grey
-      accent: amber
-      toggle:
-        icon: material/weather-night
-        name: Switch to dark mode
-  features:
-    - navigation.tabs
-    - navigation.sections
-    - navigation.expand
-    - navigation.indexes
-    - navigation.tracking
-    - navigation.top
-    - content.code.copy
-    - content.action.edit
-    - content.action.view
-    - search.suggest
-    - search.highlight
-    - toc.follow
 
-extra:
-  social:
-    - icon: fontawesome/brands/github
-      link: https://github.com/hypertrial/honestroles
-      name: GitHub Repository
-
-markdown_extensions:
-  - admonition
-  - attr_list
-  - md_in_html
-  - tables
-  - pymdownx.details
-  - pymdownx.inlinehilite
-  - pymdownx.superfences
-  - pymdownx.highlight:
-      anchor_linenums: true
-  - pymdownx.tabbed:
-      alternate_style: true
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - toc:
-      permalink: true
-
-extra_css:
-  - stylesheets/extra.css
-
-extra_javascript:
-  - javascripts/url_redirects.js
+plugins:
+  - search
 
 nav:
-  - Get Started:
-      - Welcome: index.md
-      - Installation: start/installation.md
-      - Choose Your Entry Point: start/entry_points.md
-      - Quickstart: start/quickstart.md
-  - Workflows:
-      - Overview: guides/index.md
-      - CLI Guide: guides/cli.md
-      - Troubleshooting: guides/troubleshooting.md
-      - End-to-End Pipeline: guides/end_to_end_pipeline.md
-      - Output Columns by Stage: guides/output_columns.md
-      - LLM Operations: guides/llm_operations.md
-  - Concepts:
-      - Framework Boundary: concepts/framework.md
-      - Architecture: concepts/architecture.md
-      - Compatibility and Versioning: concepts/compatibility_and_versioning.md
-  - Reference:
-      - Runtime Objects Overview: reference/objects.md
-      - Data Schema: reference/schema.md
-      - Source Schema: reference/source_schema.md
-      - Source Data Contract v1: reference/source_data_contract_v1.md
-      - Processing Stages:
-          - Clean: reference/clean.md
-          - Filter: reference/filter.md
-          - Label: reference/label.md
-          - Rate: reference/rate.md
-          - Match: reference/match.md
-          - LLM: reference/llm.md
-          - IO: reference/io.md
-      - Plugins:
-          - Overview: reference/plugins.md
-          - API Contract: reference/plugins/api_contract.md
-          - Author Guide: reference/plugins/author_guide.md
-          - Compatibility: reference/plugins/compatibility.md
-      - API Reference:
-          - API Index: reference/api/index.md
-          - Python API: reference/api/reference.md
-      - FAQ: reference/faq.md
+  - Home: index.md
+  - Quickstart: start/quickstart.md
+  - Runtime API: reference/runtime.md
+  - Plugins: reference/plugins.md
   - Maintainers:
-      - Docs Stack: maintainers/docs_stack.md
-      - Page Template: maintainers/page_template.md
-      - Performance Guardrails: maintainers/performance.md
-      - Fuzz Testing: maintainers/fuzzing.md
-      - Historical Data Workflow: maintainers/historical_data.md
-      - Packaging: maintainers/packaging.md
-      - Release Process: maintainers/release_process.md
-      - Agent-First Roadmap: maintainers/roadmap_agent_first.md
+      - Fuzzing: maintainers/fuzzing.md

@@ -1,225 +1,80 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-import string
-
-import pandas as pd
 from hypothesis import strategies as st
 
-_TEXT_ALPHABET = (
-    "abcdefghijklmnopqrstuvwxyz"
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    "0123456789"
-    " \t\n\r-_/.,:;()[]{}<>!?@#$%^&*+=|\\'\""
-)
 
-_BOOL_LIKE_VALUES = [
-    "true",
-    "false",
-    "True",
-    "False",
-    " yes ",
-    " no ",
-    "1",
-    "0",
-    "remote",
-    "on-site",
-    "",
-]
-
-BOOL_LIKE_STRINGS = st.sampled_from(_BOOL_LIKE_VALUES)
-
-TEXT_VALUES = st.text(alphabet=_TEXT_ALPHABET, min_size=0, max_size=128)
-
-PLUGIN_NAME_VALUES = st.text(
-    alphabet=string.ascii_letters + string.digits + "_-",
-    min_size=1,
-    max_size=32,
-).filter(lambda value: any(ch.isalnum() for ch in value))
-
-MODULE_REF_VALUES = st.one_of(
-    st.text(
-        alphabet=string.ascii_lowercase + string.digits + "_.",
-        min_size=3,
-        max_size=48,
-    ).filter(lambda value: "." in value and not value.startswith(".") and not value.endswith(".")),
-    st.text(
-        alphabet=string.ascii_letters + string.digits + "_/-.",
-        min_size=5,
-        max_size=64,
-    ).map(lambda value: f"{value}.py"),
-)
-
-SQLISH_TEXT = st.one_of(
-    st.sampled_from(
-        [
-            "select * from jobs",
-            "with cte as (select 1) select * from cte",
-            "select title from jobs where salary_max > 100000",
-            "select * from jobs -- comment",
-            "select * from jobs /* block */",
-            "drop table jobs",
-            "",
-            "   ",
-            "select 1; select 2",
-        ]
-    ),
-    TEXT_VALUES,
-)
-
-CLI_ARG_TOKEN = st.text(
-    alphabet=string.ascii_letters + string.digits + "-_/.:=+",
-    min_size=0,
-    max_size=40,
-)
-
-CLI_ARG_VECTORS = st.lists(CLI_ARG_TOKEN, min_size=0, max_size=10)
-
-MIXED_SCALARS = st.one_of(
+scalar = st.one_of(
     st.none(),
     st.booleans(),
-    st.integers(min_value=-10_000_000, max_value=10_000_000),
-    st.floats(allow_nan=True, allow_infinity=True, width=32),
-    BOOL_LIKE_STRINGS,
-    TEXT_VALUES,
-    st.builds(object),
+    st.integers(min_value=-10_000, max_value=10_000),
+    st.floats(allow_nan=False, allow_infinity=False, width=32),
+    st.text(min_size=0, max_size=128),
 )
 
-PARQUET_SAFE_SCALARS = st.one_of(
-    st.none(),
+bool_like = st.one_of(
     st.booleans(),
-    st.integers(min_value=-1_000_000, max_value=1_000_000),
-    st.floats(min_value=-1_000_000, max_value=1_000_000, allow_nan=False, allow_infinity=False),
-    TEXT_VALUES,
-)
-
-TIMESTAMP_LIKE_VALUES = st.one_of(
+    st.sampled_from(["true", "false", "1", "0", "yes", "no", "remote", ""]),
     st.none(),
-    st.datetimes(timezones=st.timezones()).map(lambda dt: dt.isoformat()),
-    st.sampled_from(
-        [
-            "2025-01-01T00:00:00Z",
-            "2025/01/01",
-            "Jan 01 2025",
-            "not-a-date",
-            "",
-            "   ",
-        ]
-    ),
-    st.integers(min_value=0, max_value=2_000_000_000_000_000_000),
-    st.floats(allow_nan=True, allow_infinity=True, width=64),
-    TEXT_VALUES,
 )
 
-URL_LIKE_VALUES = st.one_of(
+salary_like = st.one_of(
     st.none(),
-    st.sampled_from(
-        [
-            "https://example.com/apply",
-            "http://localhost:8080/path?q=1",
-            "ftp://bad.example.com",
-            "example.com/no-scheme",
-            "",
-            "   ",
-            "://broken",
-        ]
-    ),
-    TEXT_VALUES,
-    st.integers(min_value=-1000, max_value=1000),
+    st.integers(min_value=0, max_value=500_000),
+    st.floats(min_value=0, max_value=500_000, allow_nan=False, allow_infinity=False),
+    st.text(min_size=0, max_size=32),
 )
 
-JSONISH_VALUES = st.recursive(
-    st.one_of(st.none(), st.booleans(), st.integers(-1000, 1000), TEXT_VALUES),
-    lambda children: st.one_of(
-        st.lists(children, min_size=0, max_size=5),
-        st.dictionaries(st.text(min_size=1, max_size=8), children, min_size=0, max_size=4),
-    ),
-    max_leaves=20,
-)
-
-ARRAY_LIKE_VALUES = st.one_of(
+skill_like = st.one_of(
     st.none(),
-    TEXT_VALUES,
-    st.lists(MIXED_SCALARS, min_size=0, max_size=6),
-    st.tuples(MIXED_SCALARS, MIXED_SCALARS),
-    st.sets(st.text(min_size=0, max_size=24), min_size=0, max_size=6),
-    st.dictionaries(
-        st.text(min_size=1, max_size=10),
-        MIXED_SCALARS,
-        min_size=0,
-        max_size=4,
-    ),
+    st.text(min_size=0, max_size=64),
+    st.lists(st.text(min_size=0, max_size=16), max_size=8),
 )
 
-WEIGHT_VALUES = st.floats(min_value=-2.0, max_value=2.0, allow_nan=False, allow_infinity=False)
-
-
-@st.composite
-def dataframe_for_columns(
-    draw,
-    column_strategies: Mapping[str, st.SearchStrategy[object]],
-    *,
-    min_rows: int = 0,
-    max_rows: int = 10,
-) -> pd.DataFrame:
-    row_count = draw(st.integers(min_value=min_rows, max_value=max_rows))
-    index = draw(
-        st.lists(
-            st.integers(min_value=-1000, max_value=1000),
-            min_size=row_count,
-            max_size=row_count,
-        )
-    )
-    data: dict[str, list[object]] = {}
-    for column, strategy in column_strategies.items():
-        data[column] = draw(st.lists(strategy, min_size=row_count, max_size=row_count))
-    return pd.DataFrame(data, index=index)
-
-
-@st.composite
-def column_subsets(draw, columns: Sequence[str]) -> list[str]:
-    if not columns:
-        return []
-    size = draw(st.integers(min_value=0, max_value=len(columns)))
-    return draw(st.lists(st.sampled_from(list(columns)), min_size=size, max_size=size, unique=True))
-
-
-@st.composite
-def parquet_dataframe(
-    draw,
-    *,
-    columns: Sequence[str] = ("c1", "c2", "c3", "c4"),
-    min_rows: int = 0,
-    max_rows: int = 20,
-) -> pd.DataFrame:
-    row_count = draw(st.integers(min_value=min_rows, max_value=max_rows))
-    index = draw(
-        st.lists(
-            st.integers(min_value=-1000, max_value=1000),
-            min_size=row_count,
-            max_size=row_count,
-        )
-    )
-    kind_to_strategy: dict[str, st.SearchStrategy[object]] = {
-        "int": st.integers(min_value=-1_000_000, max_value=1_000_000),
-        "float": st.floats(
-            min_value=-1_000_000,
-            max_value=1_000_000,
-            allow_nan=False,
-            allow_infinity=False,
-        ),
-        "bool": st.booleans(),
-        "text": TEXT_VALUES,
+row_strategy = st.fixed_dictionaries(
+    {
+        "id": st.text(min_size=0, max_size=32),
+        "title": st.one_of(st.none(), st.text(min_size=0, max_size=80)),
+        "company": st.one_of(st.none(), st.text(min_size=0, max_size=80)),
+        "location": st.one_of(st.none(), st.text(min_size=0, max_size=120)),
+        "remote": bool_like,
+        "description_text": st.one_of(st.none(), st.text(min_size=0, max_size=500)),
+        "description_html": st.one_of(st.none(), st.text(min_size=0, max_size=500)),
+        "skills": skill_like,
+        "salary_min": salary_like,
+        "salary_max": salary_like,
+        "apply_url": st.one_of(st.none(), st.text(min_size=0, max_size=120)),
+        "posted_at": st.one_of(st.none(), st.text(min_size=0, max_size=64)),
     }
+)
 
-    data: dict[str, list[object]] = {}
-    for column in columns:
-        kind = draw(st.sampled_from(sorted(kind_to_strategy)))
-        data[column] = draw(
-            st.lists(
-                kind_to_strategy[kind],
-                min_size=row_count,
-                max_size=row_count,
-            )
-        )
-    return pd.DataFrame(data, index=index)
+rows_strategy = st.lists(row_strategy, min_size=0, max_size=40)
+
+plugin_name = st.from_regex(r"[a-z_][a-z0-9_]{0,15}", fullmatch=True)
+plugin_kind = st.sampled_from(["filter", "label", "rate"])
+callable_ref = st.one_of(
+    st.just("tests.plugins.fixture_plugins:filter_min_quality"),
+    st.just("tests.plugins.fixture_plugins:label_note"),
+    st.just("tests.plugins.fixture_plugins:rate_bonus"),
+    st.text(min_size=0, max_size=40),
+)
+
+cli_tokens = st.lists(
+    st.one_of(
+        st.sampled_from(
+            [
+                "run",
+                "plugins",
+                "config",
+                "validate",
+                "report-quality",
+                "--pipeline-config",
+                "--plugins",
+                "--manifest",
+                "--pipeline",
+            ]
+        ),
+        st.text(min_size=0, max_size=24),
+    ),
+    min_size=0,
+    max_size=12,
+)

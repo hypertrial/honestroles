@@ -1,0 +1,6 @@
+[[plugins]]
+name = "label_note"
+kind = "label"
+callable = "examples.example_plugins:example_label"
+enabled = true
+order = 1

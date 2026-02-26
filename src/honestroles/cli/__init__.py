@@ -1,3 +1,5 @@
 from __future__ import annotations
 
-__all__ = ["report_data_quality", "scaffold_plugin"]
+from honestroles.cli.main import build_parser, main
+
+__all__ = ["build_parser", "main"]

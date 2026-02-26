@@ -1,0 +1,27 @@
+[input]
+kind = "parquet"
+path = "./jobs.parquet"
+
+[output]
+path = "./jobs_scored.parquet"
+
+[stages.clean]
+enabled = true
+
+[stages.filter]
+enabled = true
+remote_only = false
+
+[stages.label]
+enabled = true
+
+[stages.rate]
+enabled = true
+
+[stages.match]
+enabled = true
+top_k = 50
+
+[runtime]
+fail_fast = true
+random_seed = 0

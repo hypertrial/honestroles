@@ -1,26 +1,26 @@
 from __future__ import annotations
 
-import pandas as pd
+import polars as pl
 
-from honestroles.plugins import apply_filter_plugins, apply_label_plugins, apply_rate_plugins
-from honestroles_plugin_example.plugins import register
+from honestroles.plugins.types import (
+    FilterPluginContext,
+    LabelPluginContext,
+    RatePluginContext,
+)
+from honestroles_plugin_example.plugins import example_filter, example_label, example_rate
 
 
-def test_template_plugin_contract() -> None:
-    register()
-    df = pd.DataFrame(
-        {
-            "remote_flag": [True, False],
-            "source": ["greenhouse", "lever"],
-            "rating": [0.95, 0.5],
-        }
+def test_plugin_examples_follow_contract() -> None:
+    frame = pl.DataFrame({"remote": [True, False], "rate_composite": [0.5, 0.8]})
+
+    filtered = example_filter(frame, FilterPluginContext(plugin_name="f"))
+    assert isinstance(filtered, pl.DataFrame)
+
+    labeled = example_label(frame, LabelPluginContext(plugin_name="l"))
+    assert "plugin_label_source" in labeled.columns
+
+    rated = example_rate(
+        frame,
+        RatePluginContext(plugin_name="r", settings={"bonus": 0.1}),
     )
-
-    filtered = apply_filter_plugins(df, ["only_remote"])
-    assert len(filtered) == 1
-
-    labeled = apply_label_plugins(df, ["add_source_group"])
-    assert "source_group" in labeled.columns
-
-    rated = apply_rate_plugins(df, ["add_priority_rating"])
-    assert rated["priority_role"].tolist() == [True, False]
+    assert rated["rate_composite"].max() <= 1.0

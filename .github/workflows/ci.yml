@@ -6,29 +6,7 @@ on:
     branches: ["main"]
 
 jobs:
-  packaging:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Build and verify distribution artifacts
-        run: |
-          python -m venv .venv
-          .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/python -m pip install -e ".[dev]"
-          .venv/bin/python -m build --sdist --wheel --no-isolation
-          .venv/bin/python -m twine check dist/*
-
-      - name: Installed-wheel smoke
-        run: .venv/bin/python -m pytest tests/test_packaging_distribution.py -q -o addopts=""
-
-  performance:
+  test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -43,19 +21,26 @@ jobs:
         run: |
           python -m venv .venv
           .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/python -m pip install --force-reinstall --no-cache-dir "numpy==1.26.4" "pandas==2.2.3"
           .venv/bin/python -m pip install -e ".[dev]"
-          .venv/bin/python -m pip check
-          .venv/bin/python - <<'PY'
-          import numpy
-          import pandas
-          print("numpy", numpy.__version__)
-          print("pandas", pandas.__version__)
-          PY
 
-      - name: Performance guardrails
-        env:
-          HONESTROLES_MAX_CLEAN_SECONDS: "8.0"
-          HONESTROLES_MAX_FILTER_SECONDS: "4.0"
-          HONESTROLES_MAX_RATE_SECONDS: "4.0"
-        run: .venv/bin/python -m pytest -m "performance" -q -o addopts="-n auto"
+      - name: Run deterministic test suite
+        run: .venv/bin/python -m pytest -q
+
+  packaging:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build distribution artifacts
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -e ".[dev]"
+          .venv/bin/python -m build --sdist --wheel --no-isolation
+          .venv/bin/python -m twine check dist/*

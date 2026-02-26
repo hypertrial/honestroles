@@ -1,24 +1,22 @@
 # HonestRoles Plugin Template
 
-This folder provides a starter template for external `honestroles` plugins.
+Template for plugins compatible with the explicit HonestRoles runtime ABI.
 
-## Contents
+## ABI
 
-- `pyproject.toml`: package metadata and entrypoint groups
-- `src/honestroles_plugin_example/`: plugin implementation
-- `tests/`: basic plugin contract tests
+Plugins are plain Python callables referenced by `module:function` in `plugins.toml`.
 
-## Quick Start
+- Filter: `(pl.DataFrame, FilterPluginContext) -> pl.DataFrame`
+- Label: `(pl.DataFrame, LabelPluginContext) -> pl.DataFrame`
+- Rate: `(pl.DataFrame, RatePluginContext) -> pl.DataFrame`
 
-1. Copy this folder into a new repository.
-2. Rename `honestroles_plugin_example` package and plugin names.
-3. Implement your plugin logic in `plugins.py`.
-4. Run `pytest`.
-5. Publish and register in `plugins-index/plugins.toml`.
+## Example manifest
 
-## Loading
-
-You can load this plugin with either:
-
-- explicit call to `register_plugins()`
-- `load_plugins_from_entrypoints()` if installed and entrypoints are configured
+```toml
+[[plugins]]
+name = "example_label"
+kind = "label"
+callable = "honestroles_plugin_example.plugins:example_label"
+enabled = true
+order = 10
+```
