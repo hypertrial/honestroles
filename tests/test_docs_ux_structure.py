@@ -42,16 +42,17 @@ def test_guides_landing_exists_and_links_core_flows() -> None:
 
 
 def test_custom_404_supports_md_path_redirects() -> None:
-    not_found_doc = _read("docs/404.md")
+    mkdocs_config = _read("mkdocs.yml")
+    redirect_js = _read("docs/javascripts/url_redirects.js")
 
-    assert "<script>" in not_found_doc
-    assert "path.endsWith(\".md\")" in not_found_doc
-    assert "replace(/\\/index\\.md$/, \"/\")" in not_found_doc
-    assert "replace(/\\.md$/, \"/\")" in not_found_doc
-    assert "path.endsWith(\"/index\")" in not_found_doc
-    assert "window.location.search" in not_found_doc
-    assert "window.location.hash" in not_found_doc
-    assert "[Installation](start/installation.md)" in not_found_doc
+    assert "extra_javascript:" in mkdocs_config
+    assert "javascripts/url_redirects.js" in mkdocs_config
+    assert "path.endsWith(\".md\")" in redirect_js
+    assert "replace(/\\/index\\.md$/, \"/\")" in redirect_js
+    assert "replace(/\\.md$/, \"/\")" in redirect_js
+    assert "path.endsWith(\"/index\")" in redirect_js
+    assert "window.location.search" in redirect_js
+    assert "window.location.hash" in redirect_js
 
 
 def test_custom_404_redirect_examples() -> None:

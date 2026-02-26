@@ -78,6 +78,9 @@ markdown_extensions:
 extra_css:
   - stylesheets/extra.css
 
+extra_javascript:
+  - javascripts/url_redirects.js
+
 nav:
   - Get Started:
       - Welcome: index.md
