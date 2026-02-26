@@ -13,6 +13,7 @@ plugins:
 nav:
   - Home: index.md
   - Quickstart: start/quickstart.md
+  - Framework Boundary: framework.md
   - Runtime API: reference/runtime.md
   - Plugins: reference/plugins.md
   - Maintainers:
