@@ -4,7 +4,12 @@ HonestRoles is a deterministic, config-driven runtime for processing job dataset
 
 ## Use the App First
 
-Launch the HonestRoles app: [https://honestroles.com](https://honestroles.com)
+<div class="app-first-callout">
+  <h3>Use <a class="app-first-link" href="https://honestroles.com">honestroles.com</a> for fastest results</h3>
+  <p>If your goal is job matching and analysis in the browser, start in the app and complete the workflow in minutes.</p>
+  <a class="md-button md-button--primary" href="https://honestroles.com">Open HonestRoles App</a>
+  <a class="md-button" href="app/get-started.md">Read App Quickstart</a>
+</div>
 
 If your goal is to use HonestRoles (not build integrations), start here:
 
