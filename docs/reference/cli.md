@@ -15,6 +15,8 @@ Available commands:
 - `config validate`
 - `report-quality`
 - `scaffold-plugin`
+- `eda generate`
+- `eda dashboard`
 
 ## Command Matrix
 
@@ -25,6 +27,8 @@ Available commands:
 | `honestroles config validate` | `--pipeline` | Validates pipeline config | Normalized JSON config |
 | `honestroles report-quality` | `--pipeline-config`, optional `--plugins` | Runs runtime and computes quality report | JSON quality summary |
 | `honestroles scaffold-plugin` | `--name`, optional `--output-dir` | Copies bundled plugin template | JSON scaffold path + package name |
+| `honestroles eda generate` | `--input-parquet`, optional `--output-dir`, `--quality-profile`, repeated `--quality-weight`, `--top-k`, `--max-rows` | Builds deterministic EDA artifacts (`summary.json`, tables, figures, report) | JSON artifact locations |
+| `honestroles eda dashboard` | `--artifacts-dir`, optional `--host`, `--port` | Launches Streamlit view over generated artifacts | Process exit code |
 
 ## Exit Codes
 
@@ -44,6 +48,8 @@ $ honestroles plugins validate --manifest plugins.toml
 $ honestroles config validate --pipeline pipeline.toml
 $ honestroles report-quality --pipeline-config pipeline.toml
 $ honestroles scaffold-plugin --name my-plugin --output-dir .
+$ honestroles eda generate --input-parquet jobs_historical.parquet --output-dir dist/eda/latest
+$ honestroles eda dashboard --artifacts-dir dist/eda/latest --host 127.0.0.1 --port 8501
 ```
 
 ## `report-quality` Output
@@ -65,5 +71,16 @@ $ honestroles scaffold-plugin --name my-plugin --output-dir .
     "apply_url": 0.0,
     "salary_min": 100.0
   }
+}
+```
+
+## `eda generate` Output
+
+```json
+{
+  "artifacts_dir": "/abs/path/dist/eda/latest",
+  "manifest": "/abs/path/dist/eda/latest/manifest.json",
+  "summary": "/abs/path/dist/eda/latest/summary.json",
+  "report": "/abs/path/dist/eda/latest/report.md"
 }
 ```

@@ -58,6 +58,10 @@ docs = [
   "mkdocs",
   "mkdocs-material",
 ]
+eda = [
+  "matplotlib",
+  "streamlit",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/honestroles"]

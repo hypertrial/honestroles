@@ -117,3 +117,46 @@ Inspect:
 ```python
 print(result.diagnostics.get("non_fatal_errors", []))
 ```
+
+## `eda dashboard` Fails with Missing Streamlit
+
+Symptom:
+
+```text
+streamlit is required for 'honestroles eda dashboard'
+```
+
+Cause:
+
+- EDA optional dependencies are not installed.
+
+Fix:
+
+```bash
+$ pip install "honestroles[eda]"
+```
+
+## `eda dashboard` Fails with Missing Manifest or Summary
+
+Symptom:
+
+```text
+artifacts manifest missing
+```
+
+or
+
+```text
+artifacts summary missing
+```
+
+Cause:
+
+- `--artifacts-dir` does not point to a completed `honestroles eda generate` output directory.
+
+Fix:
+
+```bash
+$ honestroles eda generate --input-parquet jobs.parquet --output-dir dist/eda/latest
+$ honestroles eda dashboard --artifacts-dir dist/eda/latest
+```

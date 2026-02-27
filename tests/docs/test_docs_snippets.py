@@ -287,3 +287,27 @@ salary_min = 0.2
     assert "profile" in payload
     assert "weighted_null_percent" in payload
     assert "effective_weights" in payload
+
+
+def test_docs_eda_generate_snippet(tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "jobs.parquet"
+    artifacts_dir = tmp_path / "eda"
+    _write_sample_parquet(input_path)
+
+    code = main(
+        [
+            "eda",
+            "generate",
+            "--input-parquet",
+            str(input_path),
+            "--output-dir",
+            str(artifacts_dir),
+            "--top-k",
+            "5",
+        ]
+    )
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert Path(payload["manifest"]).exists()
+    assert Path(payload["summary"]).exists()
+    assert Path(payload["report"]).exists()

@@ -47,6 +47,7 @@ nav:
           - Configure Pipeline: guides/configure-pipeline.md
           - Run via CLI: guides/run-via-cli.md
           - Run via Python API: guides/run-via-python-api.md
+          - Explore Data with EDA: guides/explore-data-with-eda.md
           - Understand Output: guides/understand-output.md
           - Non-Fail-Fast and Recovery: guides/non-fail-fast-and-recovery.md
           - Author Plugins: guides/author-plugins.md

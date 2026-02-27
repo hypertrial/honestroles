@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
+import subprocess
 import shutil
 import sys
 from pathlib import Path
 
 from honestroles.config import load_pipeline_config
+from honestroles.eda import (
+    generate_eda_artifacts,
+    load_eda_artifacts,
+    parse_quality_weight_overrides,
+)
 from honestroles.errors import ConfigValidationError, HonestRolesError, StageExecutionError
 from honestroles.io import build_data_quality_report
 from honestroles.plugins.errors import (
@@ -55,6 +62,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scaffold_parser.add_argument("--name", required=True)
     scaffold_parser.add_argument("--output-dir", default=".")
+
+    eda_parser = sub.add_parser("eda", help="EDA artifact generation and dashboard")
+    eda_sub = eda_parser.add_subparsers(dest="eda_command", required=True)
+
+    eda_generate = eda_sub.add_parser(
+        "generate",
+        help="Generate deterministic EDA artifacts from a parquet input",
+    )
+    eda_generate.add_argument("--input-parquet", required=True)
+    eda_generate.add_argument("--output-dir", default="dist/eda/latest")
+    eda_generate.add_argument(
+        "--quality-profile",
+        default="core_fields_weighted",
+        choices=["core_fields_weighted", "equal_weight_all", "strict_recruiting"],
+    )
+    eda_generate.add_argument("--quality-weight", action="append", default=[])
+    eda_generate.add_argument("--top-k", type=int, default=10)
+    eda_generate.add_argument("--max-rows", type=int, default=None)
+
+    eda_dashboard = eda_sub.add_parser(
+        "dashboard",
+        help="Launch Streamlit dashboard for previously generated EDA artifacts",
+    )
+    eda_dashboard.add_argument("--artifacts-dir", required=True)
+    eda_dashboard.add_argument("--host", default="127.0.0.1")
+    eda_dashboard.add_argument("--port", type=int, default=8501)
 
     return parser
 
@@ -107,6 +140,58 @@ def _handle_report_quality(args: argparse.Namespace) -> int:
         )
     )
     return _EXIT_OK
+
+
+def _handle_eda_generate(args: argparse.Namespace) -> int:
+    manifest = generate_eda_artifacts(
+        input_parquet=args.input_parquet,
+        output_dir=args.output_dir,
+        quality_profile=args.quality_profile,
+        field_weights=parse_quality_weight_overrides(args.quality_weight),
+        top_k=args.top_k,
+        max_rows=args.max_rows,
+    )
+    artifacts_dir = Path(args.output_dir).expanduser().resolve()
+    print(
+        json.dumps(
+            {
+                "artifacts_dir": str(artifacts_dir),
+                "manifest": str(artifacts_dir / "manifest.json"),
+                "summary": str(artifacts_dir / manifest.files["summary_json"]),
+                "report": str(artifacts_dir / manifest.files["report_md"]),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return _EXIT_OK
+
+
+def _handle_eda_dashboard(args: argparse.Namespace) -> int:
+    bundle = load_eda_artifacts(args.artifacts_dir)
+    if importlib.util.find_spec("streamlit") is None:
+        raise ConfigValidationError(
+            "streamlit is required for 'honestroles eda dashboard'; install with "
+            "\"pip install 'honestroles[eda]'\""
+        )
+
+    app_path = Path(__file__).resolve().parents[1] / "eda" / "dashboard_app.py"
+    cmd = [
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        str(app_path),
+        "--server.address",
+        args.host,
+        "--server.port",
+        str(args.port),
+        "--",
+        "--artifacts-dir",
+        str(bundle.artifacts_dir),
+    ]
+    completed = subprocess.run(cmd, check=False)
+    return _EXIT_OK if completed.returncode == 0 else _EXIT_GENERIC
 
 
 def _replace_text(path: Path, needle: str, replacement: str) -> None:
@@ -184,6 +269,10 @@ def main(argv: list[str] | None = None) -> int:
             return _handle_report_quality(args)
         if args.command == "scaffold-plugin":
             return _handle_scaffold_plugin(args)
+        if args.command == "eda" and args.eda_command == "generate":
+            return _handle_eda_generate(args)
+        if args.command == "eda" and args.eda_command == "dashboard":
+            return _handle_eda_dashboard(args)
     except ConfigValidationError as exc:
         print(str(exc), file=sys.stderr)
         return _EXIT_CONFIG

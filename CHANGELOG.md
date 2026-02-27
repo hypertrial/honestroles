@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added `honestroles eda generate` for deterministic file-first EDA artifacts (`summary.json`, `report.md`, parquet tables, PNG figures).
+- Added optional `honestroles eda dashboard` Streamlit wrapper that reads generated artifacts only (view layer, no profiling logic).
 - Added pipeline-configurable input aliasing via `[input.aliases]` with diagnostics in `input_aliasing`.
 - Added runtime quality profiles via `[runtime.quality]` and optional per-field weight overrides.
 - Changed `report-quality`/`build_data_quality_report` semantics: `score_percent` is now weighted profile-based (not equal-weight mean-null).

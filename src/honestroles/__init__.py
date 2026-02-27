@@ -18,6 +18,14 @@ from honestroles.errors import (
     RuntimeInitializationError,
     StageExecutionError,
 )
+from honestroles.eda import (
+    EDAArtifactsBundle,
+    EDAArtifactsManifest,
+    EDAProfileResult,
+    build_eda_profile,
+    generate_eda_artifacts,
+    load_eda_artifacts,
+)
 from honestroles.io import (
     DataQualityAccumulator,
     DataQualityReport,
@@ -51,6 +59,9 @@ __all__ = [
     "CANONICAL_SOURCE_FIELDS",
     "DataQualityAccumulator",
     "DataQualityReport",
+    "EDAArtifactsBundle",
+    "EDAArtifactsManifest",
+    "EDAProfileResult",
     "FilterPlugin",
     "FilterPluginContext",
     "HonestRolesError",
@@ -77,7 +88,10 @@ __all__ = [
     "__version__",
     "_validate_read_query",
     "_validate_table_name",
+    "build_eda_profile",
     "build_data_quality_report",
+    "generate_eda_artifacts",
+    "load_eda_artifacts",
     "load_pipeline_config",
     "load_plugin_manifest",
     "normalize_source_data_contract",

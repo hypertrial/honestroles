@@ -37,6 +37,18 @@ Generate data quality report:
 $ honestroles report-quality --pipeline-config pipeline.toml --plugins plugins.toml
 ```
 
+Generate EDA artifacts:
+
+```bash
+$ honestroles eda generate --input-parquet jobs.parquet --output-dir dist/eda/latest
+```
+
+Launch EDA dashboard (optional):
+
+```bash
+$ honestroles eda dashboard --artifacts-dir dist/eda/latest --host 127.0.0.1 --port 8501
+```
+
 Scaffold a plugin package:
 
 ```bash
