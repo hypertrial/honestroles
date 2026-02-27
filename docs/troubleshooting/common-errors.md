@@ -160,3 +160,49 @@ Fix:
 $ honestroles eda generate --input-parquet jobs.parquet --output-dir dist/eda/latest
 $ honestroles eda dashboard --artifacts-dir dist/eda/latest
 ```
+
+## `eda diff` Fails with Profile Artifact Errors
+
+Symptom:
+
+```text
+EDA diff requires profile artifacts as inputs
+```
+
+Cause:
+
+- `--baseline-dir` or `--candidate-dir` points to non-profile artifacts (for example a diff artifact directory).
+
+Fix:
+
+```bash
+$ honestroles eda generate --input-parquet baseline.parquet --output-dir dist/eda/baseline
+$ honestroles eda generate --input-parquet candidate.parquet --output-dir dist/eda/candidate
+$ honestroles eda diff --baseline-dir dist/eda/baseline --candidate-dir dist/eda/candidate
+```
+
+## `eda gate` Returns Exit Code 1
+
+Symptom:
+
+- Command exits with code `1`.
+
+Cause:
+
+- Gate policy failed (`P0` findings above threshold, or drift metrics exceeded fail thresholds).
+
+Fix:
+
+Inspect output payload:
+
+```bash
+$ honestroles eda gate --candidate-dir dist/eda/candidate --baseline-dir dist/eda/baseline --rules-file eda-rules.toml
+```
+
+Review:
+
+- `failures`
+- `warnings`
+- `evaluated_rules`
+
+Then adjust source extraction/normalization or update thresholds in `eda-rules.toml` as needed.

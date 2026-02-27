@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added EDA v2 commands: `honestroles eda diff` and `honestroles eda gate`.
+- Added EDA rules file support (`--rules-file`) with deterministic gate/drift thresholds.
+- Added source-attributed EDA outputs: `quality.by_source`, `consistency.by_source`, and `findings_by_source`.
+- Added diff artifacts (`artifact_kind=\"diff\"`) with drift metrics (numeric PSI, categorical JSD) and gate evaluation payload.
 - Added `honestroles eda generate` for deterministic file-first EDA artifacts (`summary.json`, `report.md`, parquet tables, PNG figures).
 - Added optional `honestroles eda dashboard` Streamlit wrapper that reads generated artifacts only (view layer, no profiling logic).
 - Added pipeline-configurable input aliasing via `[input.aliases]` with diagnostics in `input_aliasing`.

@@ -1,10 +1,10 @@
 # Explore Data with EDA
 
-Generate deterministic EDA artifacts from a parquet input, then optionally inspect them in a local dashboard.
+Generate deterministic EDA artifacts from parquet inputs, compare runs, and enforce CI gate policies.
 
 ## When to use
 
-Use this guide when you want repeatable profiling artifacts that can be checked into CI or shared in PRs.
+Use this guide when you need reproducible profile/diff artifacts for PR review and automated quality checks.
 
 ## Prerequisites
 
@@ -13,39 +13,46 @@ Use this guide when you want repeatable profiling artifacts that can be checked 
 
 ## Steps
 
-Generate artifacts:
+Generate baseline and candidate artifacts:
 
 ```bash
-$ honestroles eda generate --input-parquet jobs_historical.parquet --output-dir dist/eda/latest
+$ honestroles eda generate --input-parquet jobs_baseline.parquet --output-dir dist/eda/baseline
+$ honestroles eda generate --input-parquet jobs_candidate.parquet --output-dir dist/eda/candidate
 ```
 
-Review generated artifacts:
+Create diff artifacts:
 
 ```bash
-$ ls -R dist/eda/latest
-$ cat dist/eda/latest/report.md
-$ cat dist/eda/latest/summary.json
+$ honestroles eda diff --baseline-dir dist/eda/baseline --candidate-dir dist/eda/candidate --output-dir dist/eda/diff
 ```
 
-Launch the optional Streamlit view layer:
+Evaluate gate policy (CI-friendly):
 
 ```bash
-$ honestroles eda dashboard --artifacts-dir dist/eda/latest --host 127.0.0.1 --port 8501
+$ honestroles eda gate --candidate-dir dist/eda/candidate --baseline-dir dist/eda/baseline --rules-file eda-rules.toml
+```
+
+Review artifacts:
+
+```bash
+$ cat dist/eda/candidate/report.md
+$ cat dist/eda/candidate/summary.json
+$ cat dist/eda/diff/diff.json
+```
+
+Launch dashboard view layer:
+
+```bash
+$ honestroles eda dashboard --artifacts-dir dist/eda/candidate --diff-dir dist/eda/diff --host 127.0.0.1 --port 8501
 ```
 
 ## Expected result
 
-`dist/eda/latest` contains:
-
-- `manifest.json`
-- `summary.json`
-- `report.md`
-- `tables/*.parquet`
-- `figures/*.png`
-
-The dashboard renders these files directly and does not run profiling logic.
+- `dist/eda/candidate` contains profile artifacts (`manifest.json`, `summary.json`, `report.md`, `tables/`, `figures/`)
+- `dist/eda/diff` contains diff artifacts (`manifest.json`, `diff.json`, `tables/`)
+- `eda gate` exits `0` on pass and `1` on policy failure
 
 ## Next steps
 
-- Compare artifacts between runs to verify data extraction improvements.
-- Update quality profile weights and regenerate to align scoring with your use case.
+- Tune thresholds in `eda-rules.toml` for your CI bar.
+- Track `diff.json` deltas over time to catch regressions early.

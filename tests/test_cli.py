@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+import polars as pl
+
 from honestroles.eda import generate_eda_artifacts
 from honestroles.eda.models import EDAArtifactsBundle, EDAArtifactsManifest
 from honestroles.errors import ConfigValidationError, HonestRolesError, StageExecutionError
@@ -77,7 +79,6 @@ def test_cli_report_quality_includes_profile_metadata(
 
 def test_cli_report_quality_score_uses_weighted_profile(tmp_path: Path, capsys) -> None:
     parquet_path = tmp_path / "jobs.parquet"
-    import polars as pl
 
     pl.DataFrame({"a": [1, None], "b": [None, None], "title": ["x", "y"], "description_text": ["d", "d"]}).write_parquet(parquet_path)
 
@@ -322,6 +323,24 @@ def test_cli_eda_dashboard_missing_artifacts_returns_config_error(tmp_path: Path
     assert code == 2
 
 
+def test_cli_eda_dashboard_invalid_diff_dir_returns_config_error(
+    sample_parquet: Path, tmp_path: Path
+) -> None:
+    profile_dir = tmp_path / "profile"
+    generate_eda_artifacts(input_parquet=sample_parquet, output_dir=profile_dir)
+    code = main(
+        [
+            "eda",
+            "dashboard",
+            "--artifacts-dir",
+            str(profile_dir),
+            "--diff-dir",
+            str(tmp_path / "missing_diff"),
+        ]
+    )
+    assert code == 2
+
+
 def test_cli_eda_dashboard_requires_streamlit(
     sample_parquet: Path, tmp_path: Path, monkeypatch
 ) -> None:
@@ -345,7 +364,8 @@ def test_cli_eda_dashboard_requires_streamlit(
 def test_cli_eda_dashboard_launches_streamlit(tmp_path: Path, monkeypatch) -> None:
     cli_main = _cli_main_module()
     manifest = EDAArtifactsManifest(
-        schema_version="1.0",
+        schema_version="1.1",
+        artifact_kind="profile",
         generated_at_utc="2026-02-27T00:00:00+00:00",
         input_path="/tmp/jobs.parquet",
         row_count_raw=1,
@@ -399,3 +419,111 @@ def test_cli_eda_generate_invalid_quality_weight_returns_config_error(
         ]
     )
     assert code == 2
+
+
+def test_cli_eda_diff(sample_parquet: Path, tmp_path: Path, capsys) -> None:
+    baseline_dir = tmp_path / "baseline"
+    candidate_dir = tmp_path / "candidate"
+    diff_dir = tmp_path / "diff"
+    generate_eda_artifacts(input_parquet=sample_parquet, output_dir=baseline_dir)
+    generate_eda_artifacts(input_parquet=sample_parquet, output_dir=candidate_dir)
+
+    code = main(
+        [
+            "eda",
+            "diff",
+            "--baseline-dir",
+            str(baseline_dir),
+            "--candidate-dir",
+            str(candidate_dir),
+            "--output-dir",
+            str(diff_dir),
+        ]
+    )
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert Path(payload["manifest"]).exists()
+    assert Path(payload["diff_json"]).exists()
+
+
+def test_cli_eda_gate_passes_without_failures(sample_parquet: Path, tmp_path: Path) -> None:
+    candidate_dir = tmp_path / "candidate"
+    generate_eda_artifacts(input_parquet=sample_parquet, output_dir=candidate_dir)
+
+    code = main(
+        [
+            "eda",
+            "gate",
+            "--candidate-dir",
+            str(candidate_dir),
+        ]
+    )
+    assert code == 0
+
+
+def test_cli_eda_gate_fails_with_baseline_drift(tmp_path: Path) -> None:
+    baseline_parquet = tmp_path / "baseline.parquet"
+    candidate_parquet = tmp_path / "candidate.parquet"
+
+    pl.DataFrame(
+        {
+            "id": ["1", "2"],
+            "source": ["lever", "lever"],
+            "title": ["Engineer", "Engineer"],
+            "company": ["A", "A"],
+            "location_raw": ["Remote", "Remote"],
+            "remote_flag": [True, True],
+            "description_text": ["x", "x"],
+            "apply_url": ["u1", "u2"],
+            "posted_at": ["2026-01-01", "2026-01-02"],
+            "salary_min": [100000.0, 120000.0],
+            "salary_max": [150000.0, 170000.0],
+        }
+    ).write_parquet(baseline_parquet)
+
+    pl.DataFrame(
+        {
+            "id": ["1", "2"],
+            "source": ["lever", "lever"],
+            "title": ["Engineer", "Engineer"],
+            "company": ["A", "A"],
+            "location_raw": ["Unknown", "Unknown"],
+            "remote_flag": [False, False],
+            "description_text": ["x", "x"],
+            "apply_url": ["u1", "u2"],
+            "posted_at": ["2026-01-01", "2026-01-02"],
+            "salary_min": [250000.0, 280000.0],
+            "salary_max": [300000.0, 320000.0],
+        }
+    ).write_parquet(candidate_parquet)
+
+    baseline_dir = tmp_path / "baseline_artifacts"
+    candidate_dir = tmp_path / "candidate_artifacts"
+    generate_eda_artifacts(input_parquet=baseline_parquet, output_dir=baseline_dir)
+    generate_eda_artifacts(input_parquet=candidate_parquet, output_dir=candidate_dir)
+
+    rules_file = tmp_path / "rules.toml"
+    rules_file.write_text(
+        """
+[drift]
+numeric_warn_psi = 0.01
+numeric_fail_psi = 0.02
+categorical_warn_jsd = 0.01
+categorical_fail_jsd = 0.02
+""".strip(),
+        encoding="utf-8",
+    )
+
+    code = main(
+        [
+            "eda",
+            "gate",
+            "--candidate-dir",
+            str(candidate_dir),
+            "--baseline-dir",
+            str(baseline_dir),
+            "--rules-file",
+            str(rules_file),
+        ]
+    )
+    assert code == 1

@@ -27,11 +27,17 @@ def test_build_eda_profile_sections(sample_parquet: Path) -> None:
         "temporal",
         "diagnostics",
         "findings",
+        "findings_by_source",
     } == set(result.summary.keys())
 
     assert "column_profile" in result.tables
     assert "null_percentages" in result.tables
+    assert "numeric_quantiles" in result.tables
+    assert "categorical_distribution" in result.tables
     assert result.tables["column_profile"].height > 0
+
+    assert isinstance(result.summary["quality"]["by_source"], list)
+    assert isinstance(result.summary["consistency"]["by_source"], list)
 
 
 def test_build_eda_profile_detects_salary_inversions(tmp_path: Path) -> None:
@@ -41,6 +47,7 @@ def test_build_eda_profile_detects_salary_inversions(tmp_path: Path) -> None:
             "id": ["1"],
             "title": ["Engineer"],
             "company": ["A"],
+            "source": ["lever"],
             "location_raw": ["Remote"],
             "remote_flag": [True],
             "description_text": ["Python"],
@@ -62,6 +69,9 @@ def test_build_eda_profile_detects_salary_inversions(tmp_path: Path) -> None:
     assert result.summary["consistency"]["salary_min_gt_salary_max"]["count"] == 1
     severities = [item["severity"] for item in result.summary["findings"]]
     assert "P0" in severities
+
+    source_severities = [item["severity"] for item in result.summary["findings_by_source"]]
+    assert "P0" in source_severities
 
 
 def test_build_eda_profile_invalid_quality_config_raises(sample_parquet: Path) -> None:

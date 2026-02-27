@@ -82,6 +82,10 @@ def build_eda_profile(
 
     column_profile = _build_column_profile(raw_df)
     source_profile = _build_source_profile(raw_df, runtime_df)
+    quality_by_source = _build_quality_by_source(
+        runtime_df=runtime_df,
+        effective_weights=quality_payload["effective_weights"],
+    )
 
     key_fields_runtime = _key_field_completeness(
         runtime_df,
@@ -137,19 +141,24 @@ def build_eda_profile(
         "profile": quality_payload["profile"],
         "effective_weights": quality_payload["effective_weights"],
         "top_null_percentages": quality_top_null,
+        "by_source": quality_by_source,
     }
+
+    consistency_by_source = _build_consistency_by_source(raw_df=raw_df, runtime_df=runtime_df)
 
     summary: dict[str, Any] = {
         "shape": shape,
         "quality": quality_summary,
         "completeness": completeness,
         "distributions": distributions,
-        "consistency": consistency,
+        "consistency": {**consistency, "by_source": consistency_by_source},
         "temporal": temporal,
         "diagnostics": diagnostics,
         "findings": [],
+        "findings_by_source": [],
     }
     summary["findings"] = _build_findings(summary)
+    summary["findings_by_source"] = _build_source_findings(summary)
 
     tables = {
         "null_percentages": pl.DataFrame(
@@ -171,6 +180,10 @@ def build_eda_profile(
         ),
         "top_values_location": _distribution_table(
             distributions["top_locations_runtime"], value_column="location"
+        ),
+        "numeric_quantiles": _build_numeric_quantiles_table(runtime_df=runtime_df),
+        "categorical_distribution": _build_categorical_distribution_table(
+            runtime_df=runtime_df, columns=("source", "remote", "location", "company")
         ),
     }
 
@@ -442,6 +455,269 @@ def _build_source_profile(raw_df: pl.DataFrame, runtime_df: pl.DataFrame) -> pl.
     )
 
 
+def _build_quality_by_source(
+    runtime_df: pl.DataFrame, effective_weights: Mapping[str, float]
+) -> list[dict[str, Any]]:
+    if "source" not in runtime_df.columns or runtime_df.height == 0:
+        return []
+
+    source_df = runtime_df.with_columns(
+        pl.col("source").cast(pl.String, strict=False).fill_null("<null>").alias("source")
+    )
+    sources = (
+        source_df.select("source")
+        .unique()
+        .sort("source")
+        .to_series()
+        .to_list()
+    )
+
+    weights = dict(sorted((str(k), float(v)) for k, v in effective_weights.items()))
+    total_weight = sum(weights.values()) if weights else 0.0
+
+    rows: list[dict[str, Any]] = []
+    for source in sources:
+        subset = source_df.filter(pl.col("source") == source)
+        row_count = subset.height
+        if row_count == 0:
+            continue
+
+        null_pct_by_field: dict[str, float] = {}
+        for field, weight in weights.items():
+            if weight <= 0:
+                continue
+            if field not in subset.columns:
+                null_pct_by_field[field] = 100.0
+                continue
+            null_count = int(subset.select(pl.col(field).is_null().sum()).item())
+            null_pct_by_field[field] = (null_count / row_count) * 100.0
+
+        weighted_null = 0.0
+        if total_weight > 0:
+            weighted_null = sum(
+                weights[field] * null_pct_by_field.get(field, 100.0) for field in weights
+            ) / total_weight
+        score_proxy = max(0.0, min(100.0, 100.0 - weighted_null))
+
+        key_nulls = [
+            {"field": field, "null_pct": _round4(null_pct)}
+            for field, null_pct in sorted(
+                null_pct_by_field.items(), key=lambda item: item[1], reverse=True
+            )[:3]
+        ]
+        rows.append(
+            {
+                "source": str(source),
+                "rows_runtime": row_count,
+                "score_proxy": _round4(score_proxy),
+                "weighted_null_percent_proxy": _round4(weighted_null),
+                "key_nulls": key_nulls,
+            }
+        )
+
+    return sorted(rows, key=lambda item: (-item["rows_runtime"], item["source"]))
+
+
+def _build_consistency_by_source(
+    raw_df: pl.DataFrame,
+    runtime_df: pl.DataFrame,
+) -> list[dict[str, Any]]:
+    if "source" not in raw_df.columns and "source" not in runtime_df.columns:
+        return []
+
+    raw_by_source: dict[str, dict[str, Any]] = {}
+    if "source" in raw_df.columns:
+        raw_source = raw_df.with_columns(
+            pl.col("source").cast(pl.String, strict=False).fill_null("<null>").alias("source")
+        )
+        for source in raw_source.select("source").unique().sort("source").to_series().to_list():
+            subset = raw_source.filter(pl.col("source") == source)
+            rows_raw = subset.height
+            title_eq = 0
+            if "title" in subset.columns and "company" in subset.columns:
+                title_eq = subset.filter(
+                    pl.col("title").cast(pl.String, strict=False).str.strip_chars()
+                    == pl.col("company").cast(pl.String, strict=False).str.strip_chars()
+                ).height
+            raw_by_source[str(source)] = {
+                "rows_raw": rows_raw,
+                "title_equals_company_count": title_eq,
+                "title_equals_company_pct": _round4(
+                    0.0 if rows_raw == 0 else (title_eq / rows_raw) * 100.0
+                ),
+            }
+
+    runtime_by_source: dict[str, dict[str, Any]] = {}
+    if "source" in runtime_df.columns:
+        runtime_source = runtime_df.with_columns(
+            pl.col("source").cast(pl.String, strict=False).fill_null("<null>").alias("source")
+        )
+        for source in (
+            runtime_source.select("source").unique().sort("source").to_series().to_list()
+        ):
+            subset = runtime_source.filter(pl.col("source") == source)
+            rows_runtime = subset.height
+            inversion = 0
+            if "salary_min" in subset.columns and "salary_max" in subset.columns:
+                inversion = subset.filter(
+                    pl.col("salary_min").is_not_null()
+                    & pl.col("salary_max").is_not_null()
+                    & (pl.col("salary_min") > pl.col("salary_max"))
+                ).height
+            runtime_by_source[str(source)] = {
+                "rows_runtime": rows_runtime,
+                "salary_min_gt_salary_max_count": inversion,
+                "salary_min_gt_salary_max_pct": _round4(
+                    0.0 if rows_runtime == 0 else (inversion / rows_runtime) * 100.0
+                ),
+            }
+
+    all_sources = sorted(set(raw_by_source.keys()) | set(runtime_by_source.keys()))
+    rows: list[dict[str, Any]] = []
+    for source in all_sources:
+        rows.append(
+            {
+                "source": source,
+                "rows_raw": int(raw_by_source.get(source, {}).get("rows_raw", 0)),
+                "rows_runtime": int(runtime_by_source.get(source, {}).get("rows_runtime", 0)),
+                "title_equals_company_count": int(
+                    raw_by_source.get(source, {}).get("title_equals_company_count", 0)
+                ),
+                "title_equals_company_pct": float(
+                    raw_by_source.get(source, {}).get("title_equals_company_pct", 0.0)
+                ),
+                "salary_min_gt_salary_max_count": int(
+                    runtime_by_source.get(source, {}).get("salary_min_gt_salary_max_count", 0)
+                ),
+                "salary_min_gt_salary_max_pct": float(
+                    runtime_by_source.get(source, {}).get("salary_min_gt_salary_max_pct", 0.0)
+                ),
+            }
+        )
+    return rows
+
+
+def _build_numeric_quantiles_table(runtime_df: pl.DataFrame) -> pl.DataFrame:
+    quantiles = [i / 10.0 for i in range(11)]
+    numeric_types = {
+        pl.Int8,
+        pl.Int16,
+        pl.Int32,
+        pl.Int64,
+        pl.UInt8,
+        pl.UInt16,
+        pl.UInt32,
+        pl.UInt64,
+        pl.Float32,
+        pl.Float64,
+    }
+
+    rows: list[dict[str, Any]] = []
+    for column, dtype in runtime_df.schema.items():
+        if dtype not in numeric_types:
+            continue
+        non_null = int(runtime_df.select(pl.col(column).is_not_null().sum()).item())
+        if non_null == 0:
+            for q in quantiles:
+                rows.append(
+                    {
+                        "column": column,
+                        "quantile": _round4(q),
+                        "value": None,
+                        "non_null_count": non_null,
+                    }
+                )
+            continue
+        for q in quantiles:
+            value = runtime_df.select(
+                pl.col(column).cast(pl.Float64, strict=False).quantile(q).alias("v")
+            ).item()
+            rows.append(
+                {
+                    "column": column,
+                    "quantile": _round4(q),
+                    "value": None if value is None else float(value),
+                    "non_null_count": non_null,
+                }
+            )
+
+    if not rows:
+        return pl.DataFrame(
+            schema={
+                "column": pl.String,
+                "quantile": pl.Float64,
+                "value": pl.Float64,
+                "non_null_count": pl.Int64,
+            }
+        )
+    return pl.DataFrame(rows).sort(["column", "quantile"])
+
+
+def _build_categorical_distribution_table(
+    runtime_df: pl.DataFrame, columns: tuple[str, ...], top_k: int = 50
+) -> pl.DataFrame:
+    rows: list[dict[str, Any]] = []
+    if runtime_df.height == 0:
+        return pl.DataFrame(
+            schema={
+                "column": pl.String,
+                "value": pl.String,
+                "count": pl.Int64,
+                "pct": pl.Float64,
+            }
+        )
+
+    total_rows = runtime_df.height
+    for column in columns:
+        if column not in runtime_df.columns:
+            continue
+        grouped = (
+            runtime_df.with_columns(
+                pl.col(column)
+                .cast(pl.String, strict=False)
+                .fill_null("<null>")
+                .alias(column)
+            )
+            .group_by(column)
+            .len()
+            .sort("len", descending=True)
+        )
+        head = grouped.head(top_k)
+        head_rows = head.to_dicts()
+        head_count = sum(int(item["len"]) for item in head_rows)
+        for item in head_rows:
+            count = int(item["len"])
+            rows.append(
+                {
+                    "column": column,
+                    "value": str(item[column]),
+                    "count": count,
+                    "pct": _round4((count / total_rows) * 100.0),
+                }
+            )
+        other_count = max(0, total_rows - head_count)
+        if other_count > 0:
+            rows.append(
+                {
+                    "column": column,
+                    "value": "__other__",
+                    "count": other_count,
+                    "pct": _round4((other_count / total_rows) * 100.0),
+                }
+            )
+
+    if not rows:
+        return pl.DataFrame(
+            schema={
+                "column": pl.String,
+                "value": pl.String,
+                "count": pl.Int64,
+                "pct": pl.Float64,
+            }
+        )
+    return pl.DataFrame(rows).sort(["column", "count"], descending=[False, True])
+
+
 def _key_field_completeness(df: pl.DataFrame, fields: list[str]) -> dict[str, dict[str, float]]:
     rows = df.height
     out: dict[str, dict[str, float]] = {}
@@ -611,6 +887,86 @@ def _build_findings(summary: Mapping[str, Any]) -> list[dict[str, Any]]:
     return sorted(
         findings,
         key=lambda item: (_SEVERITY_RANK.get(item["severity"], 99), item["title"]),
+    )
+
+
+def _build_source_findings(summary: Mapping[str, Any]) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    quality_rows = {
+        str(item["source"]): item for item in summary.get("quality", {}).get("by_source", [])
+    }
+    consistency_rows = {
+        str(item["source"]): item
+        for item in summary.get("consistency", {}).get("by_source", [])
+    }
+
+    all_sources = sorted(set(quality_rows.keys()) | set(consistency_rows.keys()))
+    for source in all_sources:
+        quality_row = quality_rows.get(source, {})
+        consistency_row = consistency_rows.get(source, {})
+        score = float(quality_row.get("score_proxy", 100.0))
+        if score < 90.0:
+            findings.append(
+                {
+                    "severity": "P1",
+                    "source": source,
+                    "metric": "quality.score_proxy",
+                    "title": "Low source quality score",
+                    "detail": f"source={source} score_proxy={_round4(score)} below 90.",
+                    "recommendation": "Prioritize missing high-weight fields for this source.",
+                }
+            )
+        elif score < 95.0:
+            findings.append(
+                {
+                    "severity": "P2",
+                    "source": source,
+                    "metric": "quality.score_proxy",
+                    "title": "Source quality below target",
+                    "detail": f"source={source} score_proxy={_round4(score)} below 95.",
+                    "recommendation": "Review weighted nulls and extraction quality for this source.",
+                }
+            )
+
+        salary_pct = float(consistency_row.get("salary_min_gt_salary_max_pct", 0.0))
+        salary_count = int(consistency_row.get("salary_min_gt_salary_max_count", 0))
+        if salary_count > 0:
+            findings.append(
+                {
+                    "severity": "P0",
+                    "source": source,
+                    "metric": "consistency.salary_min_gt_salary_max",
+                    "title": "Invalid salary ranges in source",
+                    "detail": (
+                        f"source={source} has {salary_count} rows with salary_min > salary_max "
+                        f"({salary_pct}%)."
+                    ),
+                    "recommendation": "Fix salary parsing and normalization for this source.",
+                }
+            )
+
+        title_pct = float(consistency_row.get("title_equals_company_pct", 0.0))
+        if title_pct >= 5.0:
+            findings.append(
+                {
+                    "severity": "P1",
+                    "source": source,
+                    "metric": "consistency.title_equals_company",
+                    "title": "Title/company contamination in source",
+                    "detail": (
+                        f"source={source} has title_equals_company={_round4(title_pct)}%."
+                    ),
+                    "recommendation": "Apply source-specific title cleanup rules.",
+                }
+            )
+
+    return sorted(
+        findings,
+        key=lambda item: (
+            _SEVERITY_RANK.get(item["severity"], 99),
+            str(item.get("source", "")),
+            item["title"],
+        ),
     )
 
 

@@ -55,6 +55,7 @@ nav:
           - CLI: reference/cli.md
           - Runtime API: reference/runtime-api.md
           - Pipeline Config Schema: reference/pipeline-config-schema.md
+          - EDA Rules Schema: reference/eda-rules-schema.md
           - Plugin Manifest Schema: reference/plugin-manifest-schema.md
           - Stage Contracts: reference/stage-contracts.md
           - Error Model: reference/error-model.md

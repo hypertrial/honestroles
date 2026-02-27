@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from honestroles.eda import generate_eda_artifacts, load_eda_artifacts
+from honestroles.eda import (
+    generate_eda_artifacts,
+    generate_eda_diff_artifacts,
+    load_eda_artifacts,
+)
 from honestroles.errors import ConfigValidationError
 
 
@@ -17,7 +21,9 @@ def test_generate_eda_artifacts_and_load(sample_parquet: Path, tmp_path: Path) -
         top_k=5,
     )
 
-    assert manifest.schema_version == "1.0"
+    assert manifest.schema_version == "1.1"
+    assert manifest.artifact_kind == "profile"
+    assert manifest.rules_context is not None
     assert (output_dir / "manifest.json").exists()
     assert (output_dir / "summary.json").exists()
     assert (output_dir / "report.md").exists()
@@ -30,6 +36,8 @@ def test_generate_eda_artifacts_and_load(sample_parquet: Path, tmp_path: Path) -
         "tables/top_values_company.parquet",
         "tables/top_values_title.parquet",
         "tables/top_values_location.parquet",
+        "tables/numeric_quantiles.parquet",
+        "tables/categorical_distribution.parquet",
     ]
     for rel in expected_tables:
         assert (output_dir / rel).exists()
@@ -46,7 +54,33 @@ def test_generate_eda_artifacts_and_load(sample_parquet: Path, tmp_path: Path) -
 
     bundle = load_eda_artifacts(output_dir)
     assert bundle.manifest.row_count_raw == 3
+    assert bundle.summary is not None
     assert bundle.summary["shape"]["runtime"]["rows"] == 3
+
+
+def test_generate_eda_diff_artifacts(sample_parquet: Path, tmp_path: Path) -> None:
+    baseline_dir = tmp_path / "baseline"
+    candidate_dir = tmp_path / "candidate"
+    diff_dir = tmp_path / "diff"
+
+    generate_eda_artifacts(input_parquet=sample_parquet, output_dir=baseline_dir)
+    generate_eda_artifacts(input_parquet=sample_parquet, output_dir=candidate_dir)
+
+    manifest = generate_eda_diff_artifacts(
+        baseline_dir=baseline_dir,
+        candidate_dir=candidate_dir,
+        output_dir=diff_dir,
+    )
+
+    assert manifest.artifact_kind == "diff"
+    assert manifest.schema_version == "1.1"
+    assert (diff_dir / "diff.json").exists()
+    assert (diff_dir / "tables" / "drift_metrics.parquet").exists()
+
+    bundle = load_eda_artifacts(diff_dir)
+    assert bundle.diff is not None
+    assert "shape_diff" in bundle.diff
+    assert "gate_evaluation" in bundle.diff
 
 
 def test_load_eda_artifacts_requires_manifest(tmp_path: Path) -> None:

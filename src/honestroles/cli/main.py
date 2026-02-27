@@ -10,8 +10,12 @@ from pathlib import Path
 
 from honestroles.config import load_pipeline_config
 from honestroles.eda import (
+    build_eda_diff,
+    evaluate_eda_gate,
     generate_eda_artifacts,
+    generate_eda_diff_artifacts,
     load_eda_artifacts,
+    load_eda_rules,
     parse_quality_weight_overrides,
 )
 from honestroles.errors import ConfigValidationError, HonestRolesError, StageExecutionError
@@ -80,14 +84,35 @@ def build_parser() -> argparse.ArgumentParser:
     eda_generate.add_argument("--quality-weight", action="append", default=[])
     eda_generate.add_argument("--top-k", type=int, default=10)
     eda_generate.add_argument("--max-rows", type=int, default=None)
+    eda_generate.add_argument("--rules-file", default=None)
+
+    eda_diff = eda_sub.add_parser(
+        "diff",
+        help="Compare baseline and candidate EDA artifacts and emit diff artifacts",
+    )
+    eda_diff.add_argument("--baseline-dir", required=True)
+    eda_diff.add_argument("--candidate-dir", required=True)
+    eda_diff.add_argument("--output-dir", default="dist/eda/diff")
+    eda_diff.add_argument("--rules-file", default=None)
 
     eda_dashboard = eda_sub.add_parser(
         "dashboard",
         help="Launch Streamlit dashboard for previously generated EDA artifacts",
     )
     eda_dashboard.add_argument("--artifacts-dir", required=True)
+    eda_dashboard.add_argument("--diff-dir", default=None)
     eda_dashboard.add_argument("--host", default="127.0.0.1")
     eda_dashboard.add_argument("--port", type=int, default=8501)
+
+    eda_gate = eda_sub.add_parser(
+        "gate",
+        help="Evaluate EDA gate policies for candidate artifacts",
+    )
+    eda_gate.add_argument("--candidate-dir", required=True)
+    eda_gate.add_argument("--baseline-dir", default=None)
+    eda_gate.add_argument("--rules-file", default=None)
+    eda_gate.add_argument("--fail-on", default=None)
+    eda_gate.add_argument("--warn-on", default=None)
 
     return parser
 
@@ -150,6 +175,7 @@ def _handle_eda_generate(args: argparse.Namespace) -> int:
         field_weights=parse_quality_weight_overrides(args.quality_weight),
         top_k=args.top_k,
         max_rows=args.max_rows,
+        rules_file=args.rules_file,
     )
     artifacts_dir = Path(args.output_dir).expanduser().resolve()
     print(
@@ -167,8 +193,41 @@ def _handle_eda_generate(args: argparse.Namespace) -> int:
     return _EXIT_OK
 
 
+def _handle_eda_diff(args: argparse.Namespace) -> int:
+    manifest = generate_eda_diff_artifacts(
+        baseline_dir=args.baseline_dir,
+        candidate_dir=args.candidate_dir,
+        output_dir=args.output_dir,
+        rules_file=args.rules_file,
+    )
+    artifacts_dir = Path(args.output_dir).expanduser().resolve()
+    print(
+        json.dumps(
+            {
+                "diff_dir": str(artifacts_dir),
+                "manifest": str(artifacts_dir / "manifest.json"),
+                "diff_json": str(artifacts_dir / manifest.files["diff_json"]),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return _EXIT_OK
+
+
 def _handle_eda_dashboard(args: argparse.Namespace) -> int:
     bundle = load_eda_artifacts(args.artifacts_dir)
+    if bundle.summary is None:
+        raise ConfigValidationError(
+            "eda dashboard requires a profile artifacts directory for --artifacts-dir"
+        )
+    diff_bundle = None
+    if args.diff_dir is not None:
+        diff_bundle = load_eda_artifacts(args.diff_dir)
+        if diff_bundle.diff is None:
+            raise ConfigValidationError(
+                "eda dashboard --diff-dir must reference diff artifacts"
+            )
     if importlib.util.find_spec("streamlit") is None:
         raise ConfigValidationError(
             "streamlit is required for 'honestroles eda dashboard'; install with "
@@ -190,8 +249,40 @@ def _handle_eda_dashboard(args: argparse.Namespace) -> int:
         "--artifacts-dir",
         str(bundle.artifacts_dir),
     ]
+    if diff_bundle is not None:
+        cmd.extend(["--diff-dir", str(diff_bundle.artifacts_dir)])
     completed = subprocess.run(cmd, check=False)
     return _EXIT_OK if completed.returncode == 0 else _EXIT_GENERIC
+
+
+def _handle_eda_gate(args: argparse.Namespace) -> int:
+    candidate_bundle = load_eda_artifacts(args.candidate_dir)
+    if candidate_bundle.summary is None:
+        raise ConfigValidationError(
+            "eda gate --candidate-dir must reference profile artifacts"
+        )
+    rules = load_eda_rules(
+        rules_file=args.rules_file,
+        fail_on=args.fail_on,
+        warn_on=args.warn_on,
+    )
+
+    if args.baseline_dir:
+        diff_payload, _, _, _ = build_eda_diff(
+            baseline_dir=args.baseline_dir,
+            candidate_dir=args.candidate_dir,
+            rules=rules,
+        )
+        gate_payload = diff_payload["gate_evaluation"]
+    else:
+        gate_payload = evaluate_eda_gate(
+            candidate_summary=candidate_bundle.summary,
+            rules=rules,
+            diff_payload=None,
+        )
+
+    print(json.dumps(gate_payload, indent=2, sort_keys=True))
+    return _EXIT_OK if gate_payload["status"] == "pass" else _EXIT_GENERIC
 
 
 def _replace_text(path: Path, needle: str, replacement: str) -> None:
@@ -271,8 +362,12 @@ def main(argv: list[str] | None = None) -> int:
             return _handle_scaffold_plugin(args)
         if args.command == "eda" and args.eda_command == "generate":
             return _handle_eda_generate(args)
+        if args.command == "eda" and args.eda_command == "diff":
+            return _handle_eda_diff(args)
         if args.command == "eda" and args.eda_command == "dashboard":
             return _handle_eda_dashboard(args)
+        if args.command == "eda" and args.eda_command == "gate":
+            return _handle_eda_gate(args)
     except ConfigValidationError as exc:
         print(str(exc), file=sys.stderr)
         return _EXIT_CONFIG

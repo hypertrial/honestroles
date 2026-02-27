@@ -311,3 +311,71 @@ def test_docs_eda_generate_snippet(tmp_path: Path, capsys) -> None:
     assert Path(payload["manifest"]).exists()
     assert Path(payload["summary"]).exists()
     assert Path(payload["report"]).exists()
+
+
+def test_docs_eda_diff_and_gate_snippet(tmp_path: Path, capsys) -> None:
+    baseline_input = tmp_path / "jobs_baseline.parquet"
+    candidate_input = tmp_path / "jobs_candidate.parquet"
+    baseline_dir = tmp_path / "baseline_eda"
+    candidate_dir = tmp_path / "candidate_eda"
+    diff_dir = tmp_path / "diff_eda"
+
+    _write_sample_parquet(baseline_input)
+    _write_sample_parquet(candidate_input)
+
+    gen_base_code = main(
+        [
+            "eda",
+            "generate",
+            "--input-parquet",
+            str(baseline_input),
+            "--output-dir",
+            str(baseline_dir),
+        ]
+    )
+    assert gen_base_code == 0
+    _ = capsys.readouterr()
+
+    gen_candidate_code = main(
+        [
+            "eda",
+            "generate",
+            "--input-parquet",
+            str(candidate_input),
+            "--output-dir",
+            str(candidate_dir),
+        ]
+    )
+    assert gen_candidate_code == 0
+    _ = capsys.readouterr()
+
+    diff_code = main(
+        [
+            "eda",
+            "diff",
+            "--baseline-dir",
+            str(baseline_dir),
+            "--candidate-dir",
+            str(candidate_dir),
+            "--output-dir",
+            str(diff_dir),
+        ]
+    )
+    assert diff_code == 0
+    diff_payload = json.loads(capsys.readouterr().out)
+    assert Path(diff_payload["diff_json"]).exists()
+
+    gate_code = main(
+        [
+            "eda",
+            "gate",
+            "--candidate-dir",
+            str(candidate_dir),
+            "--baseline-dir",
+            str(baseline_dir),
+        ]
+    )
+    assert gate_code == 0
+    gate_payload = json.loads(capsys.readouterr().out)
+    assert "status" in gate_payload
+    assert "evaluated_rules" in gate_payload

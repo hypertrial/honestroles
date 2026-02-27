@@ -37,8 +37,18 @@ def test_render_report_markdown_orders_findings_by_severity() -> None:
                 "recommendation": "first rec",
             },
         ],
+        "findings_by_source": [
+            {
+                "severity": "P1",
+                "source": "lever",
+                "title": "Source issue",
+                "detail": "source detail",
+                "recommendation": "source rec",
+            }
+        ],
     }
 
     report = render_report_markdown(summary)
     assert "# HonestRoles EDA Report" in report
     assert report.index("**P0**") < report.index("**P2**")
+    assert "## Source Findings" in report

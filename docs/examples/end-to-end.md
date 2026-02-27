@@ -21,6 +21,8 @@ $ honestroles run --pipeline-config examples/sample_pipeline.toml --plugins exam
 $ python examples/run_runtime.py
 $ honestroles eda generate --input-parquet examples/jobs_sample.parquet --output-dir dist/eda/latest
 $ cat dist/eda/latest/report.md
+$ honestroles eda diff --baseline-dir dist/eda/latest --candidate-dir dist/eda/latest --output-dir dist/eda/diff
+$ honestroles eda gate --candidate-dir dist/eda/latest --baseline-dir dist/eda/latest
 ```
 
 ## Validate Inputs

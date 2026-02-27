@@ -61,6 +61,25 @@ def render_report_markdown(summary: Mapping[str, Any]) -> str:
             )
             lines.append(f"  - Recommendation: {finding['recommendation']}")
 
+    lines.extend(["", "## Source Findings"])
+    source_findings = sorted(
+        list(summary.get("findings_by_source", [])),
+        key=lambda item: (
+            _SEVERITY_RANK.get(item.get("severity", "P2"), 99),
+            item.get("source", ""),
+            item.get("title", ""),
+        ),
+    )
+    if not source_findings:
+        lines.append("- No source-attributed findings.")
+    else:
+        for finding in source_findings:
+            lines.append(
+                f"- **{finding['severity']}** source=`{finding['source']}` "
+                f"`{finding['title']}`: {finding['detail']}"
+            )
+            lines.append(f"  - Recommendation: {finding['recommendation']}")
+
     lines.extend(
         [
             "",

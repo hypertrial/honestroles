@@ -16,6 +16,8 @@ Available commands:
 - `report-quality`
 - `scaffold-plugin`
 - `eda generate`
+- `eda diff`
+- `eda gate`
 - `eda dashboard`
 
 ## Command Matrix
@@ -27,15 +29,17 @@ Available commands:
 | `honestroles config validate` | `--pipeline` | Validates pipeline config | Normalized JSON config |
 | `honestroles report-quality` | `--pipeline-config`, optional `--plugins` | Runs runtime and computes quality report | JSON quality summary |
 | `honestroles scaffold-plugin` | `--name`, optional `--output-dir` | Copies bundled plugin template | JSON scaffold path + package name |
-| `honestroles eda generate` | `--input-parquet`, optional `--output-dir`, `--quality-profile`, repeated `--quality-weight`, `--top-k`, `--max-rows` | Builds deterministic EDA artifacts (`summary.json`, tables, figures, report) | JSON artifact locations |
-| `honestroles eda dashboard` | `--artifacts-dir`, optional `--host`, `--port` | Launches Streamlit view over generated artifacts | Process exit code |
+| `honestroles eda generate` | `--input-parquet`, optional `--output-dir`, `--quality-profile`, repeated `--quality-weight`, `--top-k`, `--max-rows`, optional `--rules-file` | Builds deterministic profile artifacts (`summary.json`, tables, figures, report) | JSON artifact locations |
+| `honestroles eda diff` | `--baseline-dir`, `--candidate-dir`, optional `--output-dir`, optional `--rules-file` | Compares two profile artifact dirs and writes diff artifacts (`diff.json`, drift tables) | JSON diff artifact locations |
+| `honestroles eda gate` | `--candidate-dir`, optional `--baseline-dir`, optional `--rules-file`, optional `--fail-on`, optional `--warn-on` | Evaluates gate policy and drift thresholds for CI | JSON gate payload + exit status |
+| `honestroles eda dashboard` | `--artifacts-dir`, optional `--diff-dir`, optional `--host`, `--port` | Launches Streamlit artifact viewer | Process exit code |
 
 ## Exit Codes
 
 | Exit code | Meaning |
 | --- | --- |
 | `0` | Success |
-| `1` | Generic `HonestRolesError` |
+| `1` | Generic `HonestRolesError` or failed `eda gate` policy |
 | `2` | `ConfigValidationError` |
 | `3` | Plugin load/validation/execution failure |
 | `4` | `StageExecutionError` |
@@ -43,35 +47,11 @@ Available commands:
 ## Examples
 
 ```bash
-$ honestroles run --pipeline-config pipeline.toml --plugins plugins.toml
-$ honestroles plugins validate --manifest plugins.toml
-$ honestroles config validate --pipeline pipeline.toml
-$ honestroles report-quality --pipeline-config pipeline.toml
-$ honestroles scaffold-plugin --name my-plugin --output-dir .
-$ honestroles eda generate --input-parquet jobs_historical.parquet --output-dir dist/eda/latest
-$ honestroles eda dashboard --artifacts-dir dist/eda/latest --host 127.0.0.1 --port 8501
-```
-
-## `report-quality` Output
-
-`score_percent` uses profile-weighted null scoring.
-
-```json
-{
-  "row_count": 12345,
-  "score_percent": 78.4,
-  "profile": "core_fields_weighted",
-  "weighted_null_percent": 21.6,
-  "effective_weights": {
-    "apply_url": 2.5,
-    "company": 2.5,
-    "description_text": 3.0
-  },
-  "null_percentages": {
-    "apply_url": 0.0,
-    "salary_min": 100.0
-  }
-}
+$ honestroles eda generate --input-parquet jobs_historical.parquet --output-dir dist/eda/baseline
+$ honestroles eda generate --input-parquet jobs_historical_candidate.parquet --output-dir dist/eda/candidate
+$ honestroles eda diff --baseline-dir dist/eda/baseline --candidate-dir dist/eda/candidate --output-dir dist/eda/diff
+$ honestroles eda gate --candidate-dir dist/eda/candidate --baseline-dir dist/eda/baseline --rules-file eda-rules.toml
+$ honestroles eda dashboard --artifacts-dir dist/eda/candidate --diff-dir dist/eda/diff
 ```
 
 ## `eda generate` Output
@@ -82,5 +62,50 @@ $ honestroles eda dashboard --artifacts-dir dist/eda/latest --host 127.0.0.1 --p
   "manifest": "/abs/path/dist/eda/latest/manifest.json",
   "summary": "/abs/path/dist/eda/latest/summary.json",
   "report": "/abs/path/dist/eda/latest/report.md"
+}
+```
+
+## `eda diff` Output
+
+```json
+{
+  "diff_dir": "/abs/path/dist/eda/diff",
+  "manifest": "/abs/path/dist/eda/diff/manifest.json",
+  "diff_json": "/abs/path/dist/eda/diff/diff.json"
+}
+```
+
+## `eda gate` Output
+
+```json
+{
+  "status": "pass",
+  "severity_counts": {"P0": 0, "P1": 2, "P2": 1},
+  "failures": [],
+  "warnings": [
+    {
+      "type": "finding_count",
+      "severity": "P1",
+      "count": 2,
+      "threshold": 999999,
+      "detail": "P1 findings count is 2."
+    }
+  ],
+  "evaluated_rules": {
+    "gate": {
+      "fail_on": ["P0"],
+      "warn_on": ["P1"],
+      "max_p0": 0,
+      "max_p1": 999999
+    },
+    "drift": {
+      "numeric_warn_psi": 0.1,
+      "numeric_fail_psi": 0.25,
+      "categorical_warn_jsd": 0.1,
+      "categorical_fail_jsd": 0.2,
+      "columns_numeric": ["salary_min", "salary_max"],
+      "columns_categorical": ["source", "remote", "location", "company"]
+    }
+  }
 }
 ```

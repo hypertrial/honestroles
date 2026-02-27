@@ -49,6 +49,18 @@ Launch EDA dashboard (optional):
 $ honestroles eda dashboard --artifacts-dir dist/eda/latest --host 127.0.0.1 --port 8501
 ```
 
+Diff two EDA runs:
+
+```bash
+$ honestroles eda diff --baseline-dir dist/eda/baseline --candidate-dir dist/eda/candidate --output-dir dist/eda/diff
+```
+
+Evaluate CI gate policy:
+
+```bash
+$ honestroles eda gate --candidate-dir dist/eda/candidate --baseline-dir dist/eda/baseline --rules-file eda-rules.toml
+```
+
 Scaffold a plugin package:
 
 ```bash
