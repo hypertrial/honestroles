@@ -64,6 +64,16 @@ def test_clean_stage_strip_html_false_branch() -> None:
     assert out["description_text"].to_list()[0] == "python sql"
 
 
+def test_clean_stage_drop_null_titles_false_branch() -> None:
+    frame = _base_df().with_columns(pl.lit("").alias("title"))
+    out = clean_stage(
+        frame,
+        CleanStageOptions(strip_html=False, drop_null_titles=False),
+        _ctx(),
+    )
+    assert out.height == frame.height
+
+
 def test_clean_stage_wraps_generic_exception(monkeypatch) -> None:
     import honestroles.stages as stages_module
 
@@ -78,6 +88,14 @@ def test_clean_stage_wraps_generic_exception(monkeypatch) -> None:
 def test_apply_filter_options_remote_only_branch() -> None:
     out = _apply_filter_options(_base_df(), FilterStageOptions(remote_only=True))
     assert out.height == 1
+
+
+def test_apply_filter_options_ignores_blank_keyword() -> None:
+    out = _apply_filter_options(
+        _base_df(),
+        FilterStageOptions(required_keywords=("   ",)),
+    )
+    assert out.height == _base_df().height
 
 
 def test_filter_stage_wraps_generic_exception(monkeypatch) -> None:

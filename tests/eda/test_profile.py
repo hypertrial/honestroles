@@ -83,3 +83,33 @@ def test_build_eda_profile_invalid_quality_config_raises(sample_parquet: Path) -
             top_k=5,
             max_rows=None,
         )
+
+
+def test_build_eda_profile_rejects_invalid_top_k_and_max_rows(sample_parquet: Path) -> None:
+    with pytest.raises(ConfigValidationError, match="top_k"):
+        build_eda_profile(
+            input_parquet=sample_parquet,
+            quality_profile="core_fields_weighted",
+            field_weights={},
+            top_k=0,
+            max_rows=None,
+        )
+    with pytest.raises(ConfigValidationError, match="max_rows"):
+        build_eda_profile(
+            input_parquet=sample_parquet,
+            quality_profile="core_fields_weighted",
+            field_weights={},
+            top_k=1,
+            max_rows=0,
+        )
+
+
+def test_build_eda_profile_applies_max_rows(sample_parquet: Path) -> None:
+    result = build_eda_profile(
+        input_parquet=sample_parquet,
+        quality_profile="core_fields_weighted",
+        field_weights={},
+        top_k=3,
+        max_rows=1,
+    )
+    assert result.summary["shape"]["raw"]["rows"] == 1

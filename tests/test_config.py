@@ -3,8 +3,19 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from honestroles.config import load_pipeline_config, load_plugin_manifest
+from honestroles.config.models import (
+    FilterStageOptions,
+    InputAdapterFieldConfig,
+    InputAliasesConfig,
+    InputConfig,
+    OutputConfig,
+    PluginManifestConfig,
+    PluginSpecConfig,
+    RuntimeQualityConfig,
+)
 from honestroles.errors import ConfigValidationError
 
 
@@ -239,3 +250,62 @@ cast = "string"
     )
     with pytest.raises(ConfigValidationError):
         load_pipeline_config(path)
+
+
+def test_config_model_coercion_and_validation_branches() -> None:
+    assert InputAliasesConfig.model_validate({"location": [" location_raw "]}).location == (
+        "location_raw",
+    )
+    assert InputAliasesConfig.model_validate({"location": None}).location == ()
+    with pytest.raises((ValidationError, TypeError, ValueError)):
+        InputAliasesConfig.model_validate({"location": "location_raw"})
+    with pytest.raises((ValidationError, TypeError, ValueError)):
+        InputAliasesConfig.model_validate({"location": [1]})
+    with pytest.raises((ValidationError, TypeError, ValueError)):
+        InputAliasesConfig.model_validate({"location": [""]})
+    with pytest.raises((ValidationError, TypeError, ValueError)):
+        InputAliasesConfig.model_validate({"location": ["x", "x"]})
+
+    with pytest.raises(ValidationError):
+        InputAdapterFieldConfig.model_validate(
+            {"from": ["x"], "cast": "bool", "true_values": ["yes"], "false_values": ["yes"]}
+        )
+    with pytest.raises(ValidationError):
+        InputAdapterFieldConfig.model_validate(
+            {"from": ["x"], "cast": "float", "datetime_formats": ["%Y-%m-%d"]}
+        )
+    assert InputAdapterFieldConfig.model_validate(
+        {"from": ("x",), "cast": "string", "null_like": None}
+    ).from_ == ("x",)
+    assert InputAdapterFieldConfig.model_validate(
+        {"from": ["x"], "cast": "string", "null_like": ["na"]}
+    ).null_like == ("na",)
+    with pytest.raises((ValidationError, TypeError, ValueError)):
+        InputAdapterFieldConfig.model_validate({"from": "x", "cast": "string"})
+    with pytest.raises((ValidationError, TypeError, ValueError)):
+        InputAdapterFieldConfig.model_validate({"from": [1], "cast": "string"})
+    with pytest.raises((ValidationError, TypeError, ValueError)):
+        InputAdapterFieldConfig.model_validate({"from": [""], "cast": "string"})
+    with pytest.raises((ValidationError, TypeError, ValueError)):
+        InputAdapterFieldConfig.model_validate({"from": ["x", "x"], "cast": "string"})
+
+    with pytest.raises((ValidationError, TypeError, ValueError)):
+        InputConfig.model_validate({"kind": "parquet", "path": 123})
+    with pytest.raises((ValidationError, TypeError, ValueError)):
+        OutputConfig.model_validate({"path": 123})
+
+    with pytest.raises(ValidationError):
+        RuntimeQualityConfig.model_validate({"profile": "core_fields_weighted", "field_weights": {" ": 1.0}})
+
+    with pytest.raises(ValidationError):
+        PluginManifestConfig.model_validate(
+            {
+                "plugins": [
+                    {"name": "x", "kind": "filter", "callable": "a:b"},
+                    {"name": "x", "kind": "filter", "callable": "a:c"},
+                ]
+            }
+        )
+
+    assert isinstance(FilterStageOptions.model_validate({"required_keywords": ["python"]}), FilterStageOptions)
+    assert PluginSpecConfig.model_validate({"capabilities": ["a"]}).capabilities == ("a",)

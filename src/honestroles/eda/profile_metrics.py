@@ -185,8 +185,6 @@ def build_quality_by_source(
     for source in sources:
         subset = source_df.filter(pl.col("source") == source)
         row_count = subset.height
-        if row_count == 0:
-            continue
 
         null_pct_by_field: dict[str, float] = {}
         for field, weight in weights.items():

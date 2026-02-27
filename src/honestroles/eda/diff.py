@@ -355,8 +355,6 @@ def _cdf_from_quantile_curve(curve: list[tuple[float, float]], value: float) -> 
 
     for q_curr, v_curr in sorted_curve[1:]:
         if value < v_curr:
-            if v_curr == v_prev:
-                return float(q_curr)
             ratio = (value - v_prev) / (v_curr - v_prev)
             return float(q_prev + ratio * (q_curr - q_prev))
         q_prev, v_prev = q_curr, v_curr

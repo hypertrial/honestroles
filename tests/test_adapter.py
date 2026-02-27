@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import polars as pl
+import pytest
 
 from honestroles.config import InputAdapterConfig, InputAdapterFieldConfig
 from honestroles.errors import ConfigValidationError
@@ -10,6 +11,12 @@ from honestroles.io import (
     apply_source_adapter,
     infer_source_adapter,
     render_adapter_toml_fragment,
+)
+from honestroles.io.adapter import (
+    _coerce_adapter_config,
+    _name_score,
+    _parse_score,
+    _type_score,
 )
 
 
@@ -189,3 +196,121 @@ def test_render_adapter_toml_fragment() -> None:
     text = render_adapter_toml_fragment(cfg)
     assert "[input.adapter]" in text
     assert "[input.adapter.fields.location]" in text
+
+
+def test_render_adapter_toml_fragment_bool_and_date_defaults() -> None:
+    cfg = InputAdapterConfig(
+        enabled=True,
+        fields={
+            "remote": InputAdapterFieldConfig.model_validate({"from": ["remote_flag"], "cast": "bool"}),
+            "posted_at": InputAdapterFieldConfig.model_validate(
+                {"from": ["date_posted"], "cast": "date_string"}
+            ),
+        },
+    )
+    text = render_adapter_toml_fragment(cfg)
+    assert "true_values" in text
+    assert "datetime_formats" in text
+
+
+def test_apply_source_adapter_int_cast_and_unresolved_branch() -> None:
+    df = pl.DataFrame({"x": ["1", "bad"]})
+    cfg = InputAdapterConfig(
+        enabled=True,
+        fields={
+            "salary_min": InputAdapterFieldConfig.model_validate({"from": ["x"], "cast": "int"}),
+            "salary_max": InputAdapterFieldConfig.model_validate({"from": ["missing"], "cast": "int"}),
+        },
+    )
+    out, diagnostics = apply_source_adapter(df, cfg)
+    assert out["salary_min"].to_list() == [1, None]
+    assert "salary_max" in diagnostics["unresolved"]
+    assert diagnostics["coercion_errors"]["salary_min"] == 1
+
+
+def test_adapter_internal_scoring_helpers() -> None:
+    assert _name_score("location", "location") == 1.0
+    assert _name_score("location", "job_location") > 0.0
+    assert _name_score("location", "zzz") == 0.0
+    assert _type_score("bool", pl.Boolean) == 1.0
+    assert _type_score("bool", pl.Date) == 0.2
+    assert _type_score("float", pl.String) == 0.6
+    assert _type_score("float", pl.Date) == 0.2
+    assert _type_score("date_string", pl.String) == 0.8
+    assert _type_score("date_string", pl.Date) == 1.0
+    assert _type_score("string", pl.Int64) == 0.6
+    assert _name_score("remote", "__") == 0.0
+
+    sample = pl.DataFrame({"x": [None, None]})
+    assert _parse_score(sample, "x", "string") == 0.5
+
+
+def test_coerce_adapter_config_validation_errors() -> None:
+    assert _coerce_adapter_config(None).enabled is False
+    cfg = InputAdapterConfig(enabled=True)
+    assert _coerce_adapter_config(cfg).enabled is True
+
+    class _CfgLike:
+        def model_dump(self, mode: str = "python"):
+            return {"enabled": True, "fields": {}}
+
+    assert _coerce_adapter_config(_CfgLike()).enabled is True
+    assert _coerce_adapter_config({"enabled": True, "fields": {}}).enabled is True
+    with pytest.raises(TypeError):
+        _coerce_adapter_config(1)
+
+
+def test_apply_source_adapter_trim_and_conflict_noop_branches() -> None:
+    df = pl.DataFrame({"remote": [True], "loc_text": ["  Remote  "]})
+    cfg = InputAdapterConfig(
+        enabled=True,
+        fields={
+            "remote": InputAdapterFieldConfig.model_validate(
+                {"from": ["missing"], "cast": "bool"}
+            ),
+            "location": InputAdapterFieldConfig.model_validate(
+                {"from": ["loc_text"], "cast": "string", "trim": False}
+            ),
+        },
+    )
+    out, diagnostics = apply_source_adapter(df, cfg)
+    assert out["remote"].to_list() == [True]
+    assert out["location"].to_list() == ["  Remote  "]
+    assert diagnostics["conflicts"] == {}
+    assert diagnostics["unresolved"] == []
+
+
+def test_apply_source_adapter_records_null_like_hits() -> None:
+    df = pl.DataFrame({"location_raw": ["", "n/a", "Remote"]})
+    cfg = InputAdapterConfig(
+        enabled=True,
+        fields={
+            "location": InputAdapterFieldConfig.model_validate(
+                {"from": ["location_raw"], "cast": "string"}
+            )
+        },
+    )
+    _, diagnostics = apply_source_adapter(df, cfg)
+    assert diagnostics["null_like_hits"]["location"] == 2
+
+
+def test_infer_source_adapter_validates_more_thresholds() -> None:
+    df = pl.DataFrame({"a": [1]})
+    with pytest.raises(ConfigValidationError, match="top_candidates must be >= 1"):
+        infer_source_adapter(df, top_candidates=0)
+    with pytest.raises(ConfigValidationError, match="min_confidence must be between 0 and 1"):
+        infer_source_adapter(df, min_confidence=2.0)
+
+
+def test_apply_source_adapter_conflict_zero_path() -> None:
+    df = pl.DataFrame({"remote": [True], "remote_flag": ["true"]})
+    cfg = InputAdapterConfig(
+        enabled=True,
+        fields={
+            "remote": InputAdapterFieldConfig.model_validate(
+                {"from": ["remote_flag"], "cast": "bool"}
+            )
+        },
+    )
+    _, diagnostics = apply_source_adapter(df, cfg)
+    assert diagnostics["conflicts"] == {}

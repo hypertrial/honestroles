@@ -8,6 +8,7 @@ import pytest
 from honestroles.config import RuntimeQualityConfig
 from honestroles.errors import ConfigValidationError
 from honestroles.io import (
+    DataQualityAccumulator,
     _validate_read_query,
     _validate_table_name,
     build_data_quality_report,
@@ -175,3 +176,35 @@ def test_quality_report_missing_weighted_column_treated_as_fully_null() -> None:
     assert report.effective_weights["missing_col"] == 2.0
     assert report.weighted_null_percent == 87.5
     assert report.score_percent == 12.5
+
+
+def test_resolve_source_aliases_validation_errors() -> None:
+    frame = pl.DataFrame({"title": ["x"]})
+    resolved, diagnostics = resolve_source_aliases(frame, aliases=None)
+    assert resolved.height == 1
+    assert diagnostics["applied"] == {}
+    with pytest.raises(TypeError):
+        resolve_source_aliases(frame, aliases=1)
+    with pytest.raises(ConfigValidationError):
+        resolve_source_aliases(frame, aliases={"bad": ("x",)})
+    with pytest.raises(TypeError):
+        resolve_source_aliases(frame, aliases={"title": "x"})
+    with pytest.raises(TypeError):
+        resolve_source_aliases(frame, aliases={"title": (1,)})
+    resolved2, _ = resolve_source_aliases(frame, aliases={"title": ["alias_title"]})
+    assert resolved2.height == 1
+
+
+def test_quality_report_strict_profile_and_zero_total_weight_error() -> None:
+    frame = pl.DataFrame({"title": ["x"], "description_text": ["y"]})
+    strict = build_data_quality_report(
+        frame,
+        quality=RuntimeQualityConfig(profile="strict_recruiting"),
+    )
+    assert strict.profile == "strict_recruiting"
+
+    no_columns = pl.DataFrame([{}])
+    acc = DataQualityAccumulator(row_count=0, null_count_by_column={})
+    acc.update(no_columns)
+    with pytest.raises(ConfigValidationError, match="total weight must be positive"):
+        acc.finalize(quality=RuntimeQualityConfig(profile="equal_weight_all"))

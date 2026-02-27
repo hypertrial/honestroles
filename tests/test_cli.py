@@ -273,6 +273,48 @@ def test_cli_adapter_infer_invalid_thresholds_return_config_error(
     )
     assert code == 2
 
+    code = main(
+        [
+            "adapter",
+            "infer",
+            "--input-parquet",
+            str(sample_parquet),
+            "--top-candidates",
+            "0",
+        ]
+    )
+    assert code == 2
+
+    code = main(
+        [
+            "adapter",
+            "infer",
+            "--input-parquet",
+            str(sample_parquet),
+            "--min-confidence",
+            "2",
+        ]
+    )
+    assert code == 2
+
+
+def test_cli_adapter_infer_print_fragment(sample_parquet: Path, tmp_path: Path, capsys) -> None:
+    output_file = tmp_path / "adapter.toml"
+    code = main(
+        [
+            "adapter",
+            "infer",
+            "--input-parquet",
+            str(sample_parquet),
+            "--output-file",
+            str(output_file),
+            "--print",
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "[input.adapter]" in out
+
 
 def test_cli_template_resolution_packaged_fallback(monkeypatch) -> None:
     cli_main = _cli_main_module()
@@ -466,6 +508,113 @@ def test_cli_eda_dashboard_launches_streamlit(tmp_path: Path, monkeypatch) -> No
     assert "--artifacts-dir" in calls["cmd"]
 
 
+def test_cli_eda_dashboard_launches_streamlit_with_diff(tmp_path: Path, monkeypatch) -> None:
+    cli_main = _cli_main_module()
+    profile_manifest = EDAArtifactsManifest(
+        schema_version="1.1",
+        artifact_kind="profile",
+        generated_at_utc="2026-02-27T00:00:00+00:00",
+        input_path="/tmp/jobs.parquet",
+        row_count_raw=1,
+        row_count_runtime=1,
+        quality_profile="core_fields_weighted",
+        files={"summary_json": "summary.json", "report_md": "report.md"},
+    )
+    diff_manifest = EDAArtifactsManifest(
+        schema_version="1.1",
+        artifact_kind="diff",
+        generated_at_utc="2026-02-27T00:00:00+00:00",
+        input_path="/tmp/jobs.parquet",
+        row_count_raw=1,
+        row_count_runtime=1,
+        quality_profile="core_fields_weighted",
+        files={"diff_json": "diff.json"},
+    )
+    profile_bundle = EDAArtifactsBundle(artifacts_dir=tmp_path / "profile", manifest=profile_manifest, summary={})
+    diff_bundle = EDAArtifactsBundle(artifacts_dir=tmp_path / "diff", manifest=diff_manifest, diff={})
+
+    def fake_load(path):
+        return diff_bundle if Path(path) == diff_bundle.artifacts_dir else profile_bundle
+
+    monkeypatch.setattr(cli_main, "load_eda_artifacts", fake_load)
+    monkeypatch.setattr(cli_main.importlib.util, "find_spec", lambda _name: object())
+
+    calls: dict[str, list[str]] = {}
+
+    def fake_run(cmd, check=False):
+        calls["cmd"] = cmd
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+    monkeypatch.setattr(cli_main.subprocess, "run", fake_run)
+    code = cli_main.main(
+        [
+            "eda",
+            "dashboard",
+            "--artifacts-dir",
+            str(profile_bundle.artifacts_dir),
+            "--diff-dir",
+            str(diff_bundle.artifacts_dir),
+        ]
+    )
+    assert code == 0
+    assert "--diff-dir" in calls["cmd"]
+
+
+def test_cli_eda_dashboard_profile_and_diff_validation_errors(tmp_path: Path, monkeypatch) -> None:
+    cli_main = _cli_main_module()
+    profile_manifest = EDAArtifactsManifest(
+        schema_version="1.1",
+        artifact_kind="profile",
+        generated_at_utc="2026-02-27T00:00:00+00:00",
+        input_path="/tmp/jobs.parquet",
+        row_count_raw=1,
+        row_count_runtime=1,
+        quality_profile="core_fields_weighted",
+        files={"summary_json": "summary.json", "report_md": "report.md"},
+    )
+    diff_manifest = EDAArtifactsManifest(
+        schema_version="1.1",
+        artifact_kind="diff",
+        generated_at_utc="2026-02-27T00:00:00+00:00",
+        input_path="/tmp/jobs.parquet",
+        row_count_raw=1,
+        row_count_runtime=1,
+        quality_profile="core_fields_weighted",
+        files={"diff_json": "diff.json"},
+    )
+    bad_profile = EDAArtifactsBundle(artifacts_dir=tmp_path / "profile", manifest=profile_manifest, summary=None)
+    bad_diff = EDAArtifactsBundle(artifacts_dir=tmp_path / "diff", manifest=diff_manifest, diff=None)
+
+    monkeypatch.setattr(cli_main.importlib.util, "find_spec", lambda _name: object())
+    monkeypatch.setattr(cli_main.subprocess, "run", lambda cmd, check=False: subprocess.CompletedProcess(args=cmd, returncode=0))
+
+    monkeypatch.setattr(cli_main, "load_eda_artifacts", lambda _p: bad_profile)
+    code = cli_main.main(["eda", "dashboard", "--artifacts-dir", str(tmp_path / "profile")])
+    assert code == 2
+
+    def fake_load(path):
+        if Path(path) == bad_diff.artifacts_dir:
+            return bad_diff
+        return EDAArtifactsBundle(
+            artifacts_dir=tmp_path / "profile_ok",
+            manifest=profile_manifest,
+            summary={},
+        )
+
+    monkeypatch.setattr(cli_main, "load_eda_artifacts", fake_load)
+    code = cli_main.main(
+        [
+            "eda",
+            "dashboard",
+            "--artifacts-dir",
+            str(tmp_path / "profile_ok"),
+            "--diff-dir",
+            str(bad_diff.artifacts_dir),
+        ]
+    )
+    assert code == 2
+
+
 def test_cli_eda_generate_invalid_quality_weight_returns_config_error(
     sample_parquet: Path, tmp_path: Path
 ) -> None:
@@ -590,3 +739,42 @@ categorical_fail_jsd = 0.02
         ]
     )
     assert code == 1
+
+
+def test_cli_eda_gate_requires_profile_candidate(tmp_path: Path) -> None:
+    baseline_parquet = tmp_path / "baseline.parquet"
+    candidate_parquet = tmp_path / "candidate.parquet"
+    pl.DataFrame({"id": ["1"], "title": ["x"], "company": ["y"], "description_text": ["z"]}).write_parquet(
+        baseline_parquet
+    )
+    pl.DataFrame({"id": ["1"], "title": ["x"], "company": ["y"], "description_text": ["z"]}).write_parquet(
+        candidate_parquet
+    )
+    baseline_profile = tmp_path / "baseline_profile"
+    candidate_profile = tmp_path / "candidate_profile"
+    generate_eda_artifacts(input_parquet=baseline_parquet, output_dir=baseline_profile)
+    generate_eda_artifacts(input_parquet=candidate_parquet, output_dir=candidate_profile)
+    diff_candidate = tmp_path / "candidate_diff"
+    from honestroles.eda import generate_eda_diff_artifacts
+
+    generate_eda_diff_artifacts(
+        baseline_dir=baseline_profile,
+        candidate_dir=candidate_profile,
+        output_dir=diff_candidate,
+    )
+
+    code = main(["eda", "gate", "--candidate-dir", str(diff_candidate)])
+    assert code == 2
+
+
+def test_cli_scaffold_plugin_skips_rename_when_package_matches_template(tmp_path: Path) -> None:
+    code = main(
+        [
+            "scaffold-plugin",
+            "--name",
+            "honestroles-plugin-example",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+    assert code == 0
