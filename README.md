@@ -2,7 +2,19 @@
 
 HonestRoles is a deterministic, config-driven pipeline runtime for job data with Polars and explicit plugin manifests.
 
-## Install
+## Start With the App
+
+Use the HonestRoles app first: [honestroles.com](https://honestroles.com).
+
+- Launch app: [https://honestroles.com](https://honestroles.com)
+- App guide: [App Quickstart](https://honestroles.com/docs/app/get-started/)
+
+## Choose Your Path
+
+- App users: start in the browser at [honestroles.com](https://honestroles.com)
+- Developers and integrators: use the CLI/SDK sections below
+
+## Install (Developer)
 
 ```bash
 $ python -m venv .venv
@@ -11,7 +23,7 @@ $ python -m pip install --upgrade pip
 $ pip install honestroles
 ```
 
-## 5-Minute First Run
+## 5-Minute First Run (Developer)
 
 From the repository root:
 
@@ -51,7 +63,8 @@ print(result.application_plan[:3])
 
 ## Documentation
 
-- Site: https://hypertrial.github.io/honestroles/
+- App home: https://honestroles.com
+- Docs home: https://honestroles.com/docs/
 - Local docs source: `docs/`
 - Start here in docs: `docs/index.md`
 

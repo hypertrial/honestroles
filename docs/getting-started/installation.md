@@ -2,6 +2,8 @@
 
 Install HonestRoles in a virtual environment and verify the CLI is available.
 
+If you only need the hosted product experience, use the app directly at [https://honestroles.com](https://honestroles.com).
+
 ## When to use
 
 Use this page before running any pipeline.

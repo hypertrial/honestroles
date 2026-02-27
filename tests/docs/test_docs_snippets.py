@@ -9,6 +9,20 @@ from honestroles.cli.main import main
 from honestroles.plugins.registry import PluginRegistry
 
 
+def test_docs_home_surfaces_app_first_links() -> None:
+    root = Path(__file__).resolve().parents[2]
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    docs_home = (root / "docs" / "index.md").read_text(encoding="utf-8")
+    mkdocs_config = (root / "mkdocs.yml").read_text(encoding="utf-8")
+    pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert "https://honestroles.com" in readme
+    assert "https://honestroles.com" in docs_home
+    assert 'site_url: https://honestroles.com/docs/' in mkdocs_config
+    assert 'Documentation = "https://honestroles.com/docs/"' in pyproject
+    assert "App:" in mkdocs_config
+
+
 def _write_sample_parquet(path: Path) -> None:
     pl.DataFrame(
         {

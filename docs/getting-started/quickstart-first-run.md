@@ -2,6 +2,8 @@
 
 This workflow guarantees a successful first run from a clean checkout.
 
+Prefer the browser product? Start with [https://honestroles.com](https://honestroles.com).
+
 ## When to use
 
 Use this for your first end-to-end pipeline execution.

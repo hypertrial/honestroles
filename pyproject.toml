@@ -35,10 +35,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/hypertrial/honestroles"
+Homepage = "https://honestroles.com"
 Repository = "https://github.com/hypertrial/honestroles"
 Issues = "https://github.com/hypertrial/honestroles/issues"
-Documentation = "https://hypertrial.github.io/honestroles/"
+Documentation = "https://honestroles.com/docs/"
 
 [project.scripts]
 honestroles = "honestroles.cli.main:main"
