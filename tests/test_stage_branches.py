@@ -12,9 +12,10 @@ from honestroles.config.models import (
     MatchStageOptions,
     RateStageOptions,
 )
+from honestroles.domain import JobDataset
 from honestroles.errors import StageExecutionError
 from honestroles.plugins.errors import PluginExecutionError
-from honestroles.plugins.types import LoadedPlugin, RuntimeExecutionContext
+from honestroles.plugins.types import PluginDefinition, RuntimeExecutionContext
 from honestroles.stages import (
     _apply_filter_options,
     clean_stage,
@@ -53,25 +54,28 @@ def _base_df() -> pl.DataFrame:
     )
 
 
+def _dataset() -> JobDataset:
+    return JobDataset.from_polars(_base_df())
+
+
 def test_ensure_schema_adds_missing_columns() -> None:
     out = ensure_schema(pl.DataFrame({"title": ["x"]}))
     assert "company" in out.columns
 
 
 def test_clean_stage_strip_html_false_branch() -> None:
-    frame = _base_df()
-    out = clean_stage(frame, CleanStageOptions(strip_html=False), _ctx())
-    assert out["description_text"].to_list()[0] == "python sql"
+    out = clean_stage(_dataset(), CleanStageOptions(strip_html=False), _ctx())
+    assert out.to_polars()["description_text"].to_list()[0] == "python sql"
 
 
 def test_clean_stage_drop_null_titles_false_branch() -> None:
     frame = _base_df().with_columns(pl.lit("").alias("title"))
     out = clean_stage(
-        frame,
+        JobDataset.from_polars(frame),
         CleanStageOptions(strip_html=False, drop_null_titles=False),
         _ctx(),
     )
-    assert out.height == frame.height
+    assert out.row_count() == frame.height
 
 
 def test_clean_stage_wraps_generic_exception(monkeypatch) -> None:
@@ -82,7 +86,7 @@ def test_clean_stage_wraps_generic_exception(monkeypatch) -> None:
 
     monkeypatch.setattr(stages_module, "ensure_schema", fail_ensure_schema)
     with pytest.raises(StageExecutionError):
-        clean_stage(_base_df(), CleanStageOptions(), _ctx())
+        clean_stage(_dataset(), CleanStageOptions(), _ctx())
 
 
 def test_apply_filter_options_remote_only_branch() -> None:
@@ -108,89 +112,135 @@ def test_filter_stage_wraps_generic_exception(monkeypatch) -> None:
 
     monkeypatch.setattr(stages_module, "_apply_filter_options", fail_apply_filter_options)
     with pytest.raises(StageExecutionError):
-        filter_stage(_base_df(), FilterStageOptions(), _ctx())
+        filter_stage(_dataset(), FilterStageOptions(), _ctx())
 
 
 def test_label_stage_plugin_exception_reraised() -> None:
-    def explode(_df, _ctx):
+    def explode(_dataset, _ctx):
         raise RuntimeError("boom")
 
-    plugin = LoadedPlugin(name="bad", kind="label", callable_ref="x:y", func=explode)
+    plugin = PluginDefinition(name="bad", kind="label", callable_ref="x:y", func=explode)
     with pytest.raises(PluginExecutionError):
-        label_stage(_base_df(), LabelStageOptions(), _ctx(), plugins=(plugin,))
+        label_stage(_dataset(), LabelStageOptions(), _ctx(), plugins=(plugin,))
 
 
 def test_label_stage_invalid_plugin_return_reraised() -> None:
-    def wrong(_df, _ctx):
-        return "not-df"
+    def wrong(_dataset, _ctx):
+        return "not-dataset"
 
-    plugin = LoadedPlugin(name="bad", kind="label", callable_ref="x:y", func=wrong)
+    plugin = PluginDefinition(name="bad", kind="label", callable_ref="x:y", func=wrong)
     with pytest.raises(PluginExecutionError):
-        label_stage(_base_df(), LabelStageOptions(), _ctx(), plugins=(plugin,))
+        label_stage(_dataset(), LabelStageOptions(), _ctx(), plugins=(plugin,))
+
+
+def test_label_stage_rejects_non_canonical_plugin_dataset() -> None:
+    def wrong_shape(_dataset, _ctx):
+        return JobDataset.from_polars(pl.DataFrame({"x": [1]}))
+
+    plugin = PluginDefinition(name="bad", kind="label", callable_ref="x:y", func=wrong_shape)
+    with pytest.raises(PluginExecutionError, match="missing canonical fields"):
+        label_stage(_dataset(), LabelStageOptions(), _ctx(), plugins=(plugin,))
 
 
 def test_label_stage_wraps_generic_exception() -> None:
     with pytest.raises(StageExecutionError):
-        label_stage(pl.DataFrame({"company": ["x"]}), LabelStageOptions(), _ctx())
+        label_stage(JobDataset.from_polars(pl.DataFrame({"company": ["x"]})), LabelStageOptions(), _ctx())
 
 
 def test_rate_stage_zero_weight_sum_branch() -> None:
     out = rate_stage(
-        _base_df(),
+        _dataset(),
         RateStageOptions(completeness_weight=0.0, quality_weight=0.0),
         _ctx(),
     )
-    assert out["rate_composite"].to_list() == [0.0, 0.0]
+    assert out.to_polars()["rate_composite"].to_list() == [0.0, 0.0]
 
 
 def test_rate_stage_plugin_exception_reraised() -> None:
-    def explode(_df, _ctx):
+    def explode(_dataset, _ctx):
         raise RuntimeError("boom")
 
-    plugin = LoadedPlugin(name="bad", kind="rate", callable_ref="x:y", func=explode)
+    plugin = PluginDefinition(name="bad", kind="rate", callable_ref="x:y", func=explode)
     with pytest.raises(PluginExecutionError):
-        rate_stage(_base_df(), RateStageOptions(), _ctx(), plugins=(plugin,))
+        rate_stage(_dataset(), RateStageOptions(), _ctx(), plugins=(plugin,))
 
 
 def test_rate_stage_invalid_plugin_return_reraised() -> None:
-    def wrong(_df, _ctx):
-        return "not-df"
+    def wrong(_dataset, _ctx):
+        return "not-dataset"
 
-    plugin = LoadedPlugin(name="bad", kind="rate", callable_ref="x:y", func=wrong)
+    plugin = PluginDefinition(name="bad", kind="rate", callable_ref="x:y", func=wrong)
     with pytest.raises(PluginExecutionError):
-        rate_stage(_base_df(), RateStageOptions(), _ctx(), plugins=(plugin,))
+        rate_stage(_dataset(), RateStageOptions(), _ctx(), plugins=(plugin,))
+
+
+def test_rate_stage_rejects_non_canonical_plugin_dataset() -> None:
+    def wrong_shape(_dataset, _ctx):
+        return JobDataset.from_polars(pl.DataFrame({"x": [1]}))
+
+    plugin = PluginDefinition(name="bad", kind="rate", callable_ref="x:y", func=wrong_shape)
+    with pytest.raises(PluginExecutionError, match="missing canonical fields"):
+        rate_stage(_dataset(), RateStageOptions(), _ctx(), plugins=(plugin,))
 
 
 def test_rate_stage_wraps_generic_exception() -> None:
     with pytest.raises(StageExecutionError):
-        rate_stage(pl.DataFrame({"x": [1]}), RateStageOptions(), _ctx())
+        rate_stage(JobDataset.from_polars(pl.DataFrame({"x": [1]})), RateStageOptions(), _ctx())
 
 
 def test_match_stage_adds_missing_rate_and_label_columns() -> None:
     ranked, plan = match_stage(
-        pl.DataFrame({"title": ["x"], "company": ["c"], "apply_url": ["u"]}),
-        MatchStageOptions(top_k=5),
-        _ctx(),
-    )
-    assert "fit_score" in ranked.columns
-    assert ranked.height == 1
-    assert isinstance(plan.application_plan, list)
-
-
-def test_match_stage_adds_missing_label_when_rate_exists() -> None:
-    ranked, _ = match_stage(
-        pl.DataFrame(
-            {
-                "title": ["x"],
-                "company": ["c"],
-                "apply_url": ["u"],
-                "rate_composite": [0.2],
-            }
+        JobDataset.from_polars(
+            pl.DataFrame(
+                {
+                    "id": ["1"],
+                    "title": ["x"],
+                    "company": ["c"],
+                    "location": [None],
+                    "remote": [None],
+                    "description_text": [None],
+                    "description_html": [None],
+                    "skills": [None],
+                    "salary_min": [None],
+                    "salary_max": [None],
+                    "apply_url": ["u"],
+                    "posted_at": [None],
+                }
+            )
         ),
         MatchStageOptions(top_k=5),
         _ctx(),
     )
-    assert "label_seniority" in ranked.columns
+    assert "fit_score" in ranked.to_polars().columns
+    assert ranked.row_count() == 1
+    assert isinstance(plan.application_plan, tuple)
+
+
+def test_match_stage_adds_missing_label_when_rate_exists() -> None:
+    ranked, _ = match_stage(
+        JobDataset.from_polars(
+            pl.DataFrame(
+                {
+                    "id": ["1"],
+                    "title": ["x"],
+                    "company": ["c"],
+                    "location": [None],
+                    "remote": [None],
+                    "description_text": [None],
+                    "description_html": [None],
+                    "skills": [None],
+                    "salary_min": [None],
+                    "salary_max": [None],
+                    "apply_url": ["u"],
+                    "posted_at": [None],
+                    "rate_composite": [0.2],
+                }
+            )
+        ),
+        MatchStageOptions(top_k=5),
+        _ctx(),
+    )
+    assert "label_seniority" in ranked.to_polars().columns
 
 
 def test_match_stage_wraps_generic_exception() -> None:
@@ -198,4 +248,4 @@ def test_match_stage_wraps_generic_exception() -> None:
         top_k = "oops"
 
     with pytest.raises(StageExecutionError):
-        match_stage(_base_df(), BadOptions(), _ctx())
+        match_stage(_dataset(), BadOptions(), _ctx())

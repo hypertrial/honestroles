@@ -69,6 +69,6 @@ random_seed = 0
     runtime = HonestRolesRuntime.from_configs(pipeline_path)
     result = runtime.run()
 
-    assert_dataframe(result.dataframe)
-    assert_score_bounds(result.dataframe, ["fit_score", "rate_composite", "rate_quality"])
-    assert result.diagnostics["final_rows"] == result.dataframe.height
+    assert_dataframe(result.dataset.to_polars())
+    assert_score_bounds(result.dataset.to_polars(), ["fit_score", "rate_composite", "rate_quality"])
+    assert result.diagnostics.to_dict()["final_rows"] == result.dataset.to_polars().height

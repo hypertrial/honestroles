@@ -7,9 +7,11 @@ def test_new_surface_exports_runtime_types() -> None:
     required = {
         "HonestRolesRuntime",
         "PluginRegistry",
-        "PipelineConfig",
+        "PipelineSpec",
         "RuntimeConfig",
         "PluginManifestConfig",
+        "JobDataset",
+        "PipelineRun",
     }
     assert required.issubset(set(hr.__all__))
 

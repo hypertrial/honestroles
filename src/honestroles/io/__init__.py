@@ -11,6 +11,7 @@ from honestroles.config.models import (
     CANONICAL_SOURCE_FIELDS,
     RuntimeQualityConfig,
 )
+from honestroles.domain import JobDataset
 from honestroles.errors import ConfigValidationError
 from honestroles.io.adapter import (
     AdapterInferenceResult,
@@ -308,8 +309,10 @@ def _resolve_quality_weights(
 
 
 def build_data_quality_report(
-    frame: pl.DataFrame, quality: RuntimeQualityConfig | None = None
+    frame: pl.DataFrame | JobDataset, quality: RuntimeQualityConfig | None = None
 ) -> DataQualityReport:
+    if isinstance(frame, JobDataset):
+        frame = frame.to_polars()
     acc = DataQualityAccumulator()
     acc.update(frame)
     return acc.finalize(quality=quality)

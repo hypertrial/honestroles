@@ -6,17 +6,16 @@ from collections.abc import Callable
 from types import MappingProxyType
 from typing import Any, get_origin, get_type_hints
 
-import polars as pl
-
 from honestroles.config.models import PluginManifestConfig, PluginManifestItem
+from honestroles.domain import JobDataset
 from honestroles.plugins.errors import PluginLoadError, PluginValidationError
 from honestroles.plugins.types import (
-    FilterPluginContext,
-    LabelPluginContext,
-    LoadedPlugin,
+    FilterStageContext,
+    LabelStageContext,
     PluginKind,
+    PluginDefinition,
     PluginSpec,
-    RatePluginContext,
+    RateStageContext,
 )
 
 
@@ -75,7 +74,7 @@ def _validate_signature(name: str, kind: PluginKind, func: Callable[..., Any]) -
         ) from exc
     if len(params) < 2:
         raise PluginValidationError(
-            f"plugin '{name}' ({kind}) must accept (dataframe, context)"
+            f"plugin '{name}' ({kind}) must accept (dataset, context)"
         )
 
     first = params[0]
@@ -90,39 +89,39 @@ def _validate_signature(name: str, kind: PluginKind, func: Callable[..., Any]) -
         )
 
     expected_ctx = {
-        "filter": FilterPluginContext,
-        "label": LabelPluginContext,
-        "rate": RatePluginContext,
+        "filter": FilterStageContext,
+        "label": LabelStageContext,
+        "rate": RateStageContext,
     }[kind]
     first_annotation = hints.get(first.name, first.annotation)
     second_annotation = hints.get(second.name, second.annotation)
     return_annotation = hints.get("return", sig.return_annotation)
 
-    if not _annotation_matches(first_annotation, pl.DataFrame):
+    if not _annotation_matches(first_annotation, JobDataset):
         raise PluginValidationError(
-            f"plugin '{name}' ({kind}) first arg must be annotated as polars.DataFrame"
+            f"plugin '{name}' ({kind}) first arg must be annotated as JobDataset"
         )
     if not _annotation_matches(second_annotation, expected_ctx):
         raise PluginValidationError(
             f"plugin '{name}' ({kind}) second arg must be annotated as {expected_ctx.__name__}"
         )
-    if not _annotation_matches(return_annotation, pl.DataFrame):
+    if not _annotation_matches(return_annotation, JobDataset):
         raise PluginValidationError(
-            f"plugin '{name}' ({kind}) return annotation must be polars.DataFrame"
+            f"plugin '{name}' ({kind}) return annotation must be JobDataset"
         )
 
 
-def load_plugins(manifest: PluginManifestConfig) -> tuple[LoadedPlugin, ...]:
-    loaded: list[LoadedPlugin] = []
+def load_plugins(manifest: PluginManifestConfig) -> tuple[PluginDefinition, ...]:
+    loaded: list[PluginDefinition] = []
     for item in manifest.plugins:
         loaded.append(load_plugin_item(item))
     return tuple(sorted(loaded, key=lambda p: (p.kind, p.order, p.name)))
 
 
-def load_plugin_item(item: PluginManifestItem) -> LoadedPlugin:
+def load_plugin_item(item: PluginManifestItem) -> PluginDefinition:
     func = _import_callable(item.callable)
     _validate_signature(item.name, item.kind, func)
-    return LoadedPlugin(
+    return PluginDefinition(
         name=item.name,
         kind=item.kind,
         callable_ref=item.callable,

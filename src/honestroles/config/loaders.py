@@ -5,7 +5,7 @@ from typing import Any
 
 import tomllib
 
-from honestroles.config.models import PipelineConfig, PluginManifestConfig
+from honestroles.config.models import PipelineSpec, PluginManifestConfig
 from honestroles.errors import ConfigValidationError
 
 
@@ -18,11 +18,11 @@ def _read_toml(path: Path) -> dict[str, Any]:
         raise ConfigValidationError(f"invalid TOML in '{path}': {exc}") from exc
 
 
-def load_pipeline_config(path: str | Path) -> PipelineConfig:
+def load_pipeline_config(path: str | Path) -> PipelineSpec:
     config_path = Path(path).expanduser().resolve()
     raw = _read_toml(config_path)
     try:
-        config = PipelineConfig.model_validate(raw)
+        config = PipelineSpec.model_validate(raw)
     except Exception as exc:  # pydantic ValidationError
         raise ConfigValidationError(
             f"invalid pipeline config '{config_path}': {exc}"
@@ -45,7 +45,7 @@ def load_plugin_manifest(path: str | Path) -> PluginManifestConfig:
     return manifest
 
 
-def _resolve_pipeline_paths(config: PipelineConfig, base_dir: Path) -> PipelineConfig:
+def _resolve_pipeline_paths(config: PipelineSpec, base_dir: Path) -> PipelineSpec:
     input_path = config.input.path
     if not input_path.is_absolute():
         input_path = (base_dir / input_path).resolve()

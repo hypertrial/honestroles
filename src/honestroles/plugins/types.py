@@ -5,7 +5,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Callable, Literal, Mapping
 
-import polars as pl
+from honestroles.domain import JobDataset
 
 PluginKind = Literal["filter", "label", "rate"]
 
@@ -29,35 +29,35 @@ class RuntimeExecutionContext:
 
 
 @dataclass(frozen=True, slots=True)
-class BasePluginContext:
+class StageContext:
     plugin_name: str
     settings: Mapping[str, Any] = field(default_factory=_empty_mapping)
     runtime: RuntimeExecutionContext | None = None
 
 
 @dataclass(frozen=True, slots=True)
-class FilterPluginContext(BasePluginContext):
+class FilterStageContext(StageContext):
     pass
 
 
 @dataclass(frozen=True, slots=True)
-class LabelPluginContext(BasePluginContext):
+class LabelStageContext(StageContext):
     pass
 
 
 @dataclass(frozen=True, slots=True)
-class RatePluginContext(BasePluginContext):
+class RateStageContext(StageContext):
     pass
 
 
-FilterPlugin = Callable[[pl.DataFrame, FilterPluginContext], pl.DataFrame]
-LabelPlugin = Callable[[pl.DataFrame, LabelPluginContext], pl.DataFrame]
-RatePlugin = Callable[[pl.DataFrame, RatePluginContext], pl.DataFrame]
+FilterPlugin = Callable[[JobDataset, FilterStageContext], JobDataset]
+LabelPlugin = Callable[[JobDataset, LabelStageContext], JobDataset]
+RatePlugin = Callable[[JobDataset, RateStageContext], JobDataset]
 PluginCallable = FilterPlugin | LabelPlugin | RatePlugin
 
 
 @dataclass(frozen=True, slots=True)
-class LoadedPlugin:
+class PluginDefinition:
     name: str
     kind: PluginKind
     callable_ref: str

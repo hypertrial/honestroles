@@ -6,9 +6,9 @@ Template for plugins compatible with the explicit HonestRoles runtime ABI.
 
 Plugins are plain Python callables referenced by `module:function` in `plugins.toml`.
 
-- Filter: `(pl.DataFrame, FilterPluginContext) -> pl.DataFrame`
-- Label: `(pl.DataFrame, LabelPluginContext) -> pl.DataFrame`
-- Rate: `(pl.DataFrame, RatePluginContext) -> pl.DataFrame`
+- Filter: `(JobDataset, FilterStageContext) -> JobDataset`
+- Label: `(JobDataset, LabelStageContext) -> JobDataset`
+- Rate: `(JobDataset, RateStageContext) -> JobDataset`
 
 ## Example manifest
 

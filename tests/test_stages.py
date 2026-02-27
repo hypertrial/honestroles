@@ -5,6 +5,7 @@ from pathlib import Path
 import polars as pl
 
 from honestroles.config.models import CleanStageOptions
+from honestroles.domain import JobDataset
 from honestroles.plugins.types import RuntimeExecutionContext
 from honestroles.stages import clean_stage
 
@@ -28,7 +29,7 @@ def test_clean_stage_preserves_existing_text_when_html_missing() -> None:
     )
 
     cleaned = clean_stage(
-        frame,
+        JobDataset.from_polars(frame),
         CleanStageOptions(strip_html=True),
         RuntimeExecutionContext(
             pipeline_config_path=Path("pipeline.toml"),
@@ -36,4 +37,4 @@ def test_clean_stage_preserves_existing_text_when_html_missing() -> None:
             stage_options={},
         ),
     )
-    assert cleaned["description_text"].to_list() == ["already clean text"]
+    assert cleaned.to_polars()["description_text"].to_list() == ["already clean text"]

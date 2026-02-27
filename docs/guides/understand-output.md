@@ -15,28 +15,29 @@ Use this after every run in local development and CI.
 1. Inspect diagnostics keys:
 
 ```python
-keys = sorted(result.diagnostics.keys())
-print(keys)
+diagnostics = run.diagnostics.to_dict()
+print(sorted(diagnostics.keys()))
 ```
 
 2. Confirm row progression:
 
 ```python
-print(result.diagnostics["stage_rows"])
-print(result.diagnostics["final_rows"])
+print(diagnostics["stage_rows"])
+print(diagnostics["final_rows"])
 ```
 
 3. Confirm plugin loading by kind:
 
 ```python
-print(result.diagnostics["plugin_counts"])
+print(diagnostics["plugin_counts"])
 ```
 
 4. Inspect ranked results:
 
 ```python
-print(result.dataframe.select("fit_rank", "fit_score", "title", "company").head())
-print(result.application_plan[:5])
+frame = run.dataset.to_polars()
+print(frame.select("fit_rank", "fit_score", "title", "company").head())
+print([entry.to_dict() for entry in run.application_plan[:5]])
 ```
 
 ## Expected result
@@ -48,5 +49,5 @@ print(result.application_plan[:5])
 
 ## Next steps
 
-- Diagnostics and result structure: [Runtime API](../reference/runtime-api.md)
-- Failure interpretation: [Error Model](../reference/error-model.md)
+- Runtime contract details: [Runtime API](../reference/runtime-api.md)
+- Stage semantics: [Stage Contracts](../reference/stage-contracts.md)

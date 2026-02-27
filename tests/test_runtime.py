@@ -16,21 +16,23 @@ def test_runtime_run_end_to_end(
 ) -> None:
     runtime = HonestRolesRuntime.from_configs(pipeline_config_path, plugin_manifest_path)
     result = runtime.run()
+    diagnostics = result.diagnostics.to_dict()
+    frame = result.dataset.to_polars()
 
-    assert isinstance(result.dataframe, pl.DataFrame)
-    assert result.dataframe.height > 0
-    assert "fit_score" in result.dataframe.columns
-    assert "plugin_label_note" in result.dataframe.columns
-    assert result.diagnostics["final_rows"] == result.dataframe.height
+    assert isinstance(frame, pl.DataFrame)
+    assert frame.height > 0
+    assert "fit_score" in frame.columns
+    assert "plugin_label_note" in frame.columns
+    assert diagnostics["final_rows"] == frame.height
     assert result.application_plan
-    assert "input_aliasing" in result.diagnostics
-    assert "input_adapter" in result.diagnostics
-    assert set(result.diagnostics["input_aliasing"].keys()) == {
+    assert "input_aliasing" in diagnostics
+    assert "input_adapter" in diagnostics
+    assert set(diagnostics["input_aliasing"].keys()) == {
         "applied",
         "conflicts",
         "unresolved",
     }
-    assert set(result.diagnostics["input_adapter"].keys()) == {
+    assert set(diagnostics["input_adapter"].keys()) == {
         "enabled",
         "applied",
         "conflicts",
@@ -45,8 +47,8 @@ def test_runtime_deterministic(
     pipeline_config_path: Path, plugin_manifest_path: Path
 ) -> None:
     runtime = HonestRolesRuntime.from_configs(pipeline_config_path, plugin_manifest_path)
-    first = runtime.run().dataframe
-    second = runtime.run().dataframe
+    first = runtime.run().dataset.to_polars()
+    second = runtime.run().dataset.to_polars()
     assert first.equals(second)
 
 
@@ -57,10 +59,10 @@ def test_runtime_concurrent_isolated(
     runtime_b = HonestRolesRuntime.from_configs(pipeline_config_path, None)
 
     def run_a() -> pl.DataFrame:
-        return runtime_a.run().dataframe
+        return runtime_a.run().dataset.to_polars()
 
     def run_b() -> pl.DataFrame:
-        return runtime_b.run().dataframe
+        return runtime_b.run().dataset.to_polars()
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         a_df, b_df = pool.submit(run_a).result(), pool.submit(run_b).result()
@@ -78,9 +80,10 @@ def test_runtime_non_fail_fast_collects_plugin_errors(
         fail_plugin_manifest_path,
     )
     result = runtime.run()
-    assert result.dataframe.height >= 0
-    assert "non_fatal_errors" in result.diagnostics
-    assert result.diagnostics["non_fatal_errors"][0]["stage"] == "filter"
+    assert result.dataset.to_polars().height >= 0
+    diagnostics = result.diagnostics.to_dict()
+    assert "non_fatal_errors" in diagnostics
+    assert diagnostics["non_fatal_errors"][0]["stage"] == "filter"
 
 
 def test_runtime_from_configs_wraps_generic_init_errors(monkeypatch) -> None:
@@ -142,8 +145,9 @@ def test_runtime_non_fail_fast_collects_stage_errors(
         pipeline_config_non_fail_fast_path,
     )
     result = runtime.run()
-    assert "non_fatal_errors" in result.diagnostics
-    assert any(entry["stage"] == stage_name for entry in result.diagnostics["non_fatal_errors"])
+    diagnostics = result.diagnostics.to_dict()
+    assert "non_fatal_errors" in diagnostics
+    assert any(entry["stage"] == stage_name for entry in diagnostics["non_fatal_errors"])
 
 
 def test_runtime_alias_mapping_affects_remote_filtering(tmp_path: Path) -> None:
@@ -198,9 +202,9 @@ random_seed = 0
 
     runtime = HonestRolesRuntime.from_configs(pipeline_path)
     result = runtime.run()
-    assert result.dataframe.height == 1
-    assert result.dataframe["id"].to_list() == ["1"]
-    assert result.diagnostics["input_aliasing"]["applied"]["remote"] == "remote_flag"
+    assert result.dataset.to_polars().height == 1
+    assert result.dataset.to_polars()["id"].to_list() == ["1"]
+    assert result.diagnostics.to_dict()["input_aliasing"]["applied"]["remote"] == "remote_flag"
 
 
 def test_runtime_adapter_mapping_affects_remote_filtering(tmp_path: Path) -> None:
@@ -254,9 +258,9 @@ enabled = false
 
     runtime = HonestRolesRuntime.from_configs(pipeline_path)
     result = runtime.run()
-    assert result.dataframe.height == 1
-    assert result.dataframe["id"].to_list() == ["1"]
-    assert result.diagnostics["input_adapter"]["applied"]["remote"] == "remote_flag"
+    assert result.dataset.to_polars().height == 1
+    assert result.dataset.to_polars()["id"].to_list() == ["1"]
+    assert result.diagnostics.to_dict()["input_adapter"]["applied"]["remote"] == "remote_flag"
 
 
 def test_runtime_adapter_then_alias_precedence(tmp_path: Path) -> None:
@@ -312,6 +316,7 @@ enabled = false
 
     runtime = HonestRolesRuntime.from_configs(pipeline_path)
     result = runtime.run()
-    assert result.dataframe["location"].to_list() == ["Remote", "NYC"]
-    assert result.diagnostics["input_adapter"]["applied"]["location"] == "location_raw"
-    assert result.diagnostics["input_aliasing"]["applied"] == {}
+    assert result.dataset.to_polars()["location"].to_list() == ["Remote", "NYC"]
+    diagnostics = result.diagnostics.to_dict()
+    assert diagnostics["input_adapter"]["applied"]["location"] == "location_raw"
+    assert diagnostics["input_aliasing"]["applied"] == {}

@@ -5,7 +5,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from honestroles.config import InputAdapterConfig, InputAdapterFieldConfig
+from honestroles.config import SourceAdapterSpec, InputAdapterFieldConfig
 from honestroles.errors import ConfigValidationError
 from honestroles.io import (
     apply_source_adapter,
@@ -27,7 +27,7 @@ def test_apply_source_adapter_maps_when_canonical_missing() -> None:
             "remote_flag": ["yes"],
         }
     )
-    cfg = InputAdapterConfig(
+    cfg = SourceAdapterSpec(
         enabled=True,
         fields={
             "location": InputAdapterFieldConfig.model_validate(
@@ -52,7 +52,7 @@ def test_apply_source_adapter_preserves_canonical_and_counts_conflicts() -> None
             "remote_flag": [True, True, False],
         }
     )
-    cfg = InputAdapterConfig(
+    cfg = SourceAdapterSpec(
         enabled=True,
         fields={
             "remote": InputAdapterFieldConfig.model_validate(
@@ -73,7 +73,7 @@ def test_apply_source_adapter_date_parsing_and_numeric_errors() -> None:
             "salary_text": ["120000", "not-a-number", "140,000"],
         }
     )
-    cfg = InputAdapterConfig(
+    cfg = SourceAdapterSpec(
         enabled=True,
         fields={
             "posted_at": InputAdapterFieldConfig.model_validate(
@@ -103,7 +103,7 @@ def test_apply_source_adapter_date_parsing_and_numeric_errors() -> None:
 
 def test_apply_source_adapter_multi_source_deterministic_order() -> None:
     df = pl.DataFrame({"loc_b": ["B"], "loc_a": ["A"]})
-    cfg = InputAdapterConfig(
+    cfg = SourceAdapterSpec(
         enabled=True,
         fields={
             "location": InputAdapterFieldConfig.model_validate(
@@ -122,7 +122,7 @@ def test_apply_source_adapter_error_samples_are_capped() -> None:
             "remote_flag": ["maybe" for _ in range(100)],
         }
     )
-    cfg = InputAdapterConfig(
+    cfg = SourceAdapterSpec(
         enabled=True,
         fields={
             "remote": InputAdapterFieldConfig.model_validate(
@@ -185,7 +185,7 @@ def test_infer_source_adapter_validates_thresholds() -> None:
 
 
 def test_render_adapter_toml_fragment() -> None:
-    cfg = InputAdapterConfig(
+    cfg = SourceAdapterSpec(
         enabled=True,
         fields={
             "location": InputAdapterFieldConfig.model_validate(
@@ -199,7 +199,7 @@ def test_render_adapter_toml_fragment() -> None:
 
 
 def test_render_adapter_toml_fragment_bool_and_date_defaults() -> None:
-    cfg = InputAdapterConfig(
+    cfg = SourceAdapterSpec(
         enabled=True,
         fields={
             "remote": InputAdapterFieldConfig.model_validate({"from": ["remote_flag"], "cast": "bool"}),
@@ -215,7 +215,7 @@ def test_render_adapter_toml_fragment_bool_and_date_defaults() -> None:
 
 def test_apply_source_adapter_int_cast_and_unresolved_branch() -> None:
     df = pl.DataFrame({"x": ["1", "bad"]})
-    cfg = InputAdapterConfig(
+    cfg = SourceAdapterSpec(
         enabled=True,
         fields={
             "salary_min": InputAdapterFieldConfig.model_validate({"from": ["x"], "cast": "int"}),
@@ -247,7 +247,7 @@ def test_adapter_internal_scoring_helpers() -> None:
 
 def test_coerce_adapter_config_validation_errors() -> None:
     assert _coerce_adapter_config(None).enabled is False
-    cfg = InputAdapterConfig(enabled=True)
+    cfg = SourceAdapterSpec(enabled=True)
     assert _coerce_adapter_config(cfg).enabled is True
 
     class _CfgLike:
@@ -262,7 +262,7 @@ def test_coerce_adapter_config_validation_errors() -> None:
 
 def test_apply_source_adapter_trim_and_conflict_noop_branches() -> None:
     df = pl.DataFrame({"remote": [True], "loc_text": ["  Remote  "]})
-    cfg = InputAdapterConfig(
+    cfg = SourceAdapterSpec(
         enabled=True,
         fields={
             "remote": InputAdapterFieldConfig.model_validate(
@@ -282,7 +282,7 @@ def test_apply_source_adapter_trim_and_conflict_noop_branches() -> None:
 
 def test_apply_source_adapter_records_null_like_hits() -> None:
     df = pl.DataFrame({"location_raw": ["", "n/a", "Remote"]})
-    cfg = InputAdapterConfig(
+    cfg = SourceAdapterSpec(
         enabled=True,
         fields={
             "location": InputAdapterFieldConfig.model_validate(
@@ -304,7 +304,7 @@ def test_infer_source_adapter_validates_more_thresholds() -> None:
 
 def test_apply_source_adapter_conflict_zero_path() -> None:
     df = pl.DataFrame({"remote": [True], "remote_flag": ["true"]})
-    cfg = InputAdapterConfig(
+    cfg = SourceAdapterSpec(
         enabled=True,
         fields={
             "remote": InputAdapterFieldConfig.model_validate(

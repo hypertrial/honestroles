@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from html import unescape
-from typing import Any
 
 import polars as pl
 
@@ -13,13 +12,14 @@ from honestroles.config.models import (
     MatchStageOptions,
     RateStageOptions,
 )
+from honestroles.domain import ApplicationPlanEntry, JobDataset
 from honestroles.errors import StageExecutionError
 from honestroles.plugins.errors import PluginExecutionError
 from honestroles.plugins.types import (
-    FilterPluginContext,
-    LabelPluginContext,
-    LoadedPlugin,
-    RatePluginContext,
+    FilterStageContext,
+    LabelStageContext,
+    PluginDefinition,
+    RateStageContext,
     RuntimeExecutionContext,
 )
 
@@ -41,7 +41,7 @@ _REQUIRED_COLUMNS: tuple[str, ...] = (
 
 @dataclass(frozen=True, slots=True)
 class StageArtifacts:
-    application_plan: list[dict[str, Any]]
+    application_plan: tuple[ApplicationPlanEntry, ...] = ()
 
 
 def ensure_schema(df: pl.DataFrame) -> pl.DataFrame:
@@ -62,13 +62,13 @@ def _clean_text_expr(column: str) -> pl.Expr:
 
 
 def clean_stage(
-    df: pl.DataFrame,
+    dataset: JobDataset,
     options: CleanStageOptions,
     runtime: RuntimeExecutionContext,
-) -> pl.DataFrame:
+) -> JobDataset:
     _ = runtime
     try:
-        frame = ensure_schema(df)
+        frame = ensure_schema(dataset.to_polars())
         text_expr = pl.col("description_text").cast(pl.String, strict=False).str.strip_chars()
         if options.strip_html:
             html_raw = pl.col("description_html").cast(pl.String, strict=False)
@@ -118,7 +118,7 @@ def clean_stage(
 
         if options.drop_null_titles:
             frame = frame.filter(pl.col("title").is_not_null() & (pl.col("title") != ""))
-        return frame
+        return dataset.with_frame(frame)
     except Exception as exc:
         raise StageExecutionError("clean", str(exc)) from exc
 
@@ -147,13 +147,14 @@ def _apply_filter_options(df: pl.DataFrame, options: FilterStageOptions) -> pl.D
 
 
 def _run_filter_plugins(
-    df: pl.DataFrame,
-    plugins: tuple[LoadedPlugin, ...],
+    dataset: JobDataset,
+    plugins: tuple[PluginDefinition, ...],
     runtime: RuntimeExecutionContext,
-) -> pl.DataFrame:
-    result = df
+) -> JobDataset:
+    dataset.validate_canonical_schema()
+    result = dataset
     for plugin in plugins:
-        ctx = FilterPluginContext(
+        ctx = FilterStageContext(
             plugin_name=plugin.name,
             settings=plugin.settings,
             runtime=runtime,
@@ -162,24 +163,28 @@ def _run_filter_plugins(
             candidate = plugin.func(result, ctx)
         except Exception as exc:
             raise PluginExecutionError(plugin.name, plugin.kind, str(exc)) from exc
-        if not isinstance(candidate, pl.DataFrame):
+        if not isinstance(candidate, JobDataset):
             raise PluginExecutionError(
                 plugin.name,
                 plugin.kind,
-                f"returned invalid type '{type(candidate).__name__}', expected polars.DataFrame",
+                f"returned invalid type '{type(candidate).__name__}', expected JobDataset",
             )
+        try:
+            candidate.validate_canonical_schema()
+        except ValueError as exc:
+            raise PluginExecutionError(plugin.name, plugin.kind, str(exc)) from exc
         result = candidate
     return result
 
 
 def filter_stage(
-    df: pl.DataFrame,
+    dataset: JobDataset,
     options: FilterStageOptions,
     runtime: RuntimeExecutionContext,
-    plugins: tuple[LoadedPlugin, ...] = (),
-) -> pl.DataFrame:
+    plugins: tuple[PluginDefinition, ...] = (),
+) -> JobDataset:
     try:
-        base = _apply_filter_options(df, options)
+        base = dataset.with_frame(_apply_filter_options(dataset.to_polars(), options))
         return _run_filter_plugins(base, plugins, runtime)
     except PluginExecutionError:
         raise
@@ -188,14 +193,15 @@ def filter_stage(
 
 
 def label_stage(
-    df: pl.DataFrame,
+    dataset: JobDataset,
     options: LabelStageOptions,
     runtime: RuntimeExecutionContext,
-    plugins: tuple[LoadedPlugin, ...] = (),
-) -> pl.DataFrame:
+    plugins: tuple[PluginDefinition, ...] = (),
+) -> JobDataset:
     _ = options
     try:
-        frame = df.with_columns(
+        dataset.validate_canonical_schema()
+        frame = dataset.to_polars().with_columns(
             pl.when(pl.col("title").str.contains("(?i)intern|junior|entry"))
             .then(pl.lit("junior"))
             .when(pl.col("title").str.contains("(?i)senior|staff|principal"))
@@ -222,11 +228,10 @@ def label_stage(
             .list.unique()
             .list.sort()
         )
-        frame = frame.with_columns(stack_expr.alias("label_tech_stack"))
+        result = dataset.with_frame(frame.with_columns(stack_expr.alias("label_tech_stack")))
 
-        result = frame
         for plugin in plugins:
-            ctx = LabelPluginContext(
+            ctx = LabelStageContext(
                 plugin_name=plugin.name,
                 settings=plugin.settings,
                 runtime=runtime,
@@ -235,12 +240,16 @@ def label_stage(
                 candidate = plugin.func(result, ctx)
             except Exception as exc:
                 raise PluginExecutionError(plugin.name, plugin.kind, str(exc)) from exc
-            if not isinstance(candidate, pl.DataFrame):
+            if not isinstance(candidate, JobDataset):
                 raise PluginExecutionError(
                     plugin.name,
                     plugin.kind,
-                    f"returned invalid type '{type(candidate).__name__}', expected polars.DataFrame",
+                    f"returned invalid type '{type(candidate).__name__}', expected JobDataset",
                 )
+            try:
+                candidate.validate_canonical_schema()
+            except ValueError as exc:
+                raise PluginExecutionError(plugin.name, plugin.kind, str(exc)) from exc
             result = candidate
         return result
     except PluginExecutionError:
@@ -254,12 +263,14 @@ def _bounded(expr: pl.Expr) -> pl.Expr:
 
 
 def rate_stage(
-    df: pl.DataFrame,
+    dataset: JobDataset,
     options: RateStageOptions,
     runtime: RuntimeExecutionContext,
-    plugins: tuple[LoadedPlugin, ...] = (),
-) -> pl.DataFrame:
+    plugins: tuple[PluginDefinition, ...] = (),
+) -> JobDataset:
     try:
+        dataset.validate_canonical_schema()
+        df = dataset.to_polars()
         required = ["title", "company", "description_text", "apply_url"]
         completeness = sum(
             pl.when(pl.col(name).is_not_null() & (pl.col(name).cast(pl.String, strict=False) != ""))
@@ -291,10 +302,10 @@ def rate_stage(
                 + pl.col("rate_quality") * options.quality_weight
             ) / weight_sum
 
-        result = frame.with_columns(_bounded(composite).alias("rate_composite"))
+        result = dataset.with_frame(frame.with_columns(_bounded(composite).alias("rate_composite")))
 
         for plugin in plugins:
-            ctx = RatePluginContext(
+            ctx = RateStageContext(
                 plugin_name=plugin.name,
                 settings=plugin.settings,
                 runtime=runtime,
@@ -303,17 +314,23 @@ def rate_stage(
                 candidate = plugin.func(result, ctx)
             except Exception as exc:
                 raise PluginExecutionError(plugin.name, plugin.kind, str(exc)) from exc
-            if not isinstance(candidate, pl.DataFrame):
+            if not isinstance(candidate, JobDataset):
                 raise PluginExecutionError(
                     plugin.name,
                     plugin.kind,
-                    f"returned invalid type '{type(candidate).__name__}', expected polars.DataFrame",
+                    f"returned invalid type '{type(candidate).__name__}', expected JobDataset",
                 )
+            try:
+                candidate.validate_canonical_schema()
+            except ValueError as exc:
+                raise PluginExecutionError(plugin.name, plugin.kind, str(exc)) from exc
             result = candidate
-        return result.with_columns(
-            _bounded(pl.col("rate_completeness")).alias("rate_completeness"),
-            _bounded(pl.col("rate_quality")).alias("rate_quality"),
-            _bounded(pl.col("rate_composite")).alias("rate_composite"),
+        return result.with_frame(
+            result.to_polars().with_columns(
+                _bounded(pl.col("rate_completeness")).alias("rate_completeness"),
+                _bounded(pl.col("rate_quality")).alias("rate_quality"),
+                _bounded(pl.col("rate_composite")).alias("rate_composite"),
+            )
         )
     except PluginExecutionError:
         raise
@@ -326,12 +343,14 @@ def _normalize_text(value: str | None) -> str:
 
 
 def match_stage(
-    df: pl.DataFrame,
+    dataset: JobDataset,
     options: MatchStageOptions,
     runtime: RuntimeExecutionContext,
-) -> tuple[pl.DataFrame, StageArtifacts]:
+) -> tuple[JobDataset, StageArtifacts]:
     _ = runtime
     try:
+        dataset.validate_canonical_schema()
+        df = dataset.to_polars()
         if "rate_composite" not in df.columns:
             frame = df.with_columns(pl.lit(0.0).alias("rate_composite"))
         else:
@@ -351,7 +370,7 @@ def match_stage(
             .with_row_index("fit_rank", offset=1)
         )
 
-        plan: list[dict[str, Any]] = []
+        plan: list[ApplicationPlanEntry] = []
         for row in ranked.select(
             "fit_rank", "title", "company", "apply_url", "fit_score", "label_seniority"
         ).iter_rows(named=True):
@@ -362,15 +381,15 @@ def match_stage(
             elif seniority == "junior":
                 effort = 12
             plan.append(
-                {
-                    "fit_rank": int(row["fit_rank"]),
-                    "title": row.get("title"),
-                    "company": row.get("company"),
-                    "apply_url": row.get("apply_url"),
-                    "fit_score": float(row.get("fit_score") or 0.0),
-                    "estimated_effort_minutes": effort,
-                }
+                ApplicationPlanEntry(
+                    fit_rank=int(row["fit_rank"]),
+                    title=row.get("title"),
+                    company=row.get("company"),
+                    apply_url=row.get("apply_url"),
+                    fit_score=float(row.get("fit_score") or 0.0),
+                    estimated_effort_minutes=effort,
+                )
             )
-        return ranked, StageArtifacts(application_plan=plan)
+        return dataset.with_frame(ranked), StageArtifacts(application_plan=tuple(plan))
     except Exception as exc:
         raise StageExecutionError("match", str(exc)) from exc

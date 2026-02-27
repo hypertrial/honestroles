@@ -28,11 +28,11 @@ The manifest contains repeated `[[plugins]]` entries.
 
 ## ABI Signatures
 
-- Filter: `(pl.DataFrame, FilterPluginContext) -> pl.DataFrame`
-- Label: `(pl.DataFrame, LabelPluginContext) -> pl.DataFrame`
-- Rate: `(pl.DataFrame, RatePluginContext) -> pl.DataFrame`
+- Filter: `(JobDataset, FilterStageContext) -> JobDataset`
+- Label: `(JobDataset, LabelStageContext) -> JobDataset`
+- Rate: `(JobDataset, RateStageContext) -> JobDataset`
 
-Plugin callables must use explicit type annotations and return `polars.DataFrame`.
+Plugin callables must use explicit type annotations and return `JobDataset`.
 
 ## Execution Ordering
 
@@ -43,17 +43,3 @@ Enabled plugins run in deterministic order by `(kind, order, name)`.
 - Import/reference issues: `PluginLoadError`
 - Signature/annotation issues: `PluginValidationError`
 - Runtime plugin exception or invalid return type: `PluginExecutionError`
-
-## Example
-
-```toml
-[[plugins]]
-name = "label_note"
-kind = "label"
-callable = "examples.example_plugins:example_label"
-enabled = true
-order = 1
-
-[plugins.settings]
-note = "example"
-```

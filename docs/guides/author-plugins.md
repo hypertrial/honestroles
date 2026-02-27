@@ -10,6 +10,7 @@ Use this when built-in stage behavior is not sufficient.
 
 - HonestRoles installed
 - Familiarity with Polars
+- Understanding that plugins now operate on `JobDataset`, not raw `DataFrame`
 
 ## Steps
 
@@ -23,11 +24,15 @@ $ honestroles scaffold-plugin --name my-plugin --output-dir .
 
 ```python
 import polars as pl
-from honestroles.plugins.types import LabelPluginContext
+from honestroles import JobDataset
+from honestroles.plugins.types import LabelStageContext
 
 
-def add_note(df: pl.DataFrame, ctx: LabelPluginContext) -> pl.DataFrame:
-    return df.with_columns(pl.lit(f"plugin:{ctx.plugin_name}").alias("plugin_note"))
+def add_note(dataset: JobDataset, ctx: LabelStageContext) -> JobDataset:
+    frame = dataset.to_polars().with_columns(
+        pl.lit(f"plugin:{ctx.plugin_name}").alias("plugin_note")
+    )
+    return dataset.with_frame(frame)
 ```
 
 3. Register it in `plugins.toml`:
@@ -39,9 +44,6 @@ kind = "label"
 callable = "my_plugin.plugins:add_note"
 enabled = true
 order = 10
-
-[plugins.settings]
-note = "optional-settings"
 ```
 
 4. Validate then run:
@@ -60,4 +62,4 @@ $ honestroles run --pipeline-config pipeline.toml --plugins plugins.toml
 ## Next steps
 
 - Full manifest and ABI contract: [Plugin Manifest Schema](../reference/plugin-manifest-schema.md)
-- Plugin failure debugging: [Common Errors](../troubleshooting/common-errors.md)
+- Runtime result model: [Runtime API](../reference/runtime-api.md)

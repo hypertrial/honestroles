@@ -10,8 +10,8 @@ import polars as pl
 from honestroles.config.models import (
     AdapterCastType,
     CANONICAL_SOURCE_FIELDS,
-    InputAdapterConfig,
     InputAdapterFieldConfig,
+    SourceAdapterSpec,
 )
 from honestroles.errors import ConfigValidationError
 
@@ -36,22 +36,22 @@ _MAX_ERROR_SAMPLES = 20
 
 @dataclass(frozen=True, slots=True)
 class AdapterInferenceResult:
-    adapter_config: InputAdapterConfig
+    adapter_config: SourceAdapterSpec
     toml_fragment: str
     report: dict[str, Any]
     field_suggestions: int
 
 
-def _coerce_adapter_config(value: object) -> InputAdapterConfig:
+def _coerce_adapter_config(value: object) -> SourceAdapterSpec:
     if value is None:
-        return InputAdapterConfig(enabled=False)
-    if isinstance(value, InputAdapterConfig):
+        return SourceAdapterSpec(enabled=False)
+    if isinstance(value, SourceAdapterSpec):
         return value
     if hasattr(value, "model_dump"):
         dumped = value.model_dump(mode="python")
-        return InputAdapterConfig.model_validate(dumped)
+        return SourceAdapterSpec.model_validate(dumped)
     if isinstance(value, Mapping):
-        return InputAdapterConfig.model_validate(value)
+        return SourceAdapterSpec.model_validate(value)
     raise TypeError("input.adapter must be a mapping")
 
 
@@ -399,7 +399,7 @@ def infer_source_adapter(
         else:
             unresolved.append(canonical)
 
-    adapter_config = InputAdapterConfig(enabled=True, on_error="null_warn", fields=inferred_fields)
+    adapter_config = SourceAdapterSpec(enabled=True, on_error="null_warn", fields=inferred_fields)
     report: dict[str, Any] = {
         "schema_version": "1.0",
         "inference_version": "1.0",

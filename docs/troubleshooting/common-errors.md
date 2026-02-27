@@ -60,9 +60,9 @@ Fix:
 
 Match one of:
 
-- `filter`: `(pl.DataFrame, FilterPluginContext) -> pl.DataFrame`
-- `label`: `(pl.DataFrame, LabelPluginContext) -> pl.DataFrame`
-- `rate`: `(pl.DataFrame, RatePluginContext) -> pl.DataFrame`
+- `filter`: `(JobDataset, FilterStageContext) -> JobDataset`
+- `label`: `(JobDataset, LabelStageContext) -> JobDataset`
+- `rate`: `(JobDataset, RateStageContext) -> JobDataset`
 
 ## Plugin Execution Fails
 
@@ -115,7 +115,7 @@ Fix:
 Inspect:
 
 ```python
-print(result.diagnostics.get("non_fatal_errors", []))
+print(run.diagnostics.to_dict().get("non_fatal_errors", []))
 ```
 
 ## Adapter Coercion Warnings Are High
@@ -133,8 +133,8 @@ Fix:
 1. Inspect adapter diagnostics and samples:
 
 ```python
-print(result.diagnostics["input_adapter"]["coercion_errors"])
-print(result.diagnostics["input_adapter"]["error_samples"][:5])
+print(run.diagnostics.to_dict()["input_adapter"]["coercion_errors"])
+print(run.diagnostics.to_dict()["input_adapter"]["error_samples"][:5])
 ```
 
 2. Expand adapter field fallbacks and parsing vocab:

@@ -28,7 +28,7 @@ _EXIT_GENERIC = 1
 def handle_run(args: argparse.Namespace) -> int:
     runtime = HonestRolesRuntime.from_configs(args.pipeline_config, args.plugin_manifest)
     result = runtime.run()
-    print(json.dumps(result.diagnostics, indent=2, sort_keys=True))
+    print(json.dumps(result.diagnostics.to_dict(), indent=2, sort_keys=True))
     return _EXIT_OK
 
 
@@ -56,8 +56,8 @@ def handle_report_quality(args: argparse.Namespace) -> int:
     runtime = HonestRolesRuntime.from_configs(args.pipeline_config, args.plugin_manifest)
     result = runtime.run()
     report = build_data_quality_report(
-        result.dataframe,
-        quality=runtime.pipeline_config.runtime.quality,
+        result.dataset,
+        quality=runtime.pipeline_spec.runtime.quality,
     )
     print(
         json.dumps(

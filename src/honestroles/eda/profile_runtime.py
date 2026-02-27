@@ -91,8 +91,8 @@ def run_runtime_profile(
         runtime = HonestRolesRuntime.from_configs(pipeline_config_path=pipeline_path)
         result = runtime.run()
         report = build_data_quality_report(
-            result.dataframe,
-            quality=runtime.pipeline_config.runtime.quality,
+            result.dataset,
+            quality=runtime.pipeline_spec.runtime.quality,
         )
 
     quality_payload = {
@@ -103,7 +103,7 @@ def run_runtime_profile(
         "effective_weights": report.effective_weights,
         "null_percentages": report.null_percentages,
     }
-    return result.dataframe, result.diagnostics, quality_payload
+    return result.dataset.to_polars(), result.diagnostics.to_dict(), quality_payload
 
 
 def render_pipeline_text(

@@ -21,25 +21,38 @@ runtime = HonestRolesRuntime.from_configs(
 Execution:
 
 ```python
-result = runtime.run()
+run = runtime.run()
 ```
 
-## `RuntimeResult`
+## `PipelineRun`
 
-`run()` returns `RuntimeResult` with fields:
+`run()` returns `PipelineRun` with fields:
 
-- `dataframe`: final `polars.DataFrame`
-- `diagnostics`: `dict[str, Any]`
-- `application_plan`: `list[dict[str, Any]]`
+- `dataset`: final `JobDataset`
+- `diagnostics`: `RuntimeDiagnostics`
+- `application_plan`: `tuple[ApplicationPlanEntry, ...]`
+
+## `JobDataset`
+
+`JobDataset` is the runtime stage I/O object.
+
+- `to_polars() -> pl.DataFrame`
+- `row_count() -> int`
+- `columns() -> tuple[str, ...]`
+- `rows() -> list[CanonicalJobRecord]`
+- `with_frame(frame) -> JobDataset`
+- Runtime-produced and plugin-returned datasets must retain the canonical schema.
 
 ## Diagnostics Contract
 
-Diagnostics always include:
+`RuntimeDiagnostics.to_dict()` always includes:
 
 - `input_path`
 - `stage_rows`
 - `plugin_counts`
 - `runtime`
+- `input_adapter`
+- `input_aliasing`
 - `final_rows`
 
 Diagnostics conditionally include:
@@ -49,4 +62,4 @@ Diagnostics conditionally include:
 
 ## Determinism
 
-The runtime seeds Python randomness from `runtime.random_seed` at run start. Fixed inputs/config/plugins produce stable outputs.
+The runtime seeds Python randomness from `runtime.random_seed` at run start. Fixed inputs/spec/plugins produce stable outputs.

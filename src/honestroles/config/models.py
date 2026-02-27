@@ -155,7 +155,7 @@ class InputAdapterFieldConfig(StrictModel):
         return self
 
 
-class InputAdapterConfig(StrictModel):
+class SourceAdapterSpec(StrictModel):
     enabled: bool = True
     on_error: AdapterOnError = "null_warn"
     fields: dict[str, InputAdapterFieldConfig] = Field(default_factory=dict)
@@ -177,7 +177,7 @@ class InputConfig(StrictModel):
     kind: Literal["parquet"] = "parquet"
     path: Path
     aliases: InputAliasesConfig = Field(default_factory=InputAliasesConfig)
-    adapter: InputAdapterConfig = Field(default_factory=InputAdapterConfig)
+    adapter: SourceAdapterSpec = Field(default_factory=SourceAdapterSpec)
 
     @field_validator("path", mode="before")
     @classmethod
@@ -281,7 +281,7 @@ class RuntimeConfig(StrictModel):
     quality: RuntimeQualityConfig = Field(default_factory=RuntimeQualityConfig)
 
 
-class PipelineConfig(StrictModel):
+class PipelineSpec(StrictModel):
     input: InputConfig
     output: OutputConfig | None = None
     stages: StageConfig = Field(default_factory=StageConfig)

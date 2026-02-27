@@ -9,24 +9,25 @@ from honestroles.plugins.errors import (
 from honestroles.plugins.registry import PluginRegistry
 from honestroles.plugins.types import (
     FilterPlugin,
-    FilterPluginContext,
+    FilterStageContext,
     LabelPlugin,
-    LabelPluginContext,
-    LoadedPlugin,
+    LabelStageContext,
     PluginKind,
+    PluginDefinition,
     PluginSpec,
     RatePlugin,
-    RatePluginContext,
+    RateStageContext,
     RuntimeExecutionContext,
+    StageContext,
 )
 
 __all__ = [
     "FilterPlugin",
-    "FilterPluginContext",
+    "FilterStageContext",
     "LabelPlugin",
-    "LabelPluginContext",
-    "LoadedPlugin",
+    "LabelStageContext",
     "PluginError",
+    "PluginDefinition",
     "PluginExecutionError",
     "PluginKind",
     "PluginLoadError",
@@ -34,6 +35,7 @@ __all__ = [
     "PluginSpec",
     "PluginValidationError",
     "RatePlugin",
-    "RatePluginContext",
+    "RateStageContext",
     "RuntimeExecutionContext",
+    "StageContext",
 ]

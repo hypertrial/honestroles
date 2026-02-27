@@ -3,20 +3,28 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import random
-from typing import Any
 
-import polars as pl
-
-from honestroles.config import PipelineConfig, load_pipeline_config
+from honestroles.config import PipelineSpec, load_pipeline_config
+from honestroles.diagnostics import (
+    InputAdapterDiagnostics,
+    InputAliasingDiagnostics,
+    NonFatalStageError,
+    PluginExecutionCounts,
+    RuntimeDiagnostics,
+    RuntimeSettingsSnapshot,
+    StageRowCounts,
+)
+from honestroles.domain import JobDataset
 from honestroles.errors import HonestRolesError, RuntimeInitializationError
 from honestroles.io import (
     apply_source_adapter,
-    resolve_source_aliases,
     normalize_source_data_contract,
     read_parquet,
+    resolve_source_aliases,
     validate_source_data_contract,
     write_parquet,
 )
+from honestroles.objects import PipelineRun
 from honestroles.plugins import PluginRegistry
 from honestroles.plugins.types import RuntimeExecutionContext
 from honestroles.stages import (
@@ -30,15 +38,8 @@ from honestroles.stages import (
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeResult:
-    dataframe: pl.DataFrame
-    diagnostics: dict[str, Any]
-    application_plan: list[dict[str, Any]]
-
-
-@dataclass(frozen=True, slots=True)
 class HonestRolesRuntime:
-    pipeline_config: PipelineConfig
+    pipeline_spec: PipelineSpec
     plugin_registry: PluginRegistry
     pipeline_config_path: Path
     plugin_manifest_path: Path | None = None
@@ -51,7 +52,7 @@ class HonestRolesRuntime:
     ) -> "HonestRolesRuntime":
         pipeline_path = Path(pipeline_config_path).expanduser().resolve()
         try:
-            pipeline_config = load_pipeline_config(pipeline_path)
+            pipeline_spec = load_pipeline_config(pipeline_path)
             plugin_registry = (
                 PluginRegistry.from_manifest(plugin_manifest_path)
                 if plugin_manifest_path
@@ -68,126 +69,134 @@ class HonestRolesRuntime:
             else None
         )
         return cls(
-            pipeline_config=pipeline_config,
+            pipeline_spec=pipeline_spec,
             plugin_registry=plugin_registry,
             pipeline_config_path=pipeline_path,
             plugin_manifest_path=manifest_path,
         )
 
-    def run(self) -> RuntimeResult:
-        random.seed(self.pipeline_config.runtime.random_seed)
-        diagnostics: dict[str, Any] = {
-            "input_path": str(self.pipeline_config.input.path),
-            "stage_rows": {},
-            "plugin_counts": {
-                "filter": len(self.plugin_registry.plugins_for_kind("filter")),
-                "label": len(self.plugin_registry.plugins_for_kind("label")),
-                "rate": len(self.plugin_registry.plugins_for_kind("rate")),
-            },
-            "runtime": {
-                "fail_fast": self.pipeline_config.runtime.fail_fast,
-                "random_seed": self.pipeline_config.runtime.random_seed,
-            },
-        }
-
-        df = read_parquet(self.pipeline_config.input.path)
-        df, adapter_diagnostics = apply_source_adapter(
-            df, self.pipeline_config.input.adapter
+    def run(self) -> PipelineRun:
+        random.seed(self.pipeline_spec.runtime.random_seed)
+        stage_rows = StageRowCounts()
+        plugin_counts = PluginExecutionCounts(
+            filter=len(self.plugin_registry.plugins_for_kind("filter")),
+            label=len(self.plugin_registry.plugins_for_kind("label")),
+            rate=len(self.plugin_registry.plugins_for_kind("rate")),
         )
-        diagnostics["input_adapter"] = adapter_diagnostics
-        df, aliasing = resolve_source_aliases(df, self.pipeline_config.input.aliases)
-        diagnostics["input_aliasing"] = aliasing
+        runtime_snapshot = RuntimeSettingsSnapshot(
+            fail_fast=self.pipeline_spec.runtime.fail_fast,
+            random_seed=self.pipeline_spec.runtime.random_seed,
+        )
+
+        df = read_parquet(self.pipeline_spec.input.path)
+        df, adapter_payload = apply_source_adapter(df, self.pipeline_spec.input.adapter)
+        df, aliasing_payload = resolve_source_aliases(df, self.pipeline_spec.input.aliases)
         df = normalize_source_data_contract(df)
         df = validate_source_data_contract(df)
+        dataset = JobDataset.from_polars(df)
+        dataset.validate_canonical_schema()
 
         runtime_ctx = RuntimeExecutionContext(
             pipeline_config_path=self.pipeline_config_path,
             plugin_manifest_path=self.plugin_manifest_path,
-            stage_options=self.pipeline_config.stages.model_dump(mode="python"),
+            stage_options=self.pipeline_spec.stages.model_dump(mode="python"),
         )
 
-        diagnostics["stage_rows"]["input"] = df.height
-        artifacts = StageArtifacts(application_plan=[])
-        non_fatal_errors: list[dict[str, str]] = []
+        stage_rows = stage_rows.record("input", dataset.row_count())
+        artifacts = StageArtifacts()
+        non_fatal_errors: list[NonFatalStageError] = []
 
         def _record_non_fatal(stage: str, exc: HonestRolesError) -> None:
             non_fatal_errors.append(
-                {
-                    "stage": stage,
-                    "error_type": exc.__class__.__name__,
-                    "detail": str(exc),
-                }
+                NonFatalStageError(
+                    stage=stage,
+                    error_type=exc.__class__.__name__,
+                    detail=str(exc),
+                )
             )
 
-        if self.pipeline_config.stages.clean.enabled:
+        if self.pipeline_spec.stages.clean.enabled:
             try:
-                df = clean_stage(df, self.pipeline_config.stages.clean, runtime_ctx)
+                dataset = clean_stage(dataset, self.pipeline_spec.stages.clean, runtime_ctx)
             except HonestRolesError as exc:
-                if self.pipeline_config.runtime.fail_fast:
+                if self.pipeline_spec.runtime.fail_fast:
                     raise
                 _record_non_fatal("clean", exc)
-            diagnostics["stage_rows"]["clean"] = df.height
+            stage_rows = stage_rows.record("clean", dataset.row_count())
 
-        if self.pipeline_config.stages.filter.enabled:
+        if self.pipeline_spec.stages.filter.enabled:
             try:
-                df = filter_stage(
-                    df,
-                    self.pipeline_config.stages.filter,
+                dataset = filter_stage(
+                    dataset,
+                    self.pipeline_spec.stages.filter,
                     runtime_ctx,
                     plugins=self.plugin_registry.plugins_for_kind("filter"),
                 )
             except HonestRolesError as exc:
-                if self.pipeline_config.runtime.fail_fast:
+                if self.pipeline_spec.runtime.fail_fast:
                     raise
                 _record_non_fatal("filter", exc)
-            diagnostics["stage_rows"]["filter"] = df.height
+            stage_rows = stage_rows.record("filter", dataset.row_count())
 
-        if self.pipeline_config.stages.label.enabled:
+        if self.pipeline_spec.stages.label.enabled:
             try:
-                df = label_stage(
-                    df,
-                    self.pipeline_config.stages.label,
+                dataset = label_stage(
+                    dataset,
+                    self.pipeline_spec.stages.label,
                     runtime_ctx,
                     plugins=self.plugin_registry.plugins_for_kind("label"),
                 )
             except HonestRolesError as exc:
-                if self.pipeline_config.runtime.fail_fast:
+                if self.pipeline_spec.runtime.fail_fast:
                     raise
                 _record_non_fatal("label", exc)
-            diagnostics["stage_rows"]["label"] = df.height
+            stage_rows = stage_rows.record("label", dataset.row_count())
 
-        if self.pipeline_config.stages.rate.enabled:
+        if self.pipeline_spec.stages.rate.enabled:
             try:
-                df = rate_stage(
-                    df,
-                    self.pipeline_config.stages.rate,
+                dataset = rate_stage(
+                    dataset,
+                    self.pipeline_spec.stages.rate,
                     runtime_ctx,
                     plugins=self.plugin_registry.plugins_for_kind("rate"),
                 )
             except HonestRolesError as exc:
-                if self.pipeline_config.runtime.fail_fast:
+                if self.pipeline_spec.runtime.fail_fast:
                     raise
                 _record_non_fatal("rate", exc)
-            diagnostics["stage_rows"]["rate"] = df.height
+            stage_rows = stage_rows.record("rate", dataset.row_count())
 
-        if self.pipeline_config.stages.match.enabled:
+        if self.pipeline_spec.stages.match.enabled:
             try:
-                df, artifacts = match_stage(df, self.pipeline_config.stages.match, runtime_ctx)
+                dataset, artifacts = match_stage(
+                    dataset,
+                    self.pipeline_spec.stages.match,
+                    runtime_ctx,
+                )
             except HonestRolesError as exc:
-                if self.pipeline_config.runtime.fail_fast:
+                if self.pipeline_spec.runtime.fail_fast:
                     raise
                 _record_non_fatal("match", exc)
-            diagnostics["stage_rows"]["match"] = df.height
+            stage_rows = stage_rows.record("match", dataset.row_count())
 
-        if self.pipeline_config.output is not None:
-            write_parquet(df, self.pipeline_config.output.path)
-            diagnostics["output_path"] = str(self.pipeline_config.output.path)
+        output_path: str | None = None
+        if self.pipeline_spec.output is not None:
+            write_parquet(dataset.to_polars(), self.pipeline_spec.output.path)
+            output_path = str(self.pipeline_spec.output.path)
 
-        diagnostics["final_rows"] = df.height
-        if non_fatal_errors:
-            diagnostics["non_fatal_errors"] = non_fatal_errors
-        return RuntimeResult(
-            dataframe=df,
+        diagnostics = RuntimeDiagnostics(
+            input_path=str(self.pipeline_spec.input.path),
+            stage_rows=stage_rows,
+            plugin_counts=plugin_counts,
+            runtime=runtime_snapshot,
+            input_adapter=InputAdapterDiagnostics.from_mapping(adapter_payload),
+            input_aliasing=InputAliasingDiagnostics.from_mapping(aliasing_payload),
+            output_path=output_path,
+            final_rows=dataset.row_count(),
+            non_fatal_errors=tuple(non_fatal_errors),
+        )
+        return PipelineRun(
+            dataset=dataset,
             diagnostics=diagnostics,
             application_plan=artifacts.application_plan,
         )

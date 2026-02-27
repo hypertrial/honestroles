@@ -47,6 +47,7 @@ Validation requires:
 
 ## Stage Responsibilities
 
+- Stage input/output object: `JobDataset`
 - `clean`: normalize/cast schema, clean text/html, normalize booleans/lists, optionally drop null titles
 - `filter`: apply `remote_only`, salary threshold, keyword filters, then run filter plugins
 - `label`: derive base labels, then run label plugins
@@ -58,7 +59,7 @@ Validation requires:
 - `rate_*` metrics are bounded to `[0.0, 1.0]`.
 - `fit_score` is bounded to `[0.0, 1.0]`.
 - `fit_rank` starts at `1` and reflects descending `fit_score`.
-- `application_plan` is aligned to ranked top `top_k` rows.
+- `application_plan` is aligned to ranked top `top_k` rows and returned as `ApplicationPlanEntry[]`.
 
 ## Diagnostics Additions
 
