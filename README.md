@@ -77,6 +77,8 @@ $ pytest tests/docs -q
 $ bash scripts/check_docs_refs.sh
 ```
 
+For local profiling data, keep large parquet inputs under `data/` and write generated artifacts under `dist/` (both are ignored by git).
+
 ## License
 
 MIT

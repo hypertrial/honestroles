@@ -10,14 +10,15 @@ Use this guide when you need reproducible profile/diff artifacts for PR review a
 
 - HonestRoles installed
 - For dashboard mode: `pip install "honestroles[eda]"`
+- Keep raw parquet inputs in `data/` (for example `data/jobs_baseline.parquet`) and write outputs under `dist/eda/` rather than cluttering repository root.
 
 ## Steps
 
 Generate baseline and candidate artifacts:
 
 ```bash
-$ honestroles eda generate --input-parquet jobs_baseline.parquet --output-dir dist/eda/baseline
-$ honestroles eda generate --input-parquet jobs_candidate.parquet --output-dir dist/eda/candidate
+$ honestroles eda generate --input-parquet data/jobs_baseline.parquet --output-dir dist/eda/baseline
+$ honestroles eda generate --input-parquet data/jobs_candidate.parquet --output-dir dist/eda/candidate
 ```
 
 Create diff artifacts:

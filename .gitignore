@@ -209,4 +209,7 @@ __marimo__/
 *.duckdb
 *.db
 *.parquet
+# Local raw data inputs (keep directory scaffold only)
+data/*
+!data/.gitkeep
 .DS_Store

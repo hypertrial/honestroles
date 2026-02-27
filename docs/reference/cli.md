@@ -47,8 +47,8 @@ Available commands:
 ## Examples
 
 ```bash
-$ honestroles eda generate --input-parquet jobs_historical.parquet --output-dir dist/eda/baseline
-$ honestroles eda generate --input-parquet jobs_historical_candidate.parquet --output-dir dist/eda/candidate
+$ honestroles eda generate --input-parquet data/jobs_historical.parquet --output-dir dist/eda/baseline
+$ honestroles eda generate --input-parquet data/jobs_historical_candidate.parquet --output-dir dist/eda/candidate
 $ honestroles eda diff --baseline-dir dist/eda/baseline --candidate-dir dist/eda/candidate --output-dir dist/eda/diff
 $ honestroles eda gate --candidate-dir dist/eda/candidate --baseline-dir dist/eda/baseline --rules-file eda-rules.toml
 $ honestroles eda dashboard --artifacts-dir dist/eda/candidate --diff-dir dist/eda/diff
