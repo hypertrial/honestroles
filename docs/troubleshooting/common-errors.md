@@ -118,6 +118,41 @@ Inspect:
 print(result.diagnostics.get("non_fatal_errors", []))
 ```
 
+## Adapter Coercion Warnings Are High
+
+Symptom:
+
+- `diagnostics["input_adapter"]["coercion_errors"]` contains high counts.
+
+Cause:
+
+- Source values do not match adapter cast expectations (for example non-boolean tokens in a `cast = "bool"` field, invalid dates for `cast = "date_string"`).
+
+Fix:
+
+1. Inspect adapter diagnostics and samples:
+
+```python
+print(result.diagnostics["input_adapter"]["coercion_errors"])
+print(result.diagnostics["input_adapter"]["error_samples"][:5])
+```
+
+2. Expand adapter field fallbacks and parsing vocab:
+
+```toml
+[input.adapter.fields.remote]
+from = ["remote_flag", "is_remote"]
+cast = "bool"
+true_values = ["true", "1", "yes", "y", "remote"]
+false_values = ["false", "0", "no", "n", "onsite", "on-site"]
+```
+
+3. Regenerate a draft and compare:
+
+```bash
+$ honestroles adapter infer --input-parquet data/jobs.parquet --output-file dist/adapters/adapter-draft.toml
+```
+
 ## `eda dashboard` Fails with Missing Streamlit
 
 Symptom:

@@ -14,6 +14,7 @@ Available commands:
 - `plugins validate`
 - `config validate`
 - `report-quality`
+- `adapter infer`
 - `scaffold-plugin`
 - `eda generate`
 - `eda diff`
@@ -28,6 +29,7 @@ Available commands:
 | `honestroles plugins validate` | `--manifest` | Validates and loads plugin manifest | JSON plugin listing |
 | `honestroles config validate` | `--pipeline` | Validates pipeline config | Normalized JSON config |
 | `honestroles report-quality` | `--pipeline-config`, optional `--plugins` | Runs runtime and computes quality report | JSON quality summary |
+| `honestroles adapter infer` | `--input-parquet`, optional `--output-file`, `--sample-rows`, `--top-candidates`, `--min-confidence`, optional `--print` | Infers draft `[input.adapter]` mapping/coercion config from a parquet input | JSON artifact locations |
 | `honestroles scaffold-plugin` | `--name`, optional `--output-dir` | Copies bundled plugin template | JSON scaffold path + package name |
 | `honestroles eda generate` | `--input-parquet`, optional `--output-dir`, `--quality-profile`, repeated `--quality-weight`, `--top-k`, `--max-rows`, optional `--rules-file` | Builds deterministic profile artifacts (`summary.json`, tables, figures, report) | JSON artifact locations |
 | `honestroles eda diff` | `--baseline-dir`, `--candidate-dir`, optional `--output-dir`, optional `--rules-file` | Compares two profile artifact dirs and writes diff artifacts (`diff.json`, drift tables) | JSON diff artifact locations |
@@ -47,11 +49,23 @@ Available commands:
 ## Examples
 
 ```bash
+$ honestroles adapter infer --input-parquet data/jobs_historical.parquet --output-file dist/adapters/adapter-draft.toml
 $ honestroles eda generate --input-parquet data/jobs_historical.parquet --output-dir dist/eda/baseline
 $ honestroles eda generate --input-parquet data/jobs_historical_candidate.parquet --output-dir dist/eda/candidate
 $ honestroles eda diff --baseline-dir dist/eda/baseline --candidate-dir dist/eda/candidate --output-dir dist/eda/diff
 $ honestroles eda gate --candidate-dir dist/eda/candidate --baseline-dir dist/eda/baseline --rules-file eda-rules.toml
 $ honestroles eda dashboard --artifacts-dir dist/eda/candidate --diff-dir dist/eda/diff
+```
+
+## `adapter infer` Output
+
+```json
+{
+  "input_parquet": "/abs/path/data/jobs.parquet",
+  "adapter_draft": "/abs/path/dist/adapters/adapter-draft.toml",
+  "inference_report": "/abs/path/dist/adapters/adapter-draft.report.json",
+  "field_suggestions": 9
+}
 ```
 
 ## `eda generate` Output

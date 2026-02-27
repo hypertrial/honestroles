@@ -31,13 +31,14 @@ Runtime normalizes columns to include these names:
 
 Before normalization, runtime resolves source aliases into canonical names using:
 
+- Declarative source adapter from `[input.adapter]` (runs first)
 - Built-in aliases: `location_raw -> location`, `remote_flag -> remote`
 - Optional pipeline aliases from `[input.aliases]`
 
 Conflict policy:
 
 - Canonical field wins.
-- Conflicts with alias values are recorded in diagnostics.
+- Adapter/alias conflicts are recorded in diagnostics.
 
 Validation requires:
 
@@ -69,6 +70,29 @@ Runtime diagnostics include `input_aliasing`:
     "applied": {"location": "location_raw", "remote": "remote_flag"},
     "conflicts": {"remote": 2},
     "unresolved": ["skills", "salary_min", "salary_max"]
+  }
+}
+```
+
+Runtime diagnostics also include `input_adapter`:
+
+```json
+{
+  "input_adapter": {
+    "enabled": true,
+    "applied": {"remote": "remote_flag", "posted_at": "date_posted"},
+    "conflicts": {"remote": 2},
+    "coercion_errors": {"posted_at": 1},
+    "null_like_hits": {"location": 10},
+    "unresolved": ["salary_max"],
+    "error_samples": [
+      {
+        "field": "posted_at",
+        "source": "date_posted",
+        "value": "32/13/2024",
+        "reason": "date_parse_failed"
+      }
+    ]
   }
 }
 ```

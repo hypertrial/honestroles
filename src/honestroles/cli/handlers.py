@@ -17,6 +17,7 @@ from honestroles.eda import (
 )
 from honestroles.errors import ConfigValidationError
 from honestroles.io import build_data_quality_report
+from honestroles.io import infer_source_adapter, read_parquet
 from honestroles.plugins.registry import PluginRegistry
 from honestroles.runtime import HonestRolesRuntime
 
@@ -151,6 +152,54 @@ def handle_eda_gate(args: argparse.Namespace) -> int:
 
     print(json.dumps(gate_payload, indent=2, sort_keys=True))
     return _EXIT_OK if gate_payload["status"] == "pass" else _EXIT_GENERIC
+
+
+def handle_adapter_infer(args: argparse.Namespace) -> int:
+    input_path = Path(args.input_parquet).expanduser().resolve()
+    if not input_path.exists():
+        raise ConfigValidationError(f"input parquet does not exist: '{input_path}'")
+
+    if args.sample_rows < 1:
+        raise ConfigValidationError("sample-rows must be >= 1")
+    if args.top_candidates < 1:
+        raise ConfigValidationError("top-candidates must be >= 1")
+    if not (0.0 <= args.min_confidence <= 1.0):
+        raise ConfigValidationError("min-confidence must be between 0 and 1")
+
+    output_file = Path(args.output_file).expanduser().resolve()
+    report_file = output_file.with_suffix(".report.json")
+
+    df = read_parquet(input_path)
+    inferred = infer_source_adapter(
+        df,
+        sample_rows=args.sample_rows,
+        top_candidates=args.top_candidates,
+        min_confidence=args.min_confidence,
+    )
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    output_file.write_text(inferred.toml_fragment, encoding="utf-8")
+    report_file.write_text(
+        json.dumps(inferred.report, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    if args.print_fragment:
+        print(inferred.toml_fragment.strip())
+
+    print(
+        json.dumps(
+            {
+                "input_parquet": str(input_path),
+                "adapter_draft": str(output_file),
+                "inference_report": str(report_file),
+                "field_suggestions": inferred.field_suggestions,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return _EXIT_OK
 
 
 def replace_text(path: Path, needle: str, replacement: str) -> None:

@@ -42,7 +42,23 @@ enabled = true
 top_k = 25
 ```
 
-3. Set runtime policy:
+3. Add source adapter mappings for non-canonical input schemas:
+
+```toml
+[input.adapter]
+enabled = true
+on_error = "null_warn"
+
+[input.adapter.fields.location]
+from = ["location_raw", "job_location"]
+cast = "string"
+
+[input.adapter.fields.remote]
+from = ["remote_flag", "is_remote"]
+cast = "bool"
+```
+
+4. Set runtime policy:
 
 ```toml
 [runtime]
@@ -50,7 +66,7 @@ fail_fast = false
 random_seed = 42
 ```
 
-4. Validate before running:
+5. Validate before running:
 
 ```bash
 $ honestroles config validate --pipeline pipeline.toml

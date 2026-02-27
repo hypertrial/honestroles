@@ -35,6 +35,21 @@ def build_parser() -> argparse.ArgumentParser:
     scaffold_parser.add_argument("--name", required=True)
     scaffold_parser.add_argument("--output-dir", default=".")
 
+    adapter_parser = sub.add_parser(
+        "adapter", help="Source adapter utilities"
+    )
+    adapter_sub = adapter_parser.add_subparsers(dest="adapter_command", required=True)
+    adapter_infer = adapter_sub.add_parser(
+        "infer",
+        help="Infer a draft [input.adapter] fragment from parquet input",
+    )
+    adapter_infer.add_argument("--input-parquet", required=True)
+    adapter_infer.add_argument("--output-file", default="dist/adapters/adapter-draft.toml")
+    adapter_infer.add_argument("--sample-rows", type=int, default=50000)
+    adapter_infer.add_argument("--top-candidates", type=int, default=3)
+    adapter_infer.add_argument("--min-confidence", type=float, default=0.55)
+    adapter_infer.add_argument("--print", dest="print_fragment", action="store_true")
+
     eda_parser = sub.add_parser("eda", help="EDA artifact generation and dashboard")
     eda_sub = eda_parser.add_subparsers(dest="eda_command", required=True)
 

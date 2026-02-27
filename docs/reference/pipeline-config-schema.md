@@ -18,6 +18,7 @@ Field-level reference for `pipeline.toml`.
 | `kind` | `"parquet"` | `"parquet"` | Only `parquet` allowed |
 | `path` | path-like string | none | Required |
 | `aliases` | object | `{}` | Optional canonical field alias mapping |
+| `adapter` | object | defaults | Optional declarative source-field mapping/coercion |
 
 ## `[input.aliases]`
 
@@ -49,6 +50,49 @@ Alias behavior:
 - Canonical column always wins if present.
 - If canonical is missing, runtime uses the first existing alias in order.
 - Alias conflicts are recorded in runtime diagnostics under `input_aliasing.conflicts`.
+
+## `[input.adapter]`
+
+| Field | Type | Default | Constraints |
+| --- | --- | --- | --- |
+| `enabled` | bool | `true` | |
+| `on_error` | `"null_warn"` | `"null_warn"` | v1 supports null+warn policy only |
+| `fields` | mapping | `{}` | Keys must be canonical source fields |
+
+Each field entry defines ordered source fallback and coercion:
+
+```toml
+[input.adapter]
+enabled = true
+on_error = "null_warn"
+
+[input.adapter.fields.location]
+from = ["location_raw", "job_location"]
+cast = "string"
+
+[input.adapter.fields.remote]
+from = ["remote_flag", "is_remote"]
+cast = "bool"
+true_values = ["true", "1", "yes", "y", "remote"]
+false_values = ["false", "0", "no", "n", "onsite", "on-site"]
+
+[input.adapter.fields.posted_at]
+from = ["date_posted", "published_at"]
+cast = "date_string"
+datetime_formats = ["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S%z"]
+```
+
+Field schema:
+
+| Field | Type | Default | Constraints |
+| --- | --- | --- | --- |
+| `from` | array of strings | none | Required, non-empty, ordered source fallback |
+| `cast` | `"string" \| "bool" \| "float" \| "int" \| "date_string"` | `"string"` | |
+| `trim` | bool | `true` | |
+| `null_like` | array of strings | default null-like tokens | Optional custom null-like set |
+| `true_values` | array of strings | bool defaults | Only allowed when `cast = "bool"` |
+| `false_values` | array of strings | bool defaults | Only allowed when `cast = "bool"` |
+| `datetime_formats` | array of strings | date defaults | Only allowed when `cast = "date_string"` |
 
 ## `[output]`
 

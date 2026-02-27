@@ -14,6 +14,7 @@ from honestroles.plugins.errors import (
 )
 
 from .handlers import (
+    handle_adapter_infer,
     handle_config_validate,
     handle_eda_diff,
     handle_eda_gate,
@@ -51,6 +52,10 @@ def _handle_config_validate(args: argparse.Namespace) -> int:
 
 def _handle_report_quality(args: argparse.Namespace) -> int:
     return handle_report_quality(args)
+
+
+def _handle_adapter_infer(args: argparse.Namespace) -> int:
+    return handle_adapter_infer(args)
 
 
 def _handle_eda_generate(args: argparse.Namespace) -> int:
@@ -130,6 +135,8 @@ def main(argv: list[str] | None = None) -> int:
             return _handle_config_validate(args)
         if args.command == "report-quality":
             return _handle_report_quality(args)
+        if args.command == "adapter" and args.adapter_command == "infer":
+            return _handle_adapter_infer(args)
         if args.command == "scaffold-plugin":
             return _handle_scaffold_plugin(args)
         if args.command == "eda" and args.eda_command == "generate":

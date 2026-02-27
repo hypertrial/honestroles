@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from honestroles.__about__ import __version__
 from honestroles.config import (
+    AdapterCastType,
+    AdapterOnError,
     CANONICAL_SOURCE_FIELDS,
+    InputAdapterConfig,
+    InputAdapterFieldConfig,
     InputAliasesConfig,
     PipelineConfig,
     PluginManifestConfig,
@@ -34,13 +38,17 @@ from honestroles.eda import (
     load_eda_rules,
 )
 from honestroles.io import (
+    AdapterInferenceResult,
     DataQualityAccumulator,
     DataQualityReport,
     _validate_read_query,
     _validate_table_name,
+    apply_source_adapter,
     build_data_quality_report,
+    infer_source_adapter,
     normalize_source_data_contract,
     read_parquet,
+    render_adapter_toml_fragment,
     resolve_source_aliases,
     validate_source_data_contract,
     write_parquet,
@@ -63,6 +71,9 @@ from honestroles.runtime import HonestRolesRuntime, RuntimeResult
 
 __all__ = [
     "ConfigValidationError",
+    "AdapterCastType",
+    "AdapterOnError",
+    "AdapterInferenceResult",
     "CANONICAL_SOURCE_FIELDS",
     "DataQualityAccumulator",
     "DataQualityReport",
@@ -76,6 +87,8 @@ __all__ = [
     "FilterPluginContext",
     "HonestRolesError",
     "HonestRolesRuntime",
+    "InputAdapterConfig",
+    "InputAdapterFieldConfig",
     "InputAliasesConfig",
     "LabelPlugin",
     "LabelPluginContext",
@@ -109,7 +122,10 @@ __all__ = [
     "load_pipeline_config",
     "load_plugin_manifest",
     "normalize_source_data_contract",
+    "apply_source_adapter",
+    "infer_source_adapter",
     "read_parquet",
+    "render_adapter_toml_fragment",
     "resolve_source_aliases",
     "validate_source_data_contract",
     "write_parquet",

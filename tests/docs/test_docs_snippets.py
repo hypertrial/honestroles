@@ -120,6 +120,7 @@ order = 1
 
     payload = json.loads(capsys.readouterr().out)
     assert {"stage_rows", "plugin_counts", "runtime", "final_rows"}.issubset(payload.keys())
+    assert "input_adapter" in payload
     assert output_path.exists()
 
 
@@ -287,6 +288,34 @@ salary_min = 0.2
     assert "profile" in payload
     assert "weighted_null_percent" in payload
     assert "effective_weights" in payload
+
+
+def test_docs_adapter_infer_snippet(tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "jobs.parquet"
+    output_file = tmp_path / "adapter-draft.toml"
+    _write_sample_parquet(input_path)
+
+    code = main(
+        [
+            "adapter",
+            "infer",
+            "--input-parquet",
+            str(input_path),
+            "--output-file",
+            str(output_file),
+            "--sample-rows",
+            "100",
+            "--top-candidates",
+            "3",
+            "--min-confidence",
+            "0.5",
+        ]
+    )
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert Path(payload["adapter_draft"]).exists()
+    assert Path(payload["inference_report"]).exists()
+    assert payload["field_suggestions"] >= 1
 
 
 def test_docs_eda_generate_snippet(tmp_path: Path, capsys) -> None:

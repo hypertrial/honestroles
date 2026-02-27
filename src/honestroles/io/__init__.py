@@ -12,6 +12,12 @@ from honestroles.config.models import (
     RuntimeQualityConfig,
 )
 from honestroles.errors import ConfigValidationError
+from honestroles.io.adapter import (
+    AdapterInferenceResult,
+    apply_source_adapter,
+    infer_source_adapter,
+    render_adapter_toml_fragment,
+)
 
 _BUILTIN_SOURCE_ALIASES: dict[str, tuple[str, ...]] = {
     "location": ("location_raw",),
@@ -310,13 +316,17 @@ def build_data_quality_report(
 
 
 __all__ = [
+    "AdapterInferenceResult",
     "DataQualityAccumulator",
     "DataQualityReport",
     "_validate_read_query",
     "_validate_table_name",
+    "apply_source_adapter",
     "build_data_quality_report",
+    "infer_source_adapter",
     "normalize_source_data_contract",
     "read_parquet",
+    "render_adapter_toml_fragment",
     "resolve_source_aliases",
     "validate_source_data_contract",
     "write_parquet",

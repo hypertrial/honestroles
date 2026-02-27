@@ -19,6 +19,10 @@ Start from this baseline:
 kind = "parquet"
 path = "./examples/jobs_sample.parquet"
 
+[input.adapter]
+enabled = true
+on_error = "null_warn"
+
 [output]
 path = "./examples/jobs_scored.parquet"
 

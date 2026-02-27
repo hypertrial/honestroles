@@ -10,6 +10,7 @@ import polars as pl
 from honestroles.config import PipelineConfig, load_pipeline_config
 from honestroles.errors import HonestRolesError, RuntimeInitializationError
 from honestroles.io import (
+    apply_source_adapter,
     resolve_source_aliases,
     normalize_source_data_contract,
     read_parquet,
@@ -90,6 +91,10 @@ class HonestRolesRuntime:
         }
 
         df = read_parquet(self.pipeline_config.input.path)
+        df, adapter_diagnostics = apply_source_adapter(
+            df, self.pipeline_config.input.adapter
+        )
+        diagnostics["input_adapter"] = adapter_diagnostics
         df, aliasing = resolve_source_aliases(df, self.pipeline_config.input.aliases)
         diagnostics["input_aliasing"] = aliasing
         df = normalize_source_data_contract(df)

@@ -24,10 +24,20 @@ def test_runtime_run_end_to_end(
     assert result.diagnostics["final_rows"] == result.dataframe.height
     assert result.application_plan
     assert "input_aliasing" in result.diagnostics
+    assert "input_adapter" in result.diagnostics
     assert set(result.diagnostics["input_aliasing"].keys()) == {
         "applied",
         "conflicts",
         "unresolved",
+    }
+    assert set(result.diagnostics["input_adapter"].keys()) == {
+        "enabled",
+        "applied",
+        "conflicts",
+        "coercion_errors",
+        "null_like_hits",
+        "unresolved",
+        "error_samples",
     }
 
 
@@ -191,3 +201,117 @@ random_seed = 0
     assert result.dataframe.height == 1
     assert result.dataframe["id"].to_list() == ["1"]
     assert result.diagnostics["input_aliasing"]["applied"]["remote"] == "remote_flag"
+
+
+def test_runtime_adapter_mapping_affects_remote_filtering(tmp_path: Path) -> None:
+    parquet_path = tmp_path / "jobs.parquet"
+    pl.DataFrame(
+        {
+            "id": ["1", "2"],
+            "title": ["A", "B"],
+            "company": ["X", "Y"],
+            "location_raw": ["Remote", "NYC"],
+            "remote_flag": ["yes", "no"],
+            "description_text": ["desc", "desc"],
+            "description_html": [None, None],
+            "apply_url": ["https://x/1", "https://x/2"],
+            "posted_at": ["2026-01-01", "2026-01-02"],
+        }
+    ).write_parquet(parquet_path)
+
+    pipeline_path = tmp_path / "pipeline.toml"
+    pipeline_path.write_text(
+        f"""
+[input]
+kind = "parquet"
+path = "{parquet_path}"
+
+[input.adapter]
+enabled = true
+
+[input.adapter.fields.remote]
+from = ["remote_flag"]
+cast = "bool"
+
+[stages.clean]
+enabled = true
+
+[stages.filter]
+enabled = true
+remote_only = true
+
+[stages.label]
+enabled = false
+
+[stages.rate]
+enabled = false
+
+[stages.match]
+enabled = false
+""".strip(),
+        encoding="utf-8",
+    )
+
+    runtime = HonestRolesRuntime.from_configs(pipeline_path)
+    result = runtime.run()
+    assert result.dataframe.height == 1
+    assert result.dataframe["id"].to_list() == ["1"]
+    assert result.diagnostics["input_adapter"]["applied"]["remote"] == "remote_flag"
+
+
+def test_runtime_adapter_then_alias_precedence(tmp_path: Path) -> None:
+    parquet_path = tmp_path / "jobs.parquet"
+    pl.DataFrame(
+        {
+            "id": ["1", "2"],
+            "title": ["A", "B"],
+            "company": ["X", "Y"],
+            "location_raw": ["Remote", "NYC"],
+            "location_alias": ["Austin", "Seattle"],
+            "description_text": ["desc", "desc"],
+            "description_html": [None, None],
+            "apply_url": ["https://x/1", "https://x/2"],
+            "posted_at": ["2026-01-01", "2026-01-02"],
+        }
+    ).write_parquet(parquet_path)
+
+    pipeline_path = tmp_path / "pipeline.toml"
+    pipeline_path.write_text(
+        f"""
+[input]
+kind = "parquet"
+path = "{parquet_path}"
+
+[input.aliases]
+location = ["location_alias"]
+
+[input.adapter]
+enabled = true
+
+[input.adapter.fields.location]
+from = ["location_raw"]
+cast = "string"
+
+[stages.clean]
+enabled = false
+
+[stages.filter]
+enabled = false
+
+[stages.label]
+enabled = false
+
+[stages.rate]
+enabled = false
+
+[stages.match]
+enabled = false
+""".strip(),
+        encoding="utf-8",
+    )
+
+    runtime = HonestRolesRuntime.from_configs(pipeline_path)
+    result = runtime.run()
+    assert result.dataframe["location"].to_list() == ["Remote", "NYC"]
+    assert result.diagnostics["input_adapter"]["applied"]["location"] == "location_raw"
+    assert result.diagnostics["input_aliasing"]["applied"] == {}

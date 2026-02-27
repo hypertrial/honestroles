@@ -211,6 +211,69 @@ def test_cli_scaffold_plugin_numeric_name_returns_config_error(tmp_path: Path) -
     assert code == 2
 
 
+def test_cli_adapter_infer_writes_draft_and_report(tmp_path: Path, capsys) -> None:
+    parquet_path = tmp_path / "jobs.parquet"
+    output_file = tmp_path / "adapter.toml"
+    pl.DataFrame(
+        {
+            "job_location": ["Remote", "NYC"],
+            "is_remote": ["true", "false"],
+            "date_posted": ["2026-01-01", "2026-01-02"],
+        }
+    ).write_parquet(parquet_path)
+
+    code = main(
+        [
+            "adapter",
+            "infer",
+            "--input-parquet",
+            str(parquet_path),
+            "--output-file",
+            str(output_file),
+            "--sample-rows",
+            "100",
+            "--top-candidates",
+            "2",
+            "--min-confidence",
+            "0.5",
+        ]
+    )
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["adapter_draft"] == str(output_file.resolve())
+    assert Path(payload["adapter_draft"]).exists()
+    assert Path(payload["inference_report"]).exists()
+    assert payload["field_suggestions"] >= 1
+
+
+def test_cli_adapter_infer_invalid_input_returns_config_error(tmp_path: Path) -> None:
+    code = main(
+        [
+            "adapter",
+            "infer",
+            "--input-parquet",
+            str(tmp_path / "missing.parquet"),
+        ]
+    )
+    assert code == 2
+
+
+def test_cli_adapter_infer_invalid_thresholds_return_config_error(
+    sample_parquet: Path,
+) -> None:
+    code = main(
+        [
+            "adapter",
+            "infer",
+            "--input-parquet",
+            str(sample_parquet),
+            "--sample-rows",
+            "0",
+        ]
+    )
+    assert code == 2
+
+
 def test_cli_template_resolution_packaged_fallback(monkeypatch) -> None:
     cli_main = _cli_main_module()
 

@@ -25,6 +25,8 @@ QUALITY_PROFILE_NAME = Literal[
     "equal_weight_all",
     "strict_recruiting",
 ]
+AdapterCastType = Literal["string", "bool", "float", "int", "date_string"]
+AdapterOnError = Literal["null_warn"]
 
 
 class StrictModel(BaseModel):
@@ -76,10 +78,106 @@ class InputAliasesConfig(StrictModel):
         return _coerce_alias_values(value)
 
 
+def _coerce_string_tuple(value: object, *, field: str) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, list):
+        items = value
+    elif isinstance(value, tuple):
+        items = list(value)
+    else:
+        raise TypeError(f"{field} must be a list of non-empty strings")
+
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for raw in items:
+        if not isinstance(raw, str):
+            raise TypeError(f"{field} entries must be strings")
+        token = raw.strip()
+        if not token:
+            raise ValueError(f"{field} entries must be non-empty")
+        if token in seen:
+            raise ValueError(f"duplicate {field} entry '{token}'")
+        seen.add(token)
+        cleaned.append(token)
+    return tuple(cleaned)
+
+
+class InputAdapterFieldConfig(StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True, populate_by_name=True)
+
+    from_: tuple[str, ...] = Field(alias="from")
+    cast: AdapterCastType = "string"
+    trim: bool = True
+    null_like: tuple[str, ...] = ()
+    true_values: tuple[str, ...] = ()
+    false_values: tuple[str, ...] = ()
+    datetime_formats: tuple[str, ...] = ()
+
+    @field_validator("from_", mode="before")
+    @classmethod
+    def _coerce_from(cls, value: object) -> tuple[str, ...]:
+        values = _coerce_string_tuple(value, field="input.adapter.fields.*.from")
+        if not values:
+            raise ValueError("input.adapter.fields.*.from must include at least one source field")
+        return values
+
+    @field_validator("null_like", mode="before")
+    @classmethod
+    def _coerce_null_like(cls, value: object) -> tuple[str, ...]:
+        return _coerce_string_tuple(value, field="input.adapter.fields.*.null_like")
+
+    @field_validator("true_values", mode="before")
+    @classmethod
+    def _coerce_true_values(cls, value: object) -> tuple[str, ...]:
+        return _coerce_string_tuple(value, field="input.adapter.fields.*.true_values")
+
+    @field_validator("false_values", mode="before")
+    @classmethod
+    def _coerce_false_values(cls, value: object) -> tuple[str, ...]:
+        return _coerce_string_tuple(value, field="input.adapter.fields.*.false_values")
+
+    @field_validator("datetime_formats", mode="before")
+    @classmethod
+    def _coerce_datetime_formats(cls, value: object) -> tuple[str, ...]:
+        return _coerce_string_tuple(
+            value, field="input.adapter.fields.*.datetime_formats"
+        )
+
+    @model_validator(mode="after")
+    def _cast_specific_constraints(self) -> "InputAdapterFieldConfig":
+        if self.cast != "bool" and (self.true_values or self.false_values):
+            raise ValueError("true_values/false_values are only valid when cast='bool'")
+        if self.cast == "bool" and bool(set(self.true_values) & set(self.false_values)):
+            raise ValueError("true_values and false_values must not overlap")
+        if self.cast != "date_string" and self.datetime_formats:
+            raise ValueError("datetime_formats is only valid when cast='date_string'")
+        return self
+
+
+class InputAdapterConfig(StrictModel):
+    enabled: bool = True
+    on_error: AdapterOnError = "null_warn"
+    fields: dict[str, InputAdapterFieldConfig] = Field(default_factory=dict)
+
+    @field_validator("fields")
+    @classmethod
+    def _validate_field_keys(
+        cls, value: dict[str, InputAdapterFieldConfig]
+    ) -> dict[str, InputAdapterFieldConfig]:
+        for key in value:
+            if key not in CANONICAL_SOURCE_FIELDS:
+                raise ValueError(
+                    f"input.adapter.fields contains invalid canonical key '{key}'"
+                )
+        return dict(sorted(value.items()))
+
+
 class InputConfig(StrictModel):
     kind: Literal["parquet"] = "parquet"
     path: Path
     aliases: InputAliasesConfig = Field(default_factory=InputAliasesConfig)
+    adapter: InputAdapterConfig = Field(default_factory=InputAdapterConfig)
 
     @field_validator("path", mode="before")
     @classmethod

@@ -150,3 +150,92 @@ salary_min = 0.0
     )
     with pytest.raises(ConfigValidationError):
         load_pipeline_config(path)
+
+
+def test_load_pipeline_config_with_adapter_config(tmp_path: Path) -> None:
+    parquet_path = tmp_path / "jobs.parquet"
+    parquet_path.write_bytes(b"PAR1")
+    path = tmp_path / "pipeline_with_adapter.toml"
+    path.write_text(
+        f"""
+[input]
+kind = "parquet"
+path = "{parquet_path}"
+
+[input.adapter]
+enabled = true
+on_error = "null_warn"
+
+[input.adapter.fields.remote]
+from = ["remote_flag"]
+cast = "bool"
+true_values = ["true", "1", "yes"]
+false_values = ["false", "0", "no"]
+""".strip(),
+        encoding="utf-8",
+    )
+    cfg = load_pipeline_config(path)
+    assert cfg.input.adapter.enabled is True
+    assert cfg.input.adapter.fields["remote"].from_ == ("remote_flag",)
+    assert cfg.input.adapter.fields["remote"].cast == "bool"
+
+
+def test_load_pipeline_config_rejects_adapter_empty_from_list(tmp_path: Path) -> None:
+    parquet_path = tmp_path / "jobs.parquet"
+    parquet_path.write_bytes(b"PAR1")
+    path = tmp_path / "pipeline_adapter_empty_from.toml"
+    path.write_text(
+        f"""
+[input]
+kind = "parquet"
+path = "{parquet_path}"
+
+[input.adapter.fields.location]
+from = []
+cast = "string"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError):
+        load_pipeline_config(path)
+
+
+def test_load_pipeline_config_rejects_adapter_cast_specific_fields(tmp_path: Path) -> None:
+    parquet_path = tmp_path / "jobs.parquet"
+    parquet_path.write_bytes(b"PAR1")
+    path = tmp_path / "pipeline_adapter_bad_cast_fields.toml"
+    path.write_text(
+        f"""
+[input]
+kind = "parquet"
+path = "{parquet_path}"
+
+[input.adapter.fields.salary_min]
+from = ["salary_text"]
+cast = "float"
+true_values = ["true"]
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError):
+        load_pipeline_config(path)
+
+
+def test_load_pipeline_config_rejects_invalid_adapter_canonical_key(tmp_path: Path) -> None:
+    parquet_path = tmp_path / "jobs.parquet"
+    parquet_path.write_bytes(b"PAR1")
+    path = tmp_path / "pipeline_adapter_bad_key.toml"
+    path.write_text(
+        f"""
+[input]
+kind = "parquet"
+path = "{parquet_path}"
+
+[input.adapter.fields.bad_field]
+from = ["whatever"]
+cast = "string"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError):
+        load_pipeline_config(path)
