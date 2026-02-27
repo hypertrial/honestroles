@@ -89,13 +89,18 @@ def _handle_config_validate(args: argparse.Namespace) -> int:
 def _handle_report_quality(args: argparse.Namespace) -> int:
     runtime = HonestRolesRuntime.from_configs(args.pipeline_config, args.plugin_manifest)
     result = runtime.run()
-    report = build_data_quality_report(result.dataframe)
+    report = build_data_quality_report(
+        result.dataframe, quality=runtime.pipeline_config.runtime.quality
+    )
     print(
         json.dumps(
             {
                 "row_count": report.row_count,
                 "score_percent": report.score_percent,
                 "null_percentages": report.null_percentages,
+                "profile": report.profile,
+                "weighted_null_percent": report.weighted_null_percent,
+                "effective_weights": report.effective_weights,
             },
             indent=2,
             sort_keys=True,

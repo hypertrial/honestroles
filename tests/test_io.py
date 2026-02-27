@@ -5,6 +5,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+from honestroles.config import RuntimeQualityConfig
 from honestroles.errors import ConfigValidationError
 from honestroles.io import (
     _validate_read_query,
@@ -12,6 +13,7 @@ from honestroles.io import (
     build_data_quality_report,
     normalize_source_data_contract,
     read_parquet,
+    resolve_source_aliases,
     validate_source_data_contract,
     write_parquet,
 )
@@ -70,10 +72,14 @@ def test_query_and_table_validators() -> None:
 
 
 def test_quality_report_bounds(sample_jobs_df: pl.DataFrame) -> None:
-    report = build_data_quality_report(sample_jobs_df)
+    report = build_data_quality_report(
+        sample_jobs_df, quality=RuntimeQualityConfig(profile="equal_weight_all")
+    )
     assert 0.0 <= report.score_percent <= 100.0
     assert report.row_count == sample_jobs_df.height
     assert all(0.0 <= v <= 100.0 for v in report.null_percentages.values())
+    assert report.profile == "equal_weight_all"
+    assert report.weighted_null_percent >= 0.0
 
 
 def test_quality_report_finalize_empty_frame() -> None:
@@ -81,3 +87,91 @@ def test_quality_report_finalize_empty_frame() -> None:
     assert report.row_count == 0
     assert report.score_percent == 100.0
     assert report.null_percentages == {}
+    assert report.profile == "core_fields_weighted"
+    assert report.effective_weights == {}
+    assert report.weighted_null_percent == 0.0
+
+
+def test_resolve_source_aliases_applies_alias_when_canonical_missing() -> None:
+    df = pl.DataFrame(
+        {
+            "id": ["1"],
+            "title": ["Engineer"],
+            "company": ["Acme"],
+            "location_raw": ["Remote"],
+            "remote_flag": [True],
+            "description_text": ["x"],
+            "description_html": [None],
+            "apply_url": ["https://x/1"],
+            "posted_at": ["2026-01-01"],
+        }
+    )
+    resolved, diagnostics = resolve_source_aliases(
+        df,
+        {"location": ("location_raw",), "remote": ("remote_flag",)},
+    )
+    assert resolved["location"].to_list() == ["Remote"]
+    assert resolved["remote"].to_list() == [True]
+    assert diagnostics["applied"] == {"location": "location_raw", "remote": "remote_flag"}
+    assert "location" not in diagnostics["unresolved"]
+    assert "remote" not in diagnostics["unresolved"]
+
+
+def test_resolve_source_aliases_keeps_canonical_and_reports_conflicts() -> None:
+    df = pl.DataFrame(
+        {
+            "remote": [True, False, True],
+            "remote_flag": [True, True, False],
+        }
+    )
+    resolved, diagnostics = resolve_source_aliases(df, {"remote": ("remote_flag",)})
+    assert resolved["remote"].to_list() == [True, False, True]
+    assert diagnostics["applied"] == {}
+    assert diagnostics["conflicts"]["remote"] == 2
+
+
+def test_resolve_source_aliases_counts_invalid_remote_alias_as_conflict() -> None:
+    df = pl.DataFrame(
+        {
+            "remote": [True, False],
+            "remote_flag": ["MAYBE", "0"],
+        }
+    )
+    _, diagnostics = resolve_source_aliases(df, {"remote": ("remote_flag",)})
+    assert diagnostics["conflicts"]["remote"] == 1
+
+
+def test_resolve_source_aliases_deterministic_multi_alias_selection() -> None:
+    df = pl.DataFrame({"loc_b": ["B"], "loc_a": ["A"]})
+    resolved, diagnostics = resolve_source_aliases(
+        df,
+        {"location": ("loc_b", "loc_a")},
+    )
+    assert resolved["location"].to_list() == ["B"]
+    assert diagnostics["applied"]["location"] == "loc_b"
+
+
+def test_quality_report_weighted_formula_equal_weight_profile() -> None:
+    frame = pl.DataFrame({"a": [1, None], "b": [None, None]})
+    report = build_data_quality_report(
+        frame,
+        quality=RuntimeQualityConfig(profile="equal_weight_all"),
+    )
+    assert report.null_percentages["a"] == 50.0
+    assert report.null_percentages["b"] == 100.0
+    assert report.weighted_null_percent == 75.0
+    assert report.score_percent == 25.0
+
+
+def test_quality_report_missing_weighted_column_treated_as_fully_null() -> None:
+    frame = pl.DataFrame({"a": [1, None], "b": [None, None]})
+    report = build_data_quality_report(
+        frame,
+        quality=RuntimeQualityConfig(
+            profile="equal_weight_all",
+            field_weights={"missing_col": 2.0},
+        ),
+    )
+    assert report.effective_weights["missing_col"] == 2.0
+    assert report.weighted_null_percent == 87.5
+    assert report.score_percent == 12.5

@@ -7,12 +7,14 @@ from pydantic import ValidationError
 
 from honestroles.config.models import (
     FilterStageOptions,
+    InputAliasesConfig,
     InputConfig,
     OutputConfig,
     PluginManifestConfig,
     PluginManifestItem,
     PluginSpecConfig,
     RateStageOptions,
+    RuntimeQualityConfig,
 )
 
 
@@ -67,3 +69,26 @@ def test_plugin_manifest_plugins_tuple_passthrough_and_duplicate_rejected() -> N
                 PluginManifestItem(name="dup", kind="filter", callable="z:w"),
             )
         )
+
+
+def test_input_aliases_validation() -> None:
+    cfg = InputAliasesConfig(location=["location_raw"], remote=("remote_flag",))
+    assert cfg.location == ("location_raw",)
+    assert cfg.remote == ("remote_flag",)
+
+    with pytest.raises(ValidationError):
+        InputAliasesConfig(location=["location_raw", "location_raw"])
+
+
+def test_runtime_quality_config_validation() -> None:
+    cfg = RuntimeQualityConfig(
+        profile="core_fields_weighted",
+        field_weights={"posted_at": 0.6, "salary_min": 0.2},
+    )
+    assert cfg.field_weights["posted_at"] == 0.6
+
+    with pytest.raises(ValidationError):
+        RuntimeQualityConfig(field_weights={"posted_at": -1.0})
+
+    with pytest.raises(ValidationError):
+        RuntimeQualityConfig(field_weights={"posted_at": 0.0})

@@ -17,6 +17,38 @@ Field-level reference for `pipeline.toml`.
 | --- | --- | --- | --- |
 | `kind` | `"parquet"` | `"parquet"` | Only `parquet` allowed |
 | `path` | path-like string | none | Required |
+| `aliases` | object | `{}` | Optional canonical field alias mapping |
+
+## `[input.aliases]`
+
+Canonical keys allowed:
+
+- `id`
+- `title`
+- `company`
+- `location`
+- `remote`
+- `description_text`
+- `description_html`
+- `skills`
+- `salary_min`
+- `salary_max`
+- `apply_url`
+- `posted_at`
+
+Each alias value is an ordered array of source column names:
+
+```toml
+[input.aliases]
+location = ["location_raw"]
+remote = ["remote_flag"]
+```
+
+Alias behavior:
+
+- Canonical column always wins if present.
+- If canonical is missing, runtime uses the first existing alias in order.
+- Alias conflicts are recorded in runtime diagnostics under `input_aliasing.conflicts`.
 
 ## `[output]`
 
@@ -68,6 +100,23 @@ Field-level reference for `pipeline.toml`.
 | --- | --- | --- |
 | `fail_fast` | bool | `true` |
 | `random_seed` | int | `0` |
+| `quality` | object | profile defaults |
+
+## `[runtime.quality]`
+
+| Field | Type | Default | Constraints |
+| --- | --- | --- | --- |
+| `profile` | `"core_fields_weighted" \\| "equal_weight_all" \\| "strict_recruiting"` | `"core_fields_weighted"` | |
+| `field_weights` | mapping of field -> float | `{}` | Values must be `>= 0`; custom map must include at least one positive value |
+
+```toml
+[runtime.quality]
+profile = "core_fields_weighted"
+
+[runtime.quality.field_weights]
+posted_at = 0.6
+salary_min = 0.2
+```
 
 ## Validation Rules
 

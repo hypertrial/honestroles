@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import importlib
 from pathlib import Path
 
@@ -47,6 +48,70 @@ def test_cli_report_quality(pipeline_config_path: Path, plugin_manifest_path: Pa
         ]
     )
     assert code == 0
+
+
+def test_cli_report_quality_includes_profile_metadata(
+    pipeline_config_path: Path,
+    plugin_manifest_path: Path,
+    capsys,
+) -> None:
+    code = main(
+        [
+            "report-quality",
+            "--pipeline-config",
+            str(pipeline_config_path),
+            "--plugins",
+            str(plugin_manifest_path),
+        ]
+    )
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert "profile" in payload
+    assert "weighted_null_percent" in payload
+    assert "effective_weights" in payload
+    assert payload["profile"] == "core_fields_weighted"
+
+
+def test_cli_report_quality_score_uses_weighted_profile(tmp_path: Path, capsys) -> None:
+    parquet_path = tmp_path / "jobs.parquet"
+    import polars as pl
+
+    pl.DataFrame({"a": [1, None], "b": [None, None], "title": ["x", "y"], "description_text": ["d", "d"]}).write_parquet(parquet_path)
+
+    pipeline_path = tmp_path / "pipeline.toml"
+    pipeline_path.write_text(
+        f"""
+[input]
+kind = "parquet"
+path = "{parquet_path}"
+
+[stages.clean]
+enabled = false
+
+[stages.filter]
+enabled = false
+
+[stages.label]
+enabled = false
+
+[stages.rate]
+enabled = false
+
+[stages.match]
+enabled = false
+
+[runtime.quality]
+profile = "equal_weight_all"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    code = main(["report-quality", "--pipeline-config", str(pipeline_path)])
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["profile"] == "equal_weight_all"
+    # equal weight across output columns includes a (50 null) and b (100 null), score must be < 100
+    assert payload["score_percent"] < 100.0
 
 
 def test_cli_exit_code_for_bad_config(tmp_path: Path) -> None:

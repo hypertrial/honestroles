@@ -5,14 +5,81 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+CANONICAL_SOURCE_FIELDS: tuple[str, ...] = (
+    "id",
+    "title",
+    "company",
+    "location",
+    "remote",
+    "description_text",
+    "description_html",
+    "skills",
+    "salary_min",
+    "salary_max",
+    "apply_url",
+    "posted_at",
+)
+
+QUALITY_PROFILE_NAME = Literal[
+    "core_fields_weighted",
+    "equal_weight_all",
+    "strict_recruiting",
+]
+
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
 
+def _coerce_alias_values(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, list):
+        items = value
+    elif isinstance(value, tuple):
+        items = list(value)
+    else:
+        raise TypeError("aliases must be a list of non-empty strings")
+
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for raw in items:
+        if not isinstance(raw, str):
+            raise TypeError("alias entries must be strings")
+        alias = raw.strip()
+        if not alias:
+            raise ValueError("alias entries must be non-empty")
+        if alias in seen:
+            raise ValueError(f"duplicate alias entry '{alias}'")
+        seen.add(alias)
+        cleaned.append(alias)
+    return tuple(cleaned)
+
+
+class InputAliasesConfig(StrictModel):
+    id: tuple[str, ...] = ()
+    title: tuple[str, ...] = ()
+    company: tuple[str, ...] = ()
+    location: tuple[str, ...] = ()
+    remote: tuple[str, ...] = ()
+    description_text: tuple[str, ...] = ()
+    description_html: tuple[str, ...] = ()
+    skills: tuple[str, ...] = ()
+    salary_min: tuple[str, ...] = ()
+    salary_max: tuple[str, ...] = ()
+    apply_url: tuple[str, ...] = ()
+    posted_at: tuple[str, ...] = ()
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _coerce_aliases(cls, value: object) -> tuple[str, ...]:
+        return _coerce_alias_values(value)
+
+
 class InputConfig(StrictModel):
     kind: Literal["parquet"] = "parquet"
     path: Path
+    aliases: InputAliasesConfig = Field(default_factory=InputAliasesConfig)
 
     @field_validator("path", mode="before")
     @classmethod
@@ -86,9 +153,34 @@ class StageConfig(StrictModel):
     match: MatchStageOptions = Field(default_factory=MatchStageOptions)
 
 
+class RuntimeQualityConfig(StrictModel):
+    profile: QUALITY_PROFILE_NAME = "core_fields_weighted"
+    field_weights: dict[str, float] = Field(default_factory=dict)
+
+    @field_validator("field_weights")
+    @classmethod
+    def _validate_field_weights(cls, value: dict[str, float]) -> dict[str, float]:
+        cleaned: dict[str, float] = {}
+        for raw_key, weight in value.items():
+            key = raw_key.strip()
+            if not key:
+                raise ValueError("quality.field_weights keys must be non-empty")
+            if weight < 0:
+                raise ValueError(f"quality.field_weights['{key}'] must be >= 0")
+            cleaned[key] = float(weight)
+        return cleaned
+
+    @model_validator(mode="after")
+    def _validate_custom_weight_sum(self) -> "RuntimeQualityConfig":
+        if self.field_weights and sum(self.field_weights.values()) <= 0:
+            raise ValueError("quality.field_weights must include at least one positive value")
+        return self
+
+
 class RuntimeConfig(StrictModel):
     fail_fast: bool = True
     random_seed: int = 0
+    quality: RuntimeQualityConfig = Field(default_factory=RuntimeQualityConfig)
 
 
 class PipelineConfig(StrictModel):

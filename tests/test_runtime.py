@@ -23,6 +23,12 @@ def test_runtime_run_end_to_end(
     assert "plugin_label_note" in result.dataframe.columns
     assert result.diagnostics["final_rows"] == result.dataframe.height
     assert result.application_plan
+    assert "input_aliasing" in result.diagnostics
+    assert set(result.diagnostics["input_aliasing"].keys()) == {
+        "applied",
+        "conflicts",
+        "unresolved",
+    }
 
 
 def test_runtime_deterministic(
@@ -128,3 +134,60 @@ def test_runtime_non_fail_fast_collects_stage_errors(
     result = runtime.run()
     assert "non_fatal_errors" in result.diagnostics
     assert any(entry["stage"] == stage_name for entry in result.diagnostics["non_fatal_errors"])
+
+
+def test_runtime_alias_mapping_affects_remote_filtering(tmp_path: Path) -> None:
+    parquet_path = tmp_path / "jobs.parquet"
+    pl.DataFrame(
+        {
+            "id": ["1", "2"],
+            "title": ["A", "B"],
+            "company": ["X", "Y"],
+            "location_raw": ["Remote", "NYC"],
+            "remote_flag": [True, False],
+            "description_text": ["desc", "desc"],
+            "description_html": [None, None],
+            "apply_url": ["https://x/1", "https://x/2"],
+            "posted_at": ["2026-01-01", "2026-01-02"],
+        }
+    ).write_parquet(parquet_path)
+
+    pipeline_path = tmp_path / "pipeline.toml"
+    pipeline_path.write_text(
+        f"""
+[input]
+kind = "parquet"
+path = "{parquet_path}"
+
+[input.aliases]
+remote = ["remote_flag"]
+location = ["location_raw"]
+
+[stages.clean]
+enabled = true
+
+[stages.filter]
+enabled = true
+remote_only = true
+
+[stages.label]
+enabled = false
+
+[stages.rate]
+enabled = false
+
+[stages.match]
+enabled = false
+
+[runtime]
+fail_fast = true
+random_seed = 0
+""".strip(),
+        encoding="utf-8",
+    )
+
+    runtime = HonestRolesRuntime.from_configs(pipeline_path)
+    result = runtime.run()
+    assert result.dataframe.height == 1
+    assert result.dataframe["id"].to_list() == ["1"]
+    assert result.diagnostics["input_aliasing"]["applied"]["remote"] == "remote_flag"

@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from honestroles.__about__ import __version__
 from honestroles.config import (
+    CANONICAL_SOURCE_FIELDS,
+    InputAliasesConfig,
     PipelineConfig,
     PluginManifestConfig,
     PluginManifestItem,
     RuntimeConfig,
+    RuntimeQualityConfig,
     load_pipeline_config,
     load_plugin_manifest,
 )
@@ -23,6 +26,7 @@ from honestroles.io import (
     build_data_quality_report,
     normalize_source_data_contract,
     read_parquet,
+    resolve_source_aliases,
     validate_source_data_contract,
     write_parquet,
 )
@@ -44,12 +48,14 @@ from honestroles.runtime import HonestRolesRuntime, RuntimeResult
 
 __all__ = [
     "ConfigValidationError",
+    "CANONICAL_SOURCE_FIELDS",
     "DataQualityAccumulator",
     "DataQualityReport",
     "FilterPlugin",
     "FilterPluginContext",
     "HonestRolesError",
     "HonestRolesRuntime",
+    "InputAliasesConfig",
     "LabelPlugin",
     "LabelPluginContext",
     "PipelineConfig",
@@ -64,6 +70,7 @@ __all__ = [
     "RatePlugin",
     "RatePluginContext",
     "RuntimeConfig",
+    "RuntimeQualityConfig",
     "RuntimeInitializationError",
     "RuntimeResult",
     "StageExecutionError",
@@ -75,6 +82,7 @@ __all__ = [
     "load_plugin_manifest",
     "normalize_source_data_contract",
     "read_parquet",
+    "resolve_source_aliases",
     "validate_source_data_contract",
     "write_parquet",
 ]

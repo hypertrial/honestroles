@@ -235,3 +235,55 @@ order = 0
     registry = PluginRegistry.from_manifest(manifest_path)
     assert registry.list("label") == ("label_a", "label_b")
     assert "label_disabled" not in registry.list("label")
+
+
+def test_docs_alias_and_quality_profile_snippet(tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "jobs.parquet"
+    pipeline_path = tmp_path / "pipeline.toml"
+    _write_sample_parquet(input_path)
+
+    pipeline_path.write_text(
+        f"""
+[input]
+kind = "parquet"
+path = "{input_path}"
+
+[input.aliases]
+location = ["location_raw"]
+remote = ["remote_flag"]
+
+[stages.clean]
+enabled = false
+
+[stages.filter]
+enabled = false
+
+[stages.label]
+enabled = false
+
+[stages.rate]
+enabled = false
+
+[stages.match]
+enabled = false
+
+[runtime.quality]
+profile = "core_fields_weighted"
+
+[runtime.quality.field_weights]
+posted_at = 0.6
+salary_min = 0.2
+""".strip(),
+        encoding="utf-8",
+    )
+
+    validate_code = main(["config", "validate", "--pipeline", str(pipeline_path)])
+    assert validate_code == 0
+    _ = capsys.readouterr()
+
+    quality_code = main(["report-quality", "--pipeline-config", str(pipeline_path)])
+    assert quality_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert "profile" in payload
+    assert "weighted_null_percent" in payload
+    assert "effective_weights" in payload

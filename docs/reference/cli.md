@@ -45,3 +45,25 @@ $ honestroles config validate --pipeline pipeline.toml
 $ honestroles report-quality --pipeline-config pipeline.toml
 $ honestroles scaffold-plugin --name my-plugin --output-dir .
 ```
+
+## `report-quality` Output
+
+`score_percent` uses profile-weighted null scoring.
+
+```json
+{
+  "row_count": 12345,
+  "score_percent": 78.4,
+  "profile": "core_fields_weighted",
+  "weighted_null_percent": 21.6,
+  "effective_weights": {
+    "apply_url": 2.5,
+    "company": 2.5,
+    "description_text": 3.0
+  },
+  "null_percentages": {
+    "apply_url": 0.0,
+    "salary_min": 100.0
+  }
+}
+```

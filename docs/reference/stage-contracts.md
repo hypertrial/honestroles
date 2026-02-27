@@ -29,6 +29,16 @@ Runtime normalizes columns to include these names:
 - `apply_url`
 - `posted_at`
 
+Before normalization, runtime resolves source aliases into canonical names using:
+
+- Built-in aliases: `location_raw -> location`, `remote_flag -> remote`
+- Optional pipeline aliases from `[input.aliases]`
+
+Conflict policy:
+
+- Canonical field wins.
+- Conflicts with alias values are recorded in diagnostics.
+
 Validation requires:
 
 - `title`
@@ -48,3 +58,17 @@ Validation requires:
 - `fit_score` is bounded to `[0.0, 1.0]`.
 - `fit_rank` starts at `1` and reflects descending `fit_score`.
 - `application_plan` is aligned to ranked top `top_k` rows.
+
+## Diagnostics Additions
+
+Runtime diagnostics include `input_aliasing`:
+
+```json
+{
+  "input_aliasing": {
+    "applied": {"location": "location_raw", "remote": "remote_flag"},
+    "conflicts": {"remote": 2},
+    "unresolved": ["skills", "salary_min", "salary_max"]
+  }
+}
+```
