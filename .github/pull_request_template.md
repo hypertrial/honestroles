@@ -13,8 +13,8 @@ If plugin API changed, describe compatibility impact:
 
 ## Validation
 
-- [ ] `pytest -m "not performance" --cov=src --cov=plugin_template/src --cov-fail-under=100 -q`
-- [ ] `pytest tests/test_plugin_api_contract.py tests/test_plugin_compat_matrix.py -q`
+- [ ] `PYTHONPATH=src:plugin_template/src pytest tests plugin_template/tests -m "not fuzz" --cov=src --cov=plugin_template/src --cov-fail-under=100 -q`
+- [ ] `PYTHONPATH=src:plugin_template/src pytest -m "fuzz" -q -o addopts=""`
 - [ ] Repository coverage gate passes at 100%
 
 ## Checklist

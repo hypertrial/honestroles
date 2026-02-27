@@ -10,7 +10,7 @@ Use this page before running any pipeline.
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - A shell with `python` and `pip`
 
 ## Steps

@@ -3,13 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import tomllib
+
 from honestroles.config.models import PipelineConfig, PluginManifestConfig
 from honestroles.errors import ConfigValidationError
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore[no-redef]
 
 
 def _read_toml(path: Path) -> dict[str, Any]:

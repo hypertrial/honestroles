@@ -6,6 +6,8 @@
 - Added runtime quality profiles via `[runtime.quality]` and optional per-field weight overrides.
 - Changed `report-quality`/`build_data_quality_report` semantics: `score_percent` is now weighted profile-based (not equal-weight mean-null).
 - Added profile metadata in quality output: `profile`, `effective_weights`, `weighted_null_percent`.
+- Removed legacy docs redirect pages and legacy script wrappers in favor of canonical docs IA and CLI commands.
+- Raised minimum supported Python version to 3.11 and removed TOML loader compatibility fallback.
 
 ## 0.1.0
 
