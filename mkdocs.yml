@@ -6,6 +6,8 @@ repo_name: hypertrial/honestroles
 
 theme:
   name: material
+  palette:
+    scheme: slate
   features:
     - navigation.sections
     - navigation.top
@@ -16,6 +18,9 @@ theme:
 
 plugins:
   - search
+
+extra_css:
+  - stylesheets/extra.css
 
 markdown_extensions:
   - admonition

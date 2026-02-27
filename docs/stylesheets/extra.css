@@ -1,0 +1,122 @@
+:root {
+  --bg-primary: #0B0B40;
+  --bg-secondary: #202040;
+  --bg-elevated: #404060;
+
+  --text-primary: #E0E0E0;
+  --text-secondary: #A0A0C0;
+
+  --accent: #FF9900;
+  --accent-hover: #FFB84D;
+  --border: #404060;
+  --accent-transparent: rgba(255, 153, 0, 0.15);
+  --text-secondary-muted: rgba(160, 160, 192, 0.7);
+  --accent-contrast: #1A1A1A;
+}
+
+[data-md-color-scheme="default"],
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: var(--bg-primary);
+  --md-default-bg-color--light: var(--bg-secondary);
+  --md-default-bg-color--lighter: var(--bg-elevated);
+
+  --md-default-fg-color: var(--text-primary);
+  --md-default-fg-color--light: var(--text-secondary);
+  --md-default-fg-color--lighter: var(--text-secondary-muted);
+
+  --md-primary-fg-color: var(--bg-secondary);
+  --md-primary-fg-color--light: var(--bg-elevated);
+  --md-primary-fg-color--dark: var(--bg-primary);
+
+  --md-accent-fg-color: var(--accent);
+  --md-accent-fg-color--transparent: var(--accent-transparent);
+
+  --md-typeset-a-color: var(--accent);
+  --md-code-fg-color: var(--text-primary);
+  --md-code-bg-color: var(--bg-secondary);
+  --md-code-hl-color: var(--text-primary);
+  --md-code-hl-background-color: var(--bg-elevated);
+}
+
+body,
+.md-main {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  color-scheme: dark;
+}
+
+.md-header,
+.md-tabs,
+.md-footer {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.md-search__form,
+.md-search__input,
+.md-search-result,
+.md-sidebar__scrollwrap,
+.md-typeset .admonition,
+.md-typeset details,
+.md-typeset .tabbed-content,
+.md-typeset table:not([class]),
+.md-typeset pre > code {
+  background-color: var(--bg-secondary);
+}
+
+.md-nav__title,
+.md-nav__link,
+.md-typeset,
+.md-typeset p,
+.md-typeset li {
+  color: var(--text-primary);
+}
+
+.md-typeset a,
+.md-nav__link:hover,
+.md-nav__link--active,
+.md-typeset .headerlink:hover {
+  color: var(--accent);
+}
+
+.md-typeset a:hover {
+  color: var(--accent-hover);
+}
+
+.md-search__input::placeholder {
+  color: var(--text-secondary);
+}
+
+.md-typeset table:not([class]) td,
+.md-typeset table:not([class]) th,
+.md-typeset hr,
+.md-search__form,
+.md-search-result,
+.md-typeset .admonition,
+.md-typeset details,
+.md-sidebar {
+  border-color: var(--border);
+}
+
+.md-typeset .admonition-title,
+.md-typeset summary {
+  background-color: var(--bg-elevated);
+}
+
+.md-top,
+.md-typeset .md-button {
+  background-color: var(--bg-elevated);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.md-typeset .md-button--primary {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.md-typeset .md-button--primary:hover {
+  background-color: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
