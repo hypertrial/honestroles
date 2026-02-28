@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.1
+
 - Added EDA v2 commands: `honestroles eda diff` and `honestroles eda gate`.
 - Added EDA rules file support (`--rules-file`) with deterministic gate/drift thresholds.
 - Added source-attributed EDA outputs: `quality.by_source`, `consistency.by_source`, and `findings_by_source`.
