@@ -19,7 +19,7 @@ def test_clean_stage_preserves_existing_text_when_html_missing() -> None:
             "description_html": [None],
             "remote": [True],
             "location": ["Remote"],
-            "skills": ["python,sql"],
+            "skills": [["python", "sql"]],
             "salary_min": [100.0],
             "salary_max": [200.0],
             "apply_url": ["https://x"],

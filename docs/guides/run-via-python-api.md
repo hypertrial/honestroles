@@ -24,6 +24,7 @@ run = runtime.run()
 
 print(run.dataset.row_count())
 print(run.dataset.to_polars().shape)
+print(run.dataset.materialize_records(limit=1)[0].to_dict())
 print(run.diagnostics.to_dict())
 print(run.application_plan[:3])
 ```

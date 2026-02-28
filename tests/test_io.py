@@ -37,6 +37,28 @@ def test_contract_normalize_and_validate(sample_jobs_df: pl.DataFrame) -> None:
     assert ok.height == sample_jobs_df.height
 
 
+def test_contract_normalize_handles_list_skills_dtype() -> None:
+    frame = pl.DataFrame(
+        {
+            "id": ["1"],
+            "title": ["Engineer"],
+            "company": ["A"],
+            "location": ["Remote"],
+            "remote": [True],
+            "description_text": ["desc"],
+            "description_html": [None],
+            "skills": [["python", " sql "]],
+            "salary_min": ["10"],
+            "salary_max": ["20"],
+            "apply_url": ["https://x"],
+            "posted_at": ["2026-01-01"],
+        }
+    )
+    normalized = normalize_source_data_contract(frame)
+    assert isinstance(normalized.schema["skills"], pl.List)
+    assert normalized["skills"].to_list() == [["python", "sql"]]
+
+
 def test_contract_validate_requires_description_columns(sample_jobs_df: pl.DataFrame) -> None:
     frame = sample_jobs_df.drop("description_text").drop("description_html")
     with pytest.raises(ConfigValidationError):

@@ -5,20 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-CANONICAL_SOURCE_FIELDS: tuple[str, ...] = (
-    "id",
-    "title",
-    "company",
-    "location",
-    "remote",
-    "description_text",
-    "description_html",
-    "skills",
-    "salary_min",
-    "salary_max",
-    "apply_url",
-    "posted_at",
-)
+from honestroles.schema import CANONICAL_SOURCE_FIELDS
 
 QUALITY_PROFILE_NAME = Literal[
     "core_fields_weighted",

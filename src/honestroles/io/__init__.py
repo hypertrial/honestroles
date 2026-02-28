@@ -8,7 +8,6 @@ from typing import Any, Mapping
 import polars as pl
 
 from honestroles.config.models import (
-    CANONICAL_SOURCE_FIELDS,
     RuntimeQualityConfig,
 )
 from honestroles.domain import JobDataset
@@ -19,6 +18,7 @@ from honestroles.io.adapter import (
     infer_source_adapter,
     render_adapter_toml_fragment,
 )
+from honestroles.schema import CANONICAL_SOURCE_FIELDS
 
 _BUILTIN_SOURCE_ALIASES: dict[str, tuple[str, ...]] = {
     "location": ("location_raw",),
@@ -175,15 +175,63 @@ def normalize_source_data_contract(df: pl.DataFrame) -> pl.DataFrame:
     if missing:
         df = df.with_columns(pl.lit(None).alias(name) for name in missing)
     return df.with_columns(
-        pl.col("title").cast(pl.String, strict=False),
-        pl.col("company").cast(pl.String, strict=False),
-        pl.col("location").cast(pl.String, strict=False),
-        pl.col("description_text").cast(pl.String, strict=False),
-        pl.col("description_html").cast(pl.String, strict=False),
-        pl.col("apply_url").cast(pl.String, strict=False),
-        pl.col("salary_min").cast(pl.Float64, strict=False),
-        pl.col("salary_max").cast(pl.Float64, strict=False),
-        pl.col("posted_at").cast(pl.String, strict=False),
+        pl.col("id").cast(pl.String, strict=False).alias("id"),
+        pl.col("title").cast(pl.String, strict=False).alias("title"),
+        pl.col("company").cast(pl.String, strict=False).alias("company"),
+        pl.col("location").cast(pl.String, strict=False).alias("location"),
+        _normalize_remote_expr(df.schema.get("remote")).alias("remote"),
+        pl.col("description_text").cast(pl.String, strict=False).alias("description_text"),
+        pl.col("description_html").cast(pl.String, strict=False).alias("description_html"),
+        _normalize_skills_expr(df.schema.get("skills")).alias("skills"),
+        pl.col("salary_min").cast(pl.Float64, strict=False).alias("salary_min"),
+        pl.col("salary_max").cast(pl.Float64, strict=False).alias("salary_max"),
+        pl.col("apply_url").cast(pl.String, strict=False).alias("apply_url"),
+        pl.col("posted_at").cast(pl.String, strict=False).alias("posted_at"),
+    )
+
+
+def _normalize_remote_expr(dtype: pl.DataType | None) -> pl.Expr:
+    if dtype == pl.Boolean:
+        return pl.col("remote").cast(pl.Boolean, strict=False)
+    lowered = pl.col("remote").cast(pl.String, strict=False).str.strip_chars().str.to_lowercase()
+    return (
+        pl.when(pl.col("remote").is_null())
+        .then(pl.lit(None, dtype=pl.Boolean))
+        .when(lowered.is_in(["true", "1", "yes", "y", "remote"]))
+        .then(pl.lit(True))
+        .when(lowered.is_in(["false", "0", "no", "n", "onsite", "on-site"]))
+        .then(pl.lit(False))
+        .otherwise(pl.lit(None, dtype=pl.Boolean))
+    )
+
+
+def _normalize_skills_list_expr(list_expr: pl.Expr) -> pl.Expr:
+    return (
+        list_expr
+        .list.eval(pl.element().cast(pl.String, strict=False).str.strip_chars())
+        .list.eval(
+            pl.when(pl.element().is_null() | (pl.element() == ""))
+            .then(pl.lit(None, dtype=pl.String))
+            .otherwise(pl.element())
+        )
+        .list.drop_nulls()
+        .cast(pl.List(pl.String))
+    )
+
+
+def _normalize_skills_expr(dtype: pl.DataType | None) -> pl.Expr:
+    if isinstance(dtype, pl.List):
+        return (
+            pl.when(pl.col("skills").is_null())
+            .then(pl.lit([], dtype=pl.List(pl.String)))
+            .otherwise(_normalize_skills_list_expr(pl.col("skills")))
+        )
+    return (
+        pl.when(pl.col("skills").is_null())
+        .then(pl.lit([], dtype=pl.List(pl.String)))
+        .otherwise(
+            _normalize_skills_list_expr(pl.col("skills").cast(pl.String, strict=False).str.split(","))
+        )
     )
 
 
@@ -312,7 +360,7 @@ def build_data_quality_report(
     frame: pl.DataFrame | JobDataset, quality: RuntimeQualityConfig | None = None
 ) -> DataQualityReport:
     if isinstance(frame, JobDataset):
-        frame = frame.to_polars()
+        frame = frame.to_polars(copy=False)
     acc = DataQualityAccumulator()
     acc.update(frame)
     return acc.finalize(quality=quality)

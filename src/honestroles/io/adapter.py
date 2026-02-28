@@ -9,11 +9,11 @@ import polars as pl
 
 from honestroles.config.models import (
     AdapterCastType,
-    CANONICAL_SOURCE_FIELDS,
     InputAdapterFieldConfig,
     SourceAdapterSpec,
 )
 from honestroles.errors import ConfigValidationError
+from honestroles.schema import CANONICAL_SOURCE_FIELDS
 
 _DEFAULT_NULL_LIKE: tuple[str, ...] = ("", "null", "none", "n/a", "na")
 _DEFAULT_TRUE_VALUES: tuple[str, ...] = ("true", "1", "yes", "y", "remote")

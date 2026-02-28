@@ -37,6 +37,7 @@ print(diagnostics["plugin_counts"])
 ```python
 frame = run.dataset.to_polars()
 print(frame.select("fit_rank", "fit_score", "title", "company").head())
+print(run.dataset.materialize_records(limit=1)[0].to_dict())
 print([entry.to_dict() for entry in run.application_plan[:5]])
 ```
 

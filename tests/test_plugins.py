@@ -6,7 +6,7 @@ import polars as pl
 import pytest
 
 from honestroles.config.models import FilterStageOptions, PluginManifestItem
-from honestroles.domain import JobDataset
+from honestroles import JobDataset
 from honestroles.plugins.errors import PluginExecutionError, PluginValidationError
 from honestroles.plugins.loader import load_plugin_item
 from honestroles.plugins.registry import PluginRegistry
@@ -127,7 +127,7 @@ def test_plugin_execution_type_failure() -> None:
 def test_plugin_execution_rejects_non_canonical_dataset() -> None:
     def wrong_shape(dataset: JobDataset, ctx: FilterStageContext) -> JobDataset:
         _ = (dataset, ctx)
-        return JobDataset.from_polars(pl.DataFrame({"x": [1]}))
+        return JobDataset._from_polars_unchecked(pl.DataFrame({"x": [1]}))
 
     plugin = PluginDefinition(
         name="bad_shape",
@@ -136,7 +136,32 @@ def test_plugin_execution_rejects_non_canonical_dataset() -> None:
         func=wrong_shape,
     )
 
-    with pytest.raises(PluginExecutionError, match="missing canonical fields"):
+    with pytest.raises(PluginExecutionError, match="returned invalid JobDataset: dataset is missing canonical fields"):
+        filter_stage(
+            _dataset(),
+            FilterStageOptions(),
+            RuntimeExecutionContext(
+                pipeline_config_path=Path("pipeline.toml"),
+                plugin_manifest_path=None,
+                stage_options={},
+            ),
+            plugins=(plugin,),
+        )
+
+
+def test_plugin_execution_rejects_wrong_dataset_dtype() -> None:
+    def wrong_dtype(dataset: JobDataset, ctx: FilterStageContext) -> JobDataset:
+        _ = (dataset, ctx)
+        return JobDataset._from_polars_unchecked(_dataset().to_polars(copy=False).with_columns(pl.lit("yes").alias("remote")))
+
+    plugin = PluginDefinition(
+        name="bad_dtype",
+        kind="filter",
+        callable_ref="x:y",
+        func=wrong_dtype,
+    )
+
+    with pytest.raises(PluginExecutionError, match="invalid dtype"):
         filter_stage(
             _dataset(),
             FilterStageOptions(),

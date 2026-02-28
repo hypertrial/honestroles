@@ -34,14 +34,22 @@ run = runtime.run()
 
 ## `JobDataset`
 
-`JobDataset` is the runtime stage I/O object.
+`JobDataset` is the strict canonical runtime stage I/O object.
 
-- `to_polars() -> pl.DataFrame`
+- `to_polars(copy: bool = True) -> pl.DataFrame`
 - `row_count() -> int`
 - `columns() -> tuple[str, ...]`
-- `rows() -> list[CanonicalJobRecord]`
+- `iter_records() -> Iterator[CanonicalJobRecord]`
+- `materialize_records(limit: int | None = None) -> list[CanonicalJobRecord]`
+- `validate() -> None`
 - `with_frame(frame) -> JobDataset`
-- Runtime-produced and plugin-returned datasets must retain the canonical schema.
+- `transform(fn) -> JobDataset`
+- Runtime-produced and plugin-returned datasets must retain all canonical fields and canonical logical dtypes.
+
+Notes:
+
+- `to_polars(copy=True)` is the explicit engine boundary and returns a clone by default.
+- `rows()` and `select()` are not part of the public `JobDataset` API.
 
 ## Diagnostics Contract
 

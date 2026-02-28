@@ -94,7 +94,7 @@ class HonestRolesRuntime:
         df = normalize_source_data_contract(df)
         df = validate_source_data_contract(df)
         dataset = JobDataset.from_polars(df)
-        dataset.validate_canonical_schema()
+        dataset.validate()
 
         runtime_ctx = RuntimeExecutionContext(
             pipeline_config_path=self.pipeline_config_path,
@@ -181,7 +181,7 @@ class HonestRolesRuntime:
 
         output_path: str | None = None
         if self.pipeline_spec.output is not None:
-            write_parquet(dataset.to_polars(), self.pipeline_spec.output.path)
+            write_parquet(dataset.to_polars(copy=False), self.pipeline_spec.output.path)
             output_path = str(self.pipeline_spec.output.path)
 
         diagnostics = RuntimeDiagnostics(

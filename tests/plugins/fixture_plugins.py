@@ -4,7 +4,7 @@ from typing import ForwardRef
 
 import polars as pl
 
-from honestroles.domain import JobDataset
+from honestroles import JobDataset
 from honestroles.plugins.types import (
     FilterStageContext,
     LabelStageContext,
@@ -14,25 +14,23 @@ from honestroles.plugins.types import (
 
 def filter_min_quality(dataset: JobDataset, ctx: FilterStageContext) -> JobDataset:
     threshold = float(ctx.settings.get("min_quality", 0.0))
-    df = dataset.to_polars()
-    if "rate_quality" in df.columns:
+    if "rate_quality" in dataset.columns():
+        df = dataset.to_polars(copy=False)
         return dataset.with_frame(df.filter(pl.col("rate_quality").fill_null(0.0) >= threshold))
     return dataset
 
 
 def label_note(dataset: JobDataset, ctx: LabelStageContext) -> JobDataset:
-    return dataset.with_frame(
-        dataset.to_polars().with_columns(pl.lit(f"plugin:{ctx.plugin_name}").alias("plugin_label_note"))
+    return dataset.transform(
+        lambda frame: frame.with_columns(pl.lit(f"plugin:{ctx.plugin_name}").alias("plugin_label_note"))
     )
 
 
 def rate_bonus(dataset: JobDataset, ctx: RateStageContext) -> JobDataset:
     bonus = float(ctx.settings.get("bonus", 0.0))
-    return dataset.with_frame(
-        dataset.to_polars().with_columns(
-            (pl.col("rate_composite").fill_null(0.0) + bonus).clip(0.0, 1.0).alias(
-                "rate_composite"
-            )
+    return dataset.transform(
+        lambda frame: frame.with_columns(
+            (pl.col("rate_composite").fill_null(0.0) + bonus).clip(0.0, 1.0).alias("rate_composite")
         )
     )
 

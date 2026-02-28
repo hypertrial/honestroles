@@ -20,6 +20,7 @@ def test_runtime_run_end_to_end(
     frame = result.dataset.to_polars()
 
     assert isinstance(frame, pl.DataFrame)
+    result.dataset.validate()
     assert frame.height > 0
     assert "fit_score" in frame.columns
     assert "plugin_label_note" in frame.columns
@@ -320,3 +321,56 @@ enabled = false
     diagnostics = result.diagnostics.to_dict()
     assert diagnostics["input_adapter"]["applied"]["location"] == "location_raw"
     assert diagnostics["input_aliasing"]["applied"] == {}
+
+
+def test_runtime_normalizes_canonical_types_when_clean_disabled(tmp_path: Path) -> None:
+    parquet_path = tmp_path / "jobs.parquet"
+    pl.DataFrame(
+        {
+            "id": [1],
+            "title": ["A"],
+            "company": ["X"],
+            "location": ["Remote"],
+            "remote": ["yes"],
+            "description_text": ["desc"],
+            "description_html": [None],
+            "skills": ["python, sql"],
+            "salary_min": ["100000"],
+            "salary_max": ["120000"],
+            "apply_url": ["https://x/1"],
+            "posted_at": ["2026-01-01"],
+        }
+    ).write_parquet(parquet_path)
+
+    pipeline_path = tmp_path / "pipeline.toml"
+    pipeline_path.write_text(
+        f"""
+[input]
+kind = "parquet"
+path = "{parquet_path}"
+
+[stages.clean]
+enabled = false
+
+[stages.filter]
+enabled = false
+
+[stages.label]
+enabled = false
+
+[stages.rate]
+enabled = false
+
+[stages.match]
+enabled = false
+""".strip(),
+        encoding="utf-8",
+    )
+
+    result = HonestRolesRuntime.from_configs(pipeline_path).run()
+    result.dataset.validate()
+    frame = result.dataset.to_polars()
+    assert frame.schema["id"] == pl.String
+    assert frame.schema["remote"] == pl.Boolean
+    assert isinstance(frame.schema["skills"], pl.List)
+    assert frame["skills"].to_list() == [["python", "sql"]]

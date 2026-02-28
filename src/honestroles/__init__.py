@@ -4,7 +4,6 @@ from honestroles.__about__ import __version__
 from honestroles.config import (
     AdapterCastType,
     AdapterOnError,
-    CANONICAL_SOURCE_FIELDS,
     InputAdapterFieldConfig,
     InputAliasesConfig,
     PipelineSpec,
@@ -73,6 +72,7 @@ from honestroles.plugins import (
 )
 from honestroles.runtime import HonestRolesRuntime
 from honestroles.objects import PipelineRun
+from honestroles.schema import CANONICAL_SOURCE_FIELDS
 
 __all__ = [
     "ConfigValidationError",

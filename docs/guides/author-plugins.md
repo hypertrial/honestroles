@@ -29,10 +29,11 @@ from honestroles.plugins.types import LabelStageContext
 
 
 def add_note(dataset: JobDataset, ctx: LabelStageContext) -> JobDataset:
-    frame = dataset.to_polars().with_columns(
-        pl.lit(f"plugin:{ctx.plugin_name}").alias("plugin_note")
+    return dataset.transform(
+        lambda frame: frame.with_columns(
+            pl.lit(f"plugin:{ctx.plugin_name}").alias("plugin_note")
+        )
     )
-    return dataset.with_frame(frame)
 ```
 
 3. Register it in `plugins.toml`:
@@ -58,6 +59,7 @@ $ honestroles run --pipeline-config pipeline.toml --plugins plugins.toml
 - Manifest validates successfully.
 - Plugin executes in deterministic order by `(kind, order, name)`.
 - Plugin settings are immutable inside context (`ctx.settings`).
+- Plugins must return a valid canonical `JobDataset` with all canonical fields preserved.
 
 ## Next steps
 

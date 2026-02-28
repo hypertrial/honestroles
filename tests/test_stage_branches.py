@@ -19,7 +19,6 @@ from honestroles.plugins.types import PluginDefinition, RuntimeExecutionContext
 from honestroles.stages import (
     _apply_filter_options,
     clean_stage,
-    ensure_schema,
     filter_stage,
     label_stage,
     match_stage,
@@ -45,7 +44,7 @@ def _base_df() -> pl.DataFrame:
             "remote": [True, False],
             "description_text": ["python sql", "backend"],
             "description_html": ["<p>python</p>", "<p>backend</p>"],
-            "skills": ["python,sql", "go"],
+            "skills": [["python", "sql"], ["go"]],
             "salary_min": [100.0, 0.0],
             "salary_max": [200.0, 0.0],
             "apply_url": ["https://a", "https://b"],
@@ -56,11 +55,6 @@ def _base_df() -> pl.DataFrame:
 
 def _dataset() -> JobDataset:
     return JobDataset.from_polars(_base_df())
-
-
-def test_ensure_schema_adds_missing_columns() -> None:
-    out = ensure_schema(pl.DataFrame({"title": ["x"]}))
-    assert "company" in out.columns
 
 
 def test_clean_stage_strip_html_false_branch() -> None:
@@ -81,10 +75,10 @@ def test_clean_stage_drop_null_titles_false_branch() -> None:
 def test_clean_stage_wraps_generic_exception(monkeypatch) -> None:
     import honestroles.stages as stages_module
 
-    def fail_ensure_schema(_df: pl.DataFrame) -> pl.DataFrame:
+    def fail_clean_expr(_column: str) -> pl.Expr:
         raise RuntimeError("x")
 
-    monkeypatch.setattr(stages_module, "ensure_schema", fail_ensure_schema)
+    monkeypatch.setattr(stages_module, "_clean_text_expr", fail_clean_expr)
     with pytest.raises(StageExecutionError):
         clean_stage(_dataset(), CleanStageOptions(), _ctx())
 
@@ -135,16 +129,16 @@ def test_label_stage_invalid_plugin_return_reraised() -> None:
 
 def test_label_stage_rejects_non_canonical_plugin_dataset() -> None:
     def wrong_shape(_dataset, _ctx):
-        return JobDataset.from_polars(pl.DataFrame({"x": [1]}))
+        return JobDataset._from_polars_unchecked(pl.DataFrame({"x": [1]}))
 
     plugin = PluginDefinition(name="bad", kind="label", callable_ref="x:y", func=wrong_shape)
-    with pytest.raises(PluginExecutionError, match="missing canonical fields"):
+    with pytest.raises(PluginExecutionError, match="returned invalid JobDataset: dataset is missing canonical fields"):
         label_stage(_dataset(), LabelStageOptions(), _ctx(), plugins=(plugin,))
 
 
-def test_label_stage_wraps_generic_exception() -> None:
+def test_label_stage_wraps_invalid_dataset_entry() -> None:
     with pytest.raises(StageExecutionError):
-        label_stage(JobDataset.from_polars(pl.DataFrame({"company": ["x"]})), LabelStageOptions(), _ctx())
+        label_stage(JobDataset._from_polars_unchecked(pl.DataFrame({"company": ["x"]})), LabelStageOptions(), _ctx())
 
 
 def test_rate_stage_zero_weight_sum_branch() -> None:
@@ -176,16 +170,25 @@ def test_rate_stage_invalid_plugin_return_reraised() -> None:
 
 def test_rate_stage_rejects_non_canonical_plugin_dataset() -> None:
     def wrong_shape(_dataset, _ctx):
-        return JobDataset.from_polars(pl.DataFrame({"x": [1]}))
+        return JobDataset._from_polars_unchecked(pl.DataFrame({"x": [1]}))
 
     plugin = PluginDefinition(name="bad", kind="rate", callable_ref="x:y", func=wrong_shape)
-    with pytest.raises(PluginExecutionError, match="missing canonical fields"):
+    with pytest.raises(PluginExecutionError, match="returned invalid JobDataset: dataset is missing canonical fields"):
         rate_stage(_dataset(), RateStageOptions(), _ctx(), plugins=(plugin,))
 
 
-def test_rate_stage_wraps_generic_exception() -> None:
+def test_rate_stage_rejects_wrong_dtype_plugin_dataset() -> None:
+    def wrong_dtype(_dataset, _ctx):
+        return JobDataset._from_polars_unchecked(_base_df().with_columns(pl.lit("yes").alias("remote")))
+
+    plugin = PluginDefinition(name="bad", kind="rate", callable_ref="x:y", func=wrong_dtype)
+    with pytest.raises(PluginExecutionError, match="invalid dtype"):
+        rate_stage(_dataset(), RateStageOptions(), _ctx(), plugins=(plugin,))
+
+
+def test_rate_stage_wraps_invalid_dataset_entry() -> None:
     with pytest.raises(StageExecutionError):
-        rate_stage(JobDataset.from_polars(pl.DataFrame({"x": [1]})), RateStageOptions(), _ctx())
+        rate_stage(JobDataset._from_polars_unchecked(pl.DataFrame({"x": [1]})), RateStageOptions(), _ctx())
 
 
 def test_match_stage_adds_missing_rate_and_label_columns() -> None:
@@ -200,7 +203,7 @@ def test_match_stage_adds_missing_rate_and_label_columns() -> None:
                     "remote": [None],
                     "description_text": [None],
                     "description_html": [None],
-                    "skills": [None],
+                    "skills": [[]],
                     "salary_min": [None],
                     "salary_max": [None],
                     "apply_url": ["u"],
@@ -228,7 +231,7 @@ def test_match_stage_adds_missing_label_when_rate_exists() -> None:
                     "remote": [None],
                     "description_text": [None],
                     "description_html": [None],
-                    "skills": [None],
+                    "skills": [[]],
                     "salary_min": [None],
                     "salary_max": [None],
                     "apply_url": ["u"],

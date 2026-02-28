@@ -1,16 +1,21 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import dataclass
+from itertools import islice
+from typing import Any
 
 import polars as pl
 
-from honestroles.config.models import CANONICAL_SOURCE_FIELDS
+from honestroles.schema import CANONICAL_JOB_SCHEMA, CANONICAL_SOURCE_FIELDS
 
 
 _CANONICAL_FLOAT_FIELDS = {"salary_min", "salary_max"}
 _CANONICAL_BOOL_FIELDS = {"remote"}
 _CANONICAL_TUPLE_FIELDS = {"skills"}
+_CANONICAL_STRING_FIELDS = tuple(
+    name for name, spec in CANONICAL_JOB_SCHEMA.items() if spec.logical_type == "string"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,22 +34,13 @@ class CanonicalJobRecord:
     posted_at: str | None = None
 
     def __post_init__(self) -> None:
-        for field_name in (
-            "id",
-            "title",
-            "company",
-            "location",
-            "description_text",
-            "description_html",
-            "apply_url",
-            "posted_at",
-        ):
+        for field_name in _CANONICAL_STRING_FIELDS:
             value = getattr(self, field_name)
             if value is not None and not isinstance(value, str):
                 raise TypeError(f"{field_name} must be str | None")
         if self.remote is not None and not isinstance(self.remote, bool):
             raise TypeError("remote must be bool | None")
-        for field_name in ("salary_min", "salary_max"):
+        for field_name in _CANONICAL_FLOAT_FIELDS:
             value = getattr(self, field_name)
             if value is not None and not isinstance(value, (int, float)):
                 raise TypeError(f"{field_name} must be float | None")
@@ -78,71 +74,109 @@ class CanonicalJobRecord:
 
 @dataclass(frozen=True, slots=True)
 class JobDataset:
-    frame: pl.DataFrame
-    schema_version: str = "1.0"
-    canonical_fields: tuple[str, ...] = field(default_factory=lambda: CANONICAL_SOURCE_FIELDS)
+    _frame: pl.DataFrame
+    canonical_fields: tuple[str, ...] = CANONICAL_SOURCE_FIELDS
 
     def __post_init__(self) -> None:
-        if not isinstance(self.frame, pl.DataFrame):
-            raise TypeError("frame must be a polars.DataFrame")
-        if not isinstance(self.schema_version, str) or not self.schema_version.strip():
-            raise TypeError("schema_version must be a non-empty string")
+        if not isinstance(self._frame, pl.DataFrame):
+            raise TypeError("_frame must be a polars.DataFrame")
         if not isinstance(self.canonical_fields, tuple):
             raise TypeError("canonical_fields must be a tuple[str, ...]")
         for name in self.canonical_fields:
             if not isinstance(name, str):
                 raise TypeError("canonical_fields must contain only strings")
+        if len(set(self.canonical_fields)) != len(self.canonical_fields):
+            raise TypeError("canonical_fields must not contain duplicates")
+        if self.canonical_fields != CANONICAL_SOURCE_FIELDS:
+            raise TypeError("canonical_fields must exactly match the canonical source schema")
 
     @classmethod
-    def from_polars(
-        cls,
-        df: pl.DataFrame,
-        *,
-        schema_version: str = "1.0",
-        canonical_fields: tuple[str, ...] = CANONICAL_SOURCE_FIELDS,
-    ) -> "JobDataset":
-        return cls(frame=df, schema_version=schema_version, canonical_fields=canonical_fields)
+    def from_polars(cls, df: pl.DataFrame) -> "JobDataset":
+        dataset = cls._from_polars_unchecked(df)
+        dataset.validate()
+        return dataset
 
-    def to_polars(self) -> pl.DataFrame:
-        return self.frame
+    @classmethod
+    def _from_polars_unchecked(cls, df: pl.DataFrame) -> "JobDataset":
+        return cls(_frame=df)
+
+    def to_polars(self, *, copy: bool = True) -> pl.DataFrame:
+        return self._frame.clone() if copy else self._frame
 
     def row_count(self) -> int:
-        return self.frame.height
+        return self._frame.height
 
     def columns(self) -> tuple[str, ...]:
-        return tuple(self.frame.columns)
+        return tuple(self._frame.columns)
 
     def missing_canonical_fields(self) -> tuple[str, ...]:
-        return tuple(name for name in self.canonical_fields if name not in self.frame.columns)
+        return tuple(name for name in self.canonical_fields if name not in self._frame.columns)
 
     def validate_canonical_schema(self) -> None:
         missing = self.missing_canonical_fields()
         if missing:
-            raise ValueError(
-                "dataset is missing canonical fields: " + ", ".join(missing)
-            )
+            raise ValueError("dataset is missing canonical fields: " + ", ".join(missing))
 
-    def rows(self) -> list[CanonicalJobRecord]:
-        selected = self.frame
-        missing = list(self.missing_canonical_fields())
-        if missing:
-            selected = selected.with_columns(pl.lit(None).alias(name) for name in missing)
-        selected = selected.select(list(self.canonical_fields))
-        return [CanonicalJobRecord.from_mapping(row) for row in selected.iter_rows(named=True)]
+    def validate_canonical_types(self) -> None:
+        self.validate_canonical_schema()
+        schema = self._frame.schema
+        for name, spec in CANONICAL_JOB_SCHEMA.items():
+            dtype = schema[name]
+            if spec.logical_type == "string":
+                if dtype not in {pl.String, pl.Null}:
+                    raise TypeError(
+                        f"dataset field '{name}' has invalid dtype '{dtype}', expected String or Null"
+                    )
+            elif spec.logical_type == "bool":
+                if dtype not in {pl.Boolean, pl.Null}:
+                    raise TypeError(
+                        f"dataset field '{name}' has invalid dtype '{dtype}', expected Boolean or Null"
+                    )
+            elif spec.logical_type == "float":
+                if dtype != pl.Null and not dtype.is_numeric():
+                    raise TypeError(
+                        f"dataset field '{name}' has invalid dtype '{dtype}', expected numeric or Null"
+                    )
+            elif spec.logical_type == "list_string":
+                if dtype == pl.Null:
+                    continue
+                if not isinstance(dtype, pl.List) or dtype.inner not in {pl.String, pl.Null}:
+                    raise TypeError(
+                        f"dataset field '{name}' has invalid dtype '{dtype}', expected List(String) or Null"
+                    )
+            else:
+                raise TypeError(
+                    f"unsupported logical type '{spec.logical_type}' for canonical field '{name}'"
+                )
 
-    def select(self, *columns: str) -> "JobDataset":
-        return JobDataset.from_polars(
-            self.frame.select(list(columns)),
-            schema_version=self.schema_version,
-            canonical_fields=self.canonical_fields,
-        )
+    def validate(self) -> None:
+        self.validate_canonical_types()
+
+    def iter_records(self) -> Iterator[CanonicalJobRecord]:
+        self.validate()
+        for row in self._frame.select(list(self.canonical_fields)).iter_rows(named=True):
+            yield CanonicalJobRecord.from_mapping(row)
+
+    def materialize_records(self, limit: int | None = None) -> list[CanonicalJobRecord]:
+        if limit is not None:
+            if not isinstance(limit, int):
+                raise TypeError("limit must be an int or None")
+            if limit < 0:
+                raise ValueError("limit must be >= 0")
+        iterator = self.iter_records()
+        if limit is None:
+            return list(iterator)
+        return list(islice(iterator, limit))
 
     def with_frame(self, frame: pl.DataFrame) -> "JobDataset":
-        return JobDataset.from_polars(
-            frame,
-            schema_version=self.schema_version,
-            canonical_fields=self.canonical_fields,
-        )
+        return JobDataset.from_polars(frame)
+
+    def transform(self, fn: Callable[[pl.DataFrame], pl.DataFrame]) -> "JobDataset":
+        frame = self.to_polars(copy=False).clone()
+        result = fn(frame)
+        if not isinstance(result, pl.DataFrame):
+            raise TypeError("transform function must return a polars.DataFrame")
+        return JobDataset.from_polars(result)
 
 
 @dataclass(frozen=True, slots=True)

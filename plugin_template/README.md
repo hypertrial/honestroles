@@ -10,6 +10,10 @@ Plugins are plain Python callables referenced by `module:function` in `plugins.t
 - Label: `(JobDataset, LabelStageContext) -> JobDataset`
 - Rate: `(JobDataset, RateStageContext) -> JobDataset`
 
+Returned datasets must preserve all canonical fields and canonical logical dtypes. Use
+`dataset.transform(...)` for most plugin mutations and treat `dataset.to_polars(copy=True)` as an
+explicit engine boundary.
+
 ## Example manifest
 
 ```toml

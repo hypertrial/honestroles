@@ -4,7 +4,6 @@ from honestroles.config.loaders import load_pipeline_config, load_plugin_manifes
 from honestroles.config.models import (
     AdapterCastType,
     AdapterOnError,
-    CANONICAL_SOURCE_FIELDS,
     InputAdapterFieldConfig,
     InputAliasesConfig,
     PipelineSpec,
@@ -14,6 +13,7 @@ from honestroles.config.models import (
     RuntimeQualityConfig,
     SourceAdapterSpec,
 )
+from honestroles.schema import CANONICAL_SOURCE_FIELDS
 
 __all__ = [
     "AdapterCastType",

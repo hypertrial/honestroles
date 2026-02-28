@@ -22,15 +22,15 @@ HonestRoles used to expose its domain implicitly through `polars.DataFrame`, con
 - Owned data: canonical field values only.
 - Invariants: canonical types only; `skills` is immutable tuple data.
 - Conversions: `from_mapping()`, `to_dict()`.
-- Produced by: `JobDataset.rows()`.
+- Produced by: `JobDataset.iter_records()` or `JobDataset.materialize_records()`.
 - Consumed by: downstream Python callers that need row-level typed access.
 
 ### `JobDataset`
 
 - Purpose: stage and plugin I/O object.
-- Owned data: Polars frame plus canonical field metadata.
-- Invariants: wraps a `pl.DataFrame`; carries schema version and canonical field ownership; runtime and plugin stage boundaries require all canonical fields to be present.
-- Conversions: `from_polars()`, `to_polars()`, `rows()`, `with_frame()`.
+- Owned data: canonical Polars frame plus canonical field metadata.
+- Invariants: wraps a `pl.DataFrame`; always contains every canonical field; always satisfies canonical logical dtype compatibility; public instances are validated on construction.
+- Conversions: `from_polars()`, `to_polars(copy=True)`, `iter_records()`, `materialize_records()`, `with_frame()`, `transform()`.
 - Produced by: runtime normalization and any stage/plugin transform.
 - Consumed by: stages, plugins, Python API callers, EDA entrypoints.
 
@@ -101,7 +101,7 @@ flowchart TD
 1. Source parquet is read into Polars.
 2. `SourceAdapterSpec` maps and coerces source fields.
 3. Alias resolution fills canonical fallback fields.
-4. Runtime normalizes and validates canonical schema.
+4. Runtime normalizes and validates canonical schema and logical dtypes.
 5. A `JobDataset` enters stages and plugins.
 6. Runtime returns `PipelineRun` with typed diagnostics and plan entries.
 
@@ -123,7 +123,7 @@ The dataframe-first ABI was removed so the library can have one explicit stage c
 
 ## Serialization boundaries
 
-- `JobDataset.to_polars()` is the internal engine boundary.
+- `JobDataset.to_polars(copy=True)` is the explicit engine boundary.
 - `RuntimeDiagnostics.to_dict()` is the CLI/JSON/docs boundary.
 - `ApplicationPlanEntry.to_dict()` is the plan serialization boundary.
 - Parquet read/write remains Polars-based.
@@ -140,3 +140,4 @@ The dataframe-first ABI was removed so the library can have one explicit stage c
 - Replacing Polars as the execution engine.
 - Introducing ORM/database-style persistence abstractions.
 - Versioning object schemas beyond the current in-memory contract.
+- Treating `JobDataset` as a general-purpose projection wrapper.
