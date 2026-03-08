@@ -1,8 +1,28 @@
 default_stages: [pre-commit]
 
 repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
   - repo: local
     hooks:
+      - id: markdown-style
+        name: markdown style check
+        entry: python scripts/check_markdown_style.py
+        language: system
+        pass_filenames: false
+      - id: markdown-links
+        name: markdown link check
+        entry: python scripts/check_markdown_links.py
+        language: system
+        pass_filenames: false
+      - id: docs-refs
+        name: docs reference check
+        entry: bash scripts/check_docs_refs.sh
+        language: system
+        pass_filenames: false
       - id: ruff-check
         name: ruff check
         entry: python -m ruff check src tests
@@ -16,10 +36,5 @@ repos:
       - id: pytest-non-performance
         name: pytest (non-performance)
         entry: python -m pytest -m "not performance" --cov=src --cov=plugin_template/src --cov-report=term-missing --cov-fail-under=100 -q
-        language: system
-        pass_filenames: false
-      - id: docs-refs
-        name: docs reference check
-        entry: bash scripts/check_docs_refs.sh
         language: system
         pass_filenames: false

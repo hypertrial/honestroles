@@ -16,7 +16,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  precommit_fast:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pre-commit
+        run: python -m pip install --upgrade pip pre-commit
+
+      - name: Run fast pre-commit checks
+        run: bash scripts/run_precommit_fast.sh
+
   build:
+    needs: precommit_fast
     runs-on: ubuntu-latest
     environment:
       name: github-pages

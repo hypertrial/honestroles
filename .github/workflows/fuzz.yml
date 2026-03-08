@@ -9,7 +9,25 @@ on:
   workflow_dispatch:
 
 jobs:
+  precommit_fast:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pre-commit
+        run: python -m pip install --upgrade pip pre-commit
+
+      - name: Run fast pre-commit checks
+        run: bash scripts/run_precommit_fast.sh
+
   fuzz-smoke:
+    needs: precommit_fast
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     strategy:
@@ -45,6 +63,7 @@ jobs:
         run: HYPOTHESIS_PROFILE=ci_smoke .venv/bin/python -m pytest -m "fuzz" -q -o addopts="" ${{ matrix.paths }}
 
   fuzz-nightly:
+    needs: precommit_fast
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     strategy:

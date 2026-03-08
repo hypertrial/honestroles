@@ -32,7 +32,7 @@ Required repository secrets (either one):
 - `PYPI_API_KEY`
 - `PYPI_API_TOKEN`
 
-Important: local `.env` values are not available in GitHub Actions runners.  
+Important: local `.env` values are not available in GitHub Actions runners.
 If the workflow shows empty secret values, configure repository secrets in GitHub.
 
 ## Common Publish Failures

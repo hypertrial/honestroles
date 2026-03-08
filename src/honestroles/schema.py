@@ -30,4 +30,3 @@ CANONICAL_JOB_SCHEMA: dict[str, CanonicalFieldSpec] = {
 }
 
 CANONICAL_SOURCE_FIELDS: tuple[str, ...] = tuple(CANONICAL_JOB_SCHEMA.keys())
-
