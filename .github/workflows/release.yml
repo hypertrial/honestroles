@@ -9,7 +9,6 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: read
     steps:
       - name: Checkout
@@ -48,5 +47,15 @@ jobs:
           python -m pip install build
           python -m build
 
+      - name: Validate PyPI token secret
+        run: |
+          if [ -z "${{ secrets.PYPI_API_KEY }}" ] && [ -z "${{ secrets.PYPI_API_TOKEN }}" ]; then
+            echo "Missing PyPI token secret. Set PYPI_API_KEY (or PYPI_API_TOKEN) in repository secrets."
+            exit 1
+          fi
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_KEY || secrets.PYPI_API_TOKEN }}

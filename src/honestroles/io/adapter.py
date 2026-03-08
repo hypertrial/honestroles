@@ -122,7 +122,9 @@ def _build_coercion_plan(
         reason = "int_parse_failed"
     else:
         parsed_variants: list[pl.Expr] = [
-            clean_expr.str.strptime(pl.Datetime, format=fmt, strict=False)
+            clean_expr.str.strptime(pl.Datetime, format=fmt, strict=False).cast(
+                pl.String, strict=False
+            )
             for fmt in _effective_datetime_formats(cfg)
         ]
         parsed_dt = pl.coalesce(parsed_variants)

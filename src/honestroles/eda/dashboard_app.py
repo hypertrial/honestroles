@@ -89,7 +89,7 @@ def main() -> None:
         if not table_path.exists():
             continue
         st.markdown(f"#### {key.replace('_', ' ').title()}")
-        st.dataframe(pl.read_parquet(table_path).to_pandas(), use_container_width=True)
+        st.dataframe(pl.read_parquet(table_path), use_container_width=True)
 
     if diff_payload is not None and diff_bundle is not None:
         st.subheader("Diff Overview")
@@ -110,7 +110,7 @@ def main() -> None:
         if drift_path_rel:
             drift_path = diff_bundle.artifacts_dir / drift_path_rel
             if drift_path.exists():
-                st.dataframe(pl.read_parquet(drift_path).to_pandas(), use_container_width=True)
+                st.dataframe(pl.read_parquet(drift_path), use_container_width=True)
 
         st.markdown("#### Findings Delta")
         findings_delta_rel = diff_bundle.manifest.files.get("findings_delta")
@@ -118,7 +118,7 @@ def main() -> None:
             findings_delta_path = diff_bundle.artifacts_dir / findings_delta_rel
             if findings_delta_path.exists():
                 st.dataframe(
-                    pl.read_parquet(findings_delta_path).to_pandas(),
+                    pl.read_parquet(findings_delta_path),
                     use_container_width=True,
                 )
 

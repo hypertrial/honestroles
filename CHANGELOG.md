@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.2
+
+- Fixed `honestroles adapter infer` date parsing inference to avoid Polars timezone schema conflicts while scoring parseability.
+- Fixed `honestroles eda dashboard` table rendering to avoid requiring `pyarrow` in test/runtime environments.
+- Updated release workflow to publish with PyPI API token secrets (`PYPI_API_KEY` or `PYPI_API_TOKEN`) instead of Trusted Publishing OIDC.
+
 ## 0.1.1
 
 - Added EDA v2 commands: `honestroles eda diff` and `honestroles eda gate`.
