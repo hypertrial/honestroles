@@ -10,6 +10,7 @@ Use this guide when you need reproducible profile/diff artifacts for PR review a
 
 - HonestRoles installed
 - For dashboard mode: `pip install "honestroles[eda]"`
+- `pyarrow` is not required for dashboard table rendering.
 - Keep raw parquet inputs in `data/` (for example `data/jobs_baseline.parquet`) and write outputs under `dist/eda/` rather than cluttering repository root.
 
 ## Steps

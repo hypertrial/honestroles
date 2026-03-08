@@ -36,6 +36,11 @@ Available commands:
 | `honestroles eda gate` | `--candidate-dir`, optional `--baseline-dir`, optional `--rules-file`, optional `--fail-on`, optional `--warn-on` | Evaluates gate policy and drift thresholds for CI | JSON gate payload + exit status |
 | `honestroles eda dashboard` | `--artifacts-dir`, optional `--diff-dir`, optional `--host`, `--port` | Launches Streamlit artifact viewer | Process exit code |
 
+## Operational Notes
+
+- `honestroles eda dashboard` renders parquet tables directly via Polars; `pyarrow` is not required for table display.
+- `honestroles adapter infer` supports mixed datetime formats (including timezone offsets) when scoring candidate columns.
+
 ## Exit Codes
 
 | Exit code | Meaning |

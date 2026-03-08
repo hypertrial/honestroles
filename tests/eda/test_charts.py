@@ -71,6 +71,20 @@ def test_write_chart_figures_falls_back_when_plotter_raises(
         assert (tmp_path / filename).exists()
 
 
+def test_plot_nulls_by_column_writes_figure(tmp_path: Path) -> None:
+    output = tmp_path / "nulls_by_column.png"
+    summary = {
+        "quality": {
+            "top_null_percentages": [
+                {"column": "location", "null_pct": 12.5},
+                {"column": "remote", "null_pct": 7.0},
+            ]
+        }
+    }
+    charts._plot_nulls_by_column(_FakePyplot(), summary, output)
+    assert output.exists()
+
+
 def test_load_matplotlib_pyplot_import_error(monkeypatch: pytest.MonkeyPatch) -> None:
     import builtins
 

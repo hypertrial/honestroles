@@ -10,11 +10,14 @@ Maintainer guide for property/fuzz coverage.
 ## Deterministic Coverage Gate
 
 ```bash
-$ PYTHONPATH=src:plugin_template/src pytest tests plugin_template/tests \
-  -m "not fuzz" -o addopts="" \
-  --cov=src --cov=plugin_template/src --cov-report=term-missing \
-  --cov-fail-under=100 -q
+$ PYTHON_BIN=.venv/bin/python bash scripts/run_coverage.sh
 ```
+
+Notes:
+
+- Coverage gate is `100%` for `src/honestroles`.
+- Keep chart/EDA tests deterministic even when optional plotting deps are missing.
+- Do not rely on optional extras at runtime to make coverage pass.
 
 ## Scope
 

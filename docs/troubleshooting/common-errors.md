@@ -241,3 +241,60 @@ Review:
 - `evaluated_rules`
 
 Then adjust source extraction/normalization or update thresholds in `eda-rules.toml` as needed.
+
+## Release Workflow Fails with Missing PyPI Secret
+
+Symptom:
+
+```text
+Missing PyPI token secret. Set PYPI_API_KEY (or PYPI_API_TOKEN) in repository secrets.
+```
+
+Cause:
+
+- GitHub Actions cannot read local `.env` values.
+- Neither `PYPI_API_KEY` nor `PYPI_API_TOKEN` is set in repository secrets.
+
+Fix:
+
+1. Add one of these repository secrets:
+   `PYPI_API_KEY` or `PYPI_API_TOKEN`.
+2. Re-run the release job.
+
+## Release Workflow Fails with `invalid-publisher`
+
+Symptom:
+
+```text
+invalid-publisher
+```
+
+Cause:
+
+- Trusted publisher configuration in PyPI does not match workflow/repo/tag claims.
+
+Fix:
+
+- Prefer token-based publishing via GitHub secrets, or update trusted publisher claims to exactly match the GitHub workflow identity.
+
+## Coverage Gate Drops Below 100% in CI
+
+Symptom:
+
+```text
+Coverage failure: total of 98 is less than fail-under=100
+```
+
+Common cause:
+
+- Tests rely on optional plotting/runtime dependencies being installed in CI.
+
+Fix:
+
+- Run the canonical gate command:
+
+```bash
+$ PYTHON_BIN=.venv/bin/python bash scripts/run_coverage.sh
+```
+
+- Keep tests deterministic by stubbing optional dependencies instead of requiring them for coverage-critical paths.

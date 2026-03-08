@@ -49,6 +49,8 @@ Launch EDA dashboard (optional):
 $ honestroles eda dashboard --artifacts-dir dist/eda/latest --host 127.0.0.1 --port 8501
 ```
 
+Dashboard note: table rendering uses Polars directly; `pyarrow` is not required.
+
 Diff two EDA runs:
 
 ```bash

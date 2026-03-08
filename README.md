@@ -79,6 +79,18 @@ $ bash scripts/check_docs_refs.sh
 
 For local profiling data, keep large parquet inputs under `data/` and write generated artifacts under `dist/` (both are ignored by git).
 
+## Maintainer Notes
+
+- Release workflow publishes to PyPI from GitHub Actions secrets (`PYPI_API_KEY` or `PYPI_API_TOKEN`).
+- Local `.env` files are not visible to GitHub runners.
+- Before tagging, run deterministic gate:
+
+```bash
+$ PYTHON_BIN=.venv/bin/python bash scripts/run_coverage.sh
+```
+
+- Full maintainer runbook: `docs/for-maintainers/release-and-pypi.md`.
+
 ## License
 
 MIT

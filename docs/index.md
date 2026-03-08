@@ -50,3 +50,7 @@ If your goal is to use HonestRoles (not build integrations), start here:
 
 - Frequent issues: [Common Errors](troubleshooting/common-errors.md)
 - Short answers: [FAQ](troubleshooting/faq.md)
+
+## Maintainer Ops
+
+- Release runbook: [Release and PyPI](for-maintainers/release-and-pypi.md)

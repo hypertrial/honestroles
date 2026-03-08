@@ -77,5 +77,6 @@ nav:
       - End-to-End: examples/end-to-end.md
       - Plugin Patterns: examples/plugin-patterns.md
   - For Maintainers:
+      - Release and PyPI: for-maintainers/release-and-pypi.md
       - Fuzzing: for-maintainers/fuzzing.md
       - Docs Style Guide: style-guide.md
