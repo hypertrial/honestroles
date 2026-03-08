@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.3
+
+- Added fast pre-commit hygiene gates (trailing whitespace, EOF, docs refs/style/links) across all GitHub Actions workflows.
+- Added shared `scripts/run_precommit_fast.sh` to centralize workflow pre-commit execution.
+- Hardened CI/docs/fuzz/release workflows with fail-fast pre-commit checks before heavier jobs.
+
 ## 0.1.2
 
 - Fixed `honestroles adapter infer` date parsing inference to avoid Polars timezone schema conflicts while scoring parseability.
