@@ -213,3 +213,6 @@ __marimo__/
 data/*
 !data/.gitkeep
 .DS_Store
+
+# honestroles local run lineage
+.honestroles/

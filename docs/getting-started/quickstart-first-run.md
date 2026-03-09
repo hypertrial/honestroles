@@ -44,28 +44,41 @@ pl.DataFrame(
 PY
 ```
 
-2. Run the sample pipeline and plugin manifest:
+2. Scaffold starter config files from the sample input:
 
 ```bash
-$ honestroles run --pipeline-config examples/sample_pipeline.toml --plugins examples/sample_plugins.toml
+$ honestroles init --input-parquet examples/jobs_sample.parquet --pipeline-config pipeline.toml --plugins-manifest plugins.toml
 ```
 
-3. Verify output file exists:
+3. Validate readiness before running:
 
 ```bash
-$ ls -lh examples/jobs_scored.parquet
+$ honestroles doctor --pipeline-config pipeline.toml --plugins plugins.toml --format table
+```
+
+4. Run the pipeline:
+
+```bash
+$ honestroles run --pipeline-config pipeline.toml --plugins plugins.toml
+```
+
+5. Verify output file exists:
+
+```bash
+$ ls -lh dist/jobs_scored.parquet
+```
+
+6. Verify run lineage was recorded:
+
+```bash
+$ honestroles runs list --limit 5 --format table
 ```
 
 ## Expected result
 
-The CLI prints JSON diagnostics containing:
+The CLI prints JSON diagnostics by default (or table output with `--format table`).
 
-- `stage_rows`
-- `plugin_counts`
-- `runtime`
-- `final_rows`
-
-The output file examples/jobs_scored.parquet should exist.
+The output file `dist/jobs_scored.parquet` should exist.
 
 !!! warning
     If this fails, go to [Common Errors](../troubleshooting/common-errors.md).

@@ -22,6 +22,24 @@ Fix:
 $ honestroles config validate --pipeline pipeline.toml
 ```
 
+## `doctor` Reports `fail`
+
+Symptom:
+
+- `honestroles doctor` exits with code `1`.
+
+Cause:
+
+- One or more readiness checks failed (environment, config, input/schema, or output path checks).
+
+Fix:
+
+Run in table mode and apply the suggested `fix` values per check:
+
+```bash
+$ honestroles doctor --pipeline-config pipeline.toml --plugins plugins.toml --format table
+```
+
 ## Plugin Callable Reference Fails
 
 Symptom:
@@ -276,6 +294,32 @@ Cause:
 Fix:
 
 - Prefer token-based publishing via GitHub secrets, or update trusted publisher claims to exactly match the GitHub workflow identity.
+
+## `runs show` Cannot Find a Run
+
+Symptom:
+
+```text
+run record not found
+```
+
+Cause:
+
+- `--run-id` does not exist under `.honestroles/runs/` in the current project directory.
+
+Fix:
+
+1. List available run IDs:
+
+```bash
+$ honestroles runs list --limit 20 --format table
+```
+
+2. Use one of those IDs:
+
+```bash
+$ honestroles runs show --run-id <run_id>
+```
 
 ## Coverage Gate Drops Below 100% in CI
 

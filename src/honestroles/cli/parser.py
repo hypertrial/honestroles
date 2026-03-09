@@ -3,6 +3,15 @@ from __future__ import annotations
 import argparse
 
 
+def _add_format_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--format",
+        choices=["json", "table"],
+        default="json",
+        help="Output format",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="honestroles")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -10,16 +19,19 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = sub.add_parser("run", help="Run pipeline from TOML config")
     run_parser.add_argument("--pipeline-config", required=True)
     run_parser.add_argument("--plugins", dest="plugin_manifest", required=False)
+    _add_format_arg(run_parser)
 
     plugins_parser = sub.add_parser("plugins", help="Plugin manifest operations")
     plugins_sub = plugins_parser.add_subparsers(dest="plugins_command", required=True)
     plugins_validate = plugins_sub.add_parser("validate", help="Validate plugin manifest")
     plugins_validate.add_argument("--manifest", required=True)
+    _add_format_arg(plugins_validate)
 
     config_parser = sub.add_parser("config", help="Pipeline config operations")
     config_sub = config_parser.add_subparsers(dest="config_command", required=True)
     config_validate = config_sub.add_parser("validate", help="Validate pipeline config")
     config_validate.add_argument("--pipeline", required=True)
+    _add_format_arg(config_validate)
 
     report_parser = sub.add_parser(
         "report-quality",
@@ -27,6 +39,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     report_parser.add_argument("--pipeline-config", required=True)
     report_parser.add_argument("--plugins", dest="plugin_manifest", required=False)
+    _add_format_arg(report_parser)
+
+    init_parser = sub.add_parser("init", help="Scaffold pipeline and plugin manifest")
+    init_parser.add_argument("--input-parquet", required=True)
+    init_parser.add_argument("--pipeline-config", default="pipeline.toml")
+    init_parser.add_argument("--plugins-manifest", default="plugins.toml")
+    init_parser.add_argument("--output-parquet", default="dist/jobs_scored.parquet")
+    init_parser.add_argument("--sample-rows", type=int, default=50000)
+    init_parser.add_argument("--force", action="store_true")
+    _add_format_arg(init_parser)
+
+    doctor_parser = sub.add_parser("doctor", help="Validate environment and pipeline readiness")
+    doctor_parser.add_argument("--pipeline-config", required=True)
+    doctor_parser.add_argument("--plugins", dest="plugin_manifest", required=False)
+    doctor_parser.add_argument("--sample-rows", type=int, default=1000)
+    _add_format_arg(doctor_parser)
 
     scaffold_parser = sub.add_parser(
         "scaffold-plugin",
@@ -34,6 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scaffold_parser.add_argument("--name", required=True)
     scaffold_parser.add_argument("--output-dir", default=".")
+    _add_format_arg(scaffold_parser)
 
     adapter_parser = sub.add_parser(
         "adapter", help="Source adapter utilities"
@@ -49,6 +78,7 @@ def build_parser() -> argparse.ArgumentParser:
     adapter_infer.add_argument("--top-candidates", type=int, default=3)
     adapter_infer.add_argument("--min-confidence", type=float, default=0.55)
     adapter_infer.add_argument("--print", dest="print_fragment", action="store_true")
+    _add_format_arg(adapter_infer)
 
     eda_parser = sub.add_parser("eda", help="EDA artifact generation and dashboard")
     eda_sub = eda_parser.add_subparsers(dest="eda_command", required=True)
@@ -68,6 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
     eda_generate.add_argument("--top-k", type=int, default=10)
     eda_generate.add_argument("--max-rows", type=int, default=None)
     eda_generate.add_argument("--rules-file", default=None)
+    _add_format_arg(eda_generate)
 
     eda_diff = eda_sub.add_parser(
         "diff",
@@ -77,6 +108,7 @@ def build_parser() -> argparse.ArgumentParser:
     eda_diff.add_argument("--candidate-dir", required=True)
     eda_diff.add_argument("--output-dir", default="dist/eda/diff")
     eda_diff.add_argument("--rules-file", default=None)
+    _add_format_arg(eda_diff)
 
     eda_dashboard = eda_sub.add_parser(
         "dashboard",
@@ -96,5 +128,17 @@ def build_parser() -> argparse.ArgumentParser:
     eda_gate.add_argument("--rules-file", default=None)
     eda_gate.add_argument("--fail-on", default=None)
     eda_gate.add_argument("--warn-on", default=None)
+    _add_format_arg(eda_gate)
+
+    runs_parser = sub.add_parser("runs", help="Inspect run lineage records")
+    runs_sub = runs_parser.add_subparsers(dest="runs_command", required=True)
+    runs_list = runs_sub.add_parser("list", help="List recorded runs")
+    runs_list.add_argument("--limit", type=int, default=20)
+    runs_list.add_argument("--status", choices=["pass", "fail"], default=None)
+    _add_format_arg(runs_list)
+
+    runs_show = runs_sub.add_parser("show", help="Show one run by ID")
+    runs_show.add_argument("--run-id", required=True)
+    _add_format_arg(runs_show)
 
     return parser

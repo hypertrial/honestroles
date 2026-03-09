@@ -18,8 +18,15 @@ $ PYTHON_BIN=.venv/bin/python bash scripts/run_coverage.sh
 $ PYTHONPATH=src:plugin_template/src .venv/bin/python -m pytest tests/docs -q
 ```
 
-5. Commit and push `main`.
-6. Create/push tag `v<major>.<minor>.<patch>`.
+5. Smoke-test new CLI operability commands on a sample parquet:
+
+```bash
+$ honestroles init --input-parquet examples/jobs_sample.parquet --pipeline-config /tmp/pipeline.toml --plugins-manifest /tmp/plugins.toml --force
+$ honestroles doctor --pipeline-config /tmp/pipeline.toml --format table
+```
+
+6. Commit and push `main`.
+7. Create/push tag `v<major>.<minor>.<patch>`.
 
 The release workflow validates that tag version and package version match exactly.
 
@@ -34,6 +41,14 @@ Required repository secrets (either one):
 
 Important: local `.env` values are not available in GitHub Actions runners.
 If the workflow shows empty secret values, configure repository secrets in GitHub.
+
+## Post-Release Verification
+
+After publish succeeds:
+
+1. Install the released version in a clean environment.
+2. Run `honestroles --help` and confirm new commands are present (`init`, `doctor`, `runs`).
+3. Run one command that writes lineage (`run`, `report-quality`, `adapter infer`, or `eda` command) and verify `.honestroles/runs/<run_id>/run.json` is created.
 
 ## Common Publish Failures
 

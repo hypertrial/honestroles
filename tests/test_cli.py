@@ -778,3 +778,230 @@ def test_cli_scaffold_plugin_skips_rename_when_package_matches_template(tmp_path
         ]
     )
     assert code == 0
+
+
+def test_cli_init_creates_pipeline_and_plugins(
+    sample_parquet: Path, tmp_path: Path, capsys
+) -> None:
+    pipeline_path = tmp_path / "pipeline.toml"
+    plugins_path = tmp_path / "plugins.toml"
+    output_path = tmp_path / "out.parquet"
+    code = main(
+        [
+            "init",
+            "--input-parquet",
+            str(sample_parquet),
+            "--pipeline-config",
+            str(pipeline_path),
+            "--plugins-manifest",
+            str(plugins_path),
+            "--output-parquet",
+            str(output_path),
+        ]
+    )
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["pipeline_config"] == str(pipeline_path.resolve())
+    assert payload["plugins_manifest"] == str(plugins_path.resolve())
+    assert pipeline_path.exists()
+    assert plugins_path.exists()
+    assert "[input]" in pipeline_path.read_text(encoding="utf-8")
+    assert "[output]" in pipeline_path.read_text(encoding="utf-8")
+
+
+def test_cli_init_requires_force_when_targets_exist(sample_parquet: Path, tmp_path: Path) -> None:
+    pipeline_path = tmp_path / "pipeline.toml"
+    plugins_path = tmp_path / "plugins.toml"
+    pipeline_path.write_text("old", encoding="utf-8")
+    plugins_path.write_text("old", encoding="utf-8")
+
+    code = main(
+        [
+            "init",
+            "--input-parquet",
+            str(sample_parquet),
+            "--pipeline-config",
+            str(pipeline_path),
+            "--plugins-manifest",
+            str(plugins_path),
+        ]
+    )
+    assert code == 2
+
+    code = main(
+        [
+            "init",
+            "--input-parquet",
+            str(sample_parquet),
+            "--pipeline-config",
+            str(pipeline_path),
+            "--plugins-manifest",
+            str(plugins_path),
+            "--force",
+        ]
+    )
+    assert code == 0
+    assert "[input]" in pipeline_path.read_text(encoding="utf-8")
+
+
+def test_cli_doctor_passes_on_valid_pipeline(
+    pipeline_config_path: Path, plugin_manifest_path: Path, capsys
+) -> None:
+    code = main(
+        [
+            "doctor",
+            "--pipeline-config",
+            str(pipeline_config_path),
+            "--plugins",
+            str(plugin_manifest_path),
+        ]
+    )
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] in {"pass", "warn"}
+    assert "checks" in payload
+
+
+def test_cli_doctor_returns_fail_for_invalid_pipeline_path(tmp_path: Path, capsys) -> None:
+    code = main(["doctor", "--pipeline-config", str(tmp_path / "missing.toml")])
+    assert code == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "fail"
+
+
+def test_cli_doctor_invalid_plugin_manifest_returns_config_error(
+    pipeline_config_path: Path,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    plugin_manifest = tmp_path / "plugins_bad.toml"
+    plugin_manifest.write_text("[[plugins]\n", encoding="utf-8")
+    code = main(
+        [
+            "doctor",
+            "--pipeline-config",
+            str(pipeline_config_path),
+            "--plugins",
+            str(plugin_manifest),
+        ]
+    )
+    assert code == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "fail"
+
+
+def test_cli_doctor_invalid_sample_rows_returns_config_error(
+    pipeline_config_path: Path,
+) -> None:
+    code = main(
+        [
+            "doctor",
+            "--pipeline-config",
+            str(pipeline_config_path),
+            "--sample-rows",
+            "0",
+        ]
+    )
+    assert code == 2
+
+
+def test_cli_table_format_success_and_error(
+    pipeline_config_path: Path, capsys
+) -> None:
+    code = main(
+        [
+            "config",
+            "validate",
+            "--pipeline",
+            str(pipeline_config_path),
+            "--format",
+            "table",
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "STATUS" in out
+
+    code = main(
+        [
+            "run",
+            "--pipeline-config",
+            str(Path("does-not-exist.toml").resolve()),
+            "--format",
+            "table",
+        ]
+    )
+    assert code == 2
+    assert "ERROR ConfigValidationError" in capsys.readouterr().err
+
+
+def test_cli_lineage_records_pass_and_fail(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    pipeline_config_path: Path,
+    plugin_manifest_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    code = main(
+        [
+            "run",
+            "--pipeline-config",
+            str(pipeline_config_path),
+            "--plugins",
+            str(plugin_manifest_path),
+        ]
+    )
+    assert code == 0
+
+    code = main(
+        [
+            "run",
+            "--pipeline-config",
+            str(tmp_path / "missing.toml"),
+        ]
+    )
+    assert code == 2
+
+    run_files = sorted((tmp_path / ".honestroles" / "runs").glob("*/run.json"))
+    assert len(run_files) == 2
+    statuses = {
+        json.loads(path.read_text(encoding="utf-8"))["status"]
+        for path in run_files
+    }
+    assert statuses == {"pass", "fail"}
+
+
+def test_cli_runs_list_and_show(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    pipeline_config_path: Path,
+    capsys,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    code = main(["run", "--pipeline-config", str(pipeline_config_path)])
+    assert code == 0
+    capsys.readouterr()
+
+    code = main(["runs", "list", "--limit", "10"])
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["count"] >= 1
+    run_id = payload["runs"][0]["run_id"]
+
+    code = main(["runs", "show", "--run-id", run_id])
+    assert code == 0
+    show_payload = json.loads(capsys.readouterr().out)
+    assert show_payload["run_id"] == run_id
+
+    code = main(["runs", "list", "--format", "table"])
+    assert code == 0
+    assert "RUN_ID" in capsys.readouterr().out
+
+
+def test_cli_runs_show_missing_returns_config_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    code = main(["runs", "show", "--run-id", "missing"])
+    assert code == 2
