@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Added Reliability Gate v1:
+  - New `honestroles reliability check` command with policy-aware checks and artifact output.
+  - Extended `honestroles doctor` with `--policy` and `--strict`.
+  - Added stable reliability check codes and severities in check payloads.
+  - Added reliability policy subsystem with built-in defaults and external `reliability.toml` loading.
+  - Added shared reliability evaluator used by both `doctor` and `reliability check`.
+- Extended lineage and run exploration:
+  - Track `reliability.check` runs.
+  - Added `check_codes` to run records.
+  - Extended `honestroles runs list` with `--command`, `--since`, and `--contains-code`.
+- Updated docs for reliability policy schema, strict-mode CI usage, and check-code remediation guidance.
+
 ## 0.1.4
 
 - Added `honestroles init` to scaffold `pipeline.toml` and `plugins.toml` from a sample parquet, including adapter inference when available.

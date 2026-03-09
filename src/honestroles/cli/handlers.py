@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from datetime import UTC, datetime
 import json
-import os
 from pathlib import Path
 import shutil
-import sys
 from typing import Any
 
-from honestroles.config import load_pipeline_config, load_plugin_manifest
+from honestroles.config import load_pipeline_config
 from honestroles.eda import (
     build_eda_diff,
     evaluate_eda_gate,
@@ -21,15 +20,13 @@ from honestroles.eda import (
 )
 from honestroles.errors import ConfigValidationError
 from honestroles.io import (
-    apply_source_adapter,
+    validate_source_data_contract,
     build_data_quality_report,
     infer_source_adapter,
-    normalize_source_data_contract,
     read_parquet,
-    resolve_source_aliases,
-    validate_source_data_contract,
 )
 from honestroles.plugins.registry import PluginRegistry
+from honestroles.reliability import evaluate_reliability
 from honestroles.runtime import HonestRolesRuntime
 
 from .lineage import list_records, load_record
@@ -142,22 +139,19 @@ def handle_init(args: argparse.Namespace) -> CommandResult:
     )
 
 
-def _append_check(
-    checks: list[dict[str, str]],
+def _reliability_exit_code(
     *,
-    check_id: str,
     status: str,
-    message: str,
-    fix: str,
-) -> None:
-    checks.append(
-        {
-            "id": check_id,
-            "status": status,
-            "message": message,
-            "fix": fix,
-        }
-    )
+    strict: bool,
+    has_config_input_error: bool,
+) -> int:
+    if has_config_input_error:
+        return _EXIT_CONFIG
+    if status == "fail":
+        return _EXIT_GENERIC
+    if strict and status == "warn":
+        return _EXIT_GENERIC
+    return _EXIT_OK
 
 
 def _nearest_existing_parent(path: Path) -> Path:
@@ -167,11 +161,13 @@ def _nearest_existing_parent(path: Path) -> Path:
     return current
 
 
-def _doctor_status_summary(checks: list[dict[str, str]]) -> tuple[str, dict[str, int]]:
+def _doctor_status_summary(checks: list[dict[str, Any]]) -> tuple[str, dict[str, int]]:
     summary = {"pass": 0, "warn": 0, "fail": 0}
     for item in checks:
-        state = str(item["status"])
-        summary[state] = summary.get(state, 0) + 1
+        state = str(item.get("status", ""))
+        if state not in summary:
+            continue
+        summary[state] += 1
     if summary["fail"] > 0:
         return "fail", summary
     if summary["warn"] > 0:
@@ -179,206 +175,114 @@ def _doctor_status_summary(checks: list[dict[str, str]]) -> tuple[str, dict[str,
     return "pass", summary
 
 
-def handle_doctor(args: argparse.Namespace) -> CommandResult:
-    if args.sample_rows < 1:
-        raise ConfigValidationError("sample-rows must be >= 1")
+def _reliability_payload(
+    *,
+    evaluation,
+    pipeline_config: str,
+    plugin_manifest: str | None,
+    strict: bool,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "status": evaluation.status,
+        "pipeline_config": str(Path(pipeline_config).expanduser().resolve()),
+        "plugin_manifest": (
+            str(Path(plugin_manifest).expanduser().resolve())
+            if plugin_manifest
+            else None
+        ),
+        "summary": evaluation.summary,
+        "checks": evaluation.checks,
+        "check_codes": evaluation.check_codes,
+        "policy_source": evaluation.policy_source,
+        "policy_hash": evaluation.policy_hash,
+        "strict": bool(strict),
+    }
+    if strict and evaluation.status == "warn":
+        payload["strict_escalated"] = True
+    return payload
 
-    checks: list[dict[str, str]] = []
-    has_config_input_error = False
-    _append_check(
-        checks,
-        check_id="python_version",
-        status="pass" if sys.version_info >= (3, 11) else "fail",
-        message=f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
-        fix="Use Python >= 3.11",
+
+def handle_doctor(args: argparse.Namespace) -> CommandResult:
+    strict = bool(getattr(args, "strict", False))
+    evaluation = evaluate_reliability(
+        pipeline_config=args.pipeline_config,
+        plugin_manifest=args.plugin_manifest,
+        sample_rows=args.sample_rows,
+        policy_file=getattr(args, "policy_file", None),
+        validate_source_data_contract_fn=validate_source_data_contract,
+    )
+    payload = _reliability_payload(
+        evaluation=evaluation,
+        pipeline_config=args.pipeline_config,
+        plugin_manifest=args.plugin_manifest,
+        strict=strict,
+    )
+    exit_code = _reliability_exit_code(
+        status=evaluation.status,
+        strict=strict,
+        has_config_input_error=evaluation.has_config_input_error,
+    )
+    return CommandResult(
+        payload=payload,
+        exit_code=exit_code,
     )
 
-    missing_imports: list[str] = []
-    for module in ("polars", "pydantic"):
-        try:
-            __import__(module)
-        except Exception:
-            missing_imports.append(module)
-    if missing_imports:
-        _append_check(
-            checks,
-            check_id="required_imports",
-            status="fail",
-            message=f"Missing imports: {', '.join(sorted(missing_imports))}",
-            fix="Install package dependencies (e.g. pip install honestroles)",
-        )
-    else:
-        _append_check(
-            checks,
-            check_id="required_imports",
-            status="pass",
-            message="Required runtime imports are available",
-            fix="-",
-        )
 
-    cfg = None
+def handle_reliability_check(args: argparse.Namespace) -> CommandResult:
+    strict = bool(getattr(args, "strict", False))
+    output_file = Path(args.output_file).expanduser().resolve()
+    output_file.parent.mkdir(parents=True, exist_ok=True)
     try:
-        cfg = load_pipeline_config(args.pipeline_config)
+        evaluation = evaluate_reliability(
+            pipeline_config=args.pipeline_config,
+            plugin_manifest=args.plugin_manifest,
+            sample_rows=args.sample_rows,
+            policy_file=getattr(args, "policy_file", None),
+            validate_source_data_contract_fn=validate_source_data_contract,
+        )
     except ConfigValidationError as exc:
-        has_config_input_error = True
-        _append_check(
-            checks,
-            check_id="pipeline_config",
-            status="fail",
-            message=str(exc),
-            fix="Run: honestroles config validate --pipeline <pipeline.toml>",
-        )
-    else:
-        _append_check(
-            checks,
-            check_id="pipeline_config",
-            status="pass",
-            message=f"Loaded pipeline config: {cfg.input.path}",
-            fix="-",
-        )
-
-    if args.plugin_manifest:
-        try:
-            load_plugin_manifest(args.plugin_manifest)
-        except ConfigValidationError as exc:
-            has_config_input_error = True
-            _append_check(
-                checks,
-                check_id="plugin_manifest",
-                status="fail",
-                message=str(exc),
-                fix="Run: honestroles plugins validate --manifest <plugins.toml>",
-            )
-        else:
-            _append_check(
-                checks,
-                check_id="plugin_manifest",
-                status="pass",
-                message="Plugin manifest is valid",
-                fix="-",
-            )
-
-    if cfg is not None:
-        input_path = cfg.input.path
-        if not input_path.exists():
-            _append_check(
-                checks,
-                check_id="input_exists",
-                status="fail",
-                message=f"Input parquet missing: {input_path}",
-                fix="Set [input].path to an existing parquet file",
-            )
-        else:
-            _append_check(
-                checks,
-                check_id="input_exists",
-                status="pass",
-                message=f"Input parquet exists: {input_path}",
-                fix="-",
-            )
-            sample = read_parquet(input_path).head(args.sample_rows)
-            _append_check(
-                checks,
-                check_id="input_sample_read",
-                status="pass",
-                message=f"Read sample rows: {sample.height}",
-                fix="-",
-            )
-            try:
-                adapted, _ = apply_source_adapter(sample, cfg.input.adapter)
-                aliased, _ = resolve_source_aliases(adapted, cfg.input.aliases)
-                normalized = normalize_source_data_contract(aliased)
-                validate_source_data_contract(normalized)
-            except ConfigValidationError as exc:
-                _append_check(
-                    checks,
-                    check_id="canonical_contract",
-                    status="fail",
-                    message=str(exc),
-                    fix="Update input aliases/adapter mappings to populate canonical fields",
-                )
-            else:
-                _append_check(
-                    checks,
-                    check_id="canonical_contract",
-                    status="pass",
-                    message="Canonical contract validation passed",
-                    fix="-",
-                )
-
-                if normalized.height == 0:
-                    _append_check(
-                        checks,
-                        check_id="content_readiness",
-                        status="warn",
-                        message="Input sample is empty",
-                        fix="Verify source extraction returns rows",
-                    )
-                elif normalized["title"].null_count() == normalized.height:
-                    _append_check(
-                        checks,
-                        check_id="content_readiness",
-                        status="warn",
-                        message="All sampled rows have null title",
-                        fix="Map title via [input.aliases] or [input.adapter]",
-                    )
-                else:
-                    _append_check(
-                        checks,
-                        check_id="content_readiness",
-                        status="pass",
-                        message="Sample contains required content signals",
-                        fix="-",
-                    )
-
-        if cfg.output is None:
-            _append_check(
-                checks,
-                check_id="output_path",
-                status="warn",
-                message="No [output] path configured",
-                fix="Add [output].path to persist pipeline results",
-            )
-        else:
-            parent = cfg.output.path.parent
-            if parent.exists():
-                writable = parent.is_dir() and os.access(parent, os.W_OK)
-                _append_check(
-                    checks,
-                    check_id="output_path",
-                    status="pass" if writable else "fail",
-                    message=f"Output parent directory: {parent}",
-                    fix="Ensure output directory exists and is writable",
-                )
-            else:
-                ancestor = _nearest_existing_parent(parent)
-                _append_check(
-                    checks,
-                    check_id="output_path",
-                    status="warn" if ancestor.exists() else "fail",
-                    message=f"Output parent directory does not exist: {parent}",
-                    fix=f"Create directory '{parent}' before running pipeline",
-                )
-
-    status, summary = _doctor_status_summary(checks)
-    return CommandResult(
-        payload={
-            "status": status,
+        failure_payload = {
+            "status": "fail",
             "pipeline_config": str(Path(args.pipeline_config).expanduser().resolve()),
             "plugin_manifest": (
                 str(Path(args.plugin_manifest).expanduser().resolve())
                 if args.plugin_manifest
                 else None
             ),
-            "summary": summary,
-            "checks": checks,
-        },
-        exit_code=(
-            _EXIT_CONFIG
-            if has_config_input_error
-            else (_EXIT_GENERIC if status == "fail" else _EXIT_OK)
-        ),
+            "summary": {"pass": 0, "warn": 0, "fail": 1},
+            "checks": [],
+            "check_codes": [],
+            "policy_source": "unresolved",
+            "policy_hash": None,
+            "strict": strict,
+            "error": {
+                "type": exc.__class__.__name__,
+                "message": str(exc),
+            },
+        }
+        output_file.write_text(
+            json.dumps(failure_payload, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        raise
+
+    payload = _reliability_payload(
+        evaluation=evaluation,
+        pipeline_config=args.pipeline_config,
+        plugin_manifest=args.plugin_manifest,
+        strict=strict,
     )
+    output_file.write_text(
+        json.dumps(payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    payload["reliability_artifact"] = str(output_file)
+    exit_code = _reliability_exit_code(
+        status=evaluation.status,
+        strict=strict,
+        has_config_input_error=evaluation.has_config_input_error,
+    )
+    return CommandResult(payload=payload, exit_code=exit_code)
 
 
 def handle_run(args: argparse.Namespace) -> CommandResult:
@@ -596,7 +500,27 @@ def handle_scaffold_plugin(args: argparse.Namespace) -> CommandResult:
 def handle_runs_list(args: argparse.Namespace) -> CommandResult:
     if args.limit < 1:
         raise ConfigValidationError("limit must be >= 1")
-    runs = list_records(limit=args.limit, status=args.status)
+    since = None
+    since_arg = getattr(args, "since", None)
+    if since_arg not in (None, ""):
+        try:
+            value = str(since_arg).strip()
+            if value.endswith("Z"):
+                value = value[:-1] + "+00:00"
+            since = datetime.fromisoformat(value)
+            if since.tzinfo is None:
+                since = since.replace(tzinfo=UTC)
+            else:
+                since = since.astimezone(UTC)
+        except ValueError as exc:
+            raise ConfigValidationError("since must be ISO-8601 datetime") from exc
+    runs = list_records(
+        limit=args.limit,
+        status=args.status,
+        command=getattr(args, "command_filter", None),
+        since_utc=since,
+        contains_code=getattr(args, "contains_code", None),
+    )
     return CommandResult(payload={"runs": runs, "count": len(runs)})
 
 

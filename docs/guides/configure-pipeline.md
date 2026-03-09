@@ -72,6 +72,28 @@ random_seed = 42
 $ honestroles config validate --pipeline pipeline.toml
 ```
 
+6. Define reliability thresholds in a separate policy file (optional but recommended):
+
+```toml
+# reliability.toml
+min_rows = 500
+required_columns = ["title", "description_text", "posted_at"]
+
+[max_null_pct]
+title = 5
+description_text = 10
+
+[freshness]
+column = "posted_at"
+max_age_days = 14
+```
+
+Run:
+
+```bash
+$ honestroles reliability check --pipeline-config pipeline.toml --policy reliability.toml --strict --format table
+```
+
 ## Expected result
 
 Config validation succeeds and stage/runtime values appear in normalized JSON output.
@@ -79,4 +101,5 @@ Config validation succeeds and stage/runtime values appear in normalized JSON ou
 ## Next steps
 
 - Full field-level schema: [Pipeline Config Schema](../reference/pipeline-config-schema.md)
+- Reliability threshold schema: [Reliability Policy Schema](../reference/reliability-policy-schema.md)
 - Error handling behavior: [Non-Fail-Fast and Recovery](non-fail-fast-and-recovery.md)

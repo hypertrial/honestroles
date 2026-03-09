@@ -40,6 +40,70 @@ Run in table mode and apply the suggested `fix` values per check:
 $ honestroles doctor --pipeline-config pipeline.toml --plugins plugins.toml --format table
 ```
 
+Use a custom reliability policy file:
+
+```bash
+$ honestroles doctor --pipeline-config pipeline.toml --policy reliability.toml --format table
+```
+
+Use strict mode for CI:
+
+```bash
+$ honestroles doctor --pipeline-config pipeline.toml --strict --format table
+```
+
+In strict mode, aggregate `warn` becomes exit code `1`.
+
+## `reliability check` Fails in CI
+
+Symptom:
+
+- `honestroles reliability check --strict` exits with code `1`.
+
+Cause:
+
+- One or more checks are `fail`, or strict mode escalated a `warn` status.
+
+Fix:
+
+Run in table mode and remediate by check code:
+
+```bash
+$ honestroles reliability check --pipeline-config pipeline.toml --plugins plugins.toml --strict --format table
+```
+
+Default artifact path:
+
+```text
+dist/reliability/latest/gate_result.json
+```
+
+Override artifact path:
+
+```bash
+$ honestroles reliability check --pipeline-config pipeline.toml --output-file dist/reliability/custom_gate.json
+```
+
+## Reliability Check Code Map
+
+Use this mapping for fast remediation:
+
+| Code | Typical fix |
+| --- | --- |
+| `ENV_PYTHON_VERSION` | Use Python `>=3.11`. |
+| `ENV_REQUIRED_IMPORTS` | Install package dependencies in the active environment. |
+| `CONFIG_PIPELINE_PARSE` | Run `honestroles config validate --pipeline ...` and fix config schema errors. |
+| `CONFIG_PLUGIN_MANIFEST_PARSE` | Run `honestroles plugins validate --manifest ...` and fix manifest schema/callables. |
+| `INPUT_EXISTS` | Point `[input].path` to a readable parquet file. |
+| `INPUT_SAMPLE_READ` | Verify parquet readability and file permissions. |
+| `INPUT_CANONICAL_CONTRACT` | Fix alias/adapter mappings so canonical fields are populated. |
+| `INPUT_CONTENT_READINESS` | Ensure sampled rows include required content (for example non-null titles). |
+| `OUTPUT_PATH_WRITABLE` | Create/make writable the output parent directory. |
+| `POLICY_MIN_ROWS` | Increase sample/input coverage or lower `min_rows` threshold. |
+| `POLICY_REQUIRED_COLUMNS` | Add aliases/adapter mapping for required policy columns. |
+| `POLICY_NULL_RATE` | Reduce null rates via mapping/cleaning of flagged fields. |
+| `POLICY_FRESHNESS` | Use a valid date column and update source extraction cadence/threshold. |
+
 ## Plugin Callable Reference Fails
 
 Symptom:

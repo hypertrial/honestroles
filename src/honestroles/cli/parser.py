@@ -54,7 +54,27 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_parser.add_argument("--pipeline-config", required=True)
     doctor_parser.add_argument("--plugins", dest="plugin_manifest", required=False)
     doctor_parser.add_argument("--sample-rows", type=int, default=1000)
+    doctor_parser.add_argument("--policy", dest="policy_file", default=None)
+    doctor_parser.add_argument("--strict", action="store_true")
     _add_format_arg(doctor_parser)
+
+    reliability_parser = sub.add_parser("reliability", help="Reliability policy operations")
+    reliability_sub = reliability_parser.add_subparsers(
+        dest="reliability_command", required=True
+    )
+    reliability_check = reliability_sub.add_parser(
+        "check",
+        help="Run policy-aware reliability checks and write gate artifact",
+    )
+    reliability_check.add_argument("--pipeline-config", required=True)
+    reliability_check.add_argument("--plugins", dest="plugin_manifest", required=False)
+    reliability_check.add_argument("--sample-rows", type=int, default=1000)
+    reliability_check.add_argument("--policy", dest="policy_file", default=None)
+    reliability_check.add_argument(
+        "--output-file", default="dist/reliability/latest/gate_result.json"
+    )
+    reliability_check.add_argument("--strict", action="store_true")
+    _add_format_arg(reliability_check)
 
     scaffold_parser = sub.add_parser(
         "scaffold-plugin",
@@ -135,6 +155,9 @@ def build_parser() -> argparse.ArgumentParser:
     runs_list = runs_sub.add_parser("list", help="List recorded runs")
     runs_list.add_argument("--limit", type=int, default=20)
     runs_list.add_argument("--status", choices=["pass", "fail"], default=None)
+    runs_list.add_argument("--command", dest="command_filter", default=None)
+    runs_list.add_argument("--since", default=None)
+    runs_list.add_argument("--contains-code", dest="contains_code", default=None)
     _add_format_arg(runs_list)
 
     runs_show = runs_sub.add_parser("show", help="Show one run by ID")

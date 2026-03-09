@@ -23,6 +23,7 @@ $ PYTHONPATH=src:plugin_template/src .venv/bin/python -m pytest tests/docs -q
 ```bash
 $ honestroles init --input-parquet examples/jobs_sample.parquet --pipeline-config /tmp/pipeline.toml --plugins-manifest /tmp/plugins.toml --force
 $ honestroles doctor --pipeline-config /tmp/pipeline.toml --format table
+$ honestroles reliability check --pipeline-config /tmp/pipeline.toml --strict --format table
 ```
 
 6. Commit and push `main`.
@@ -61,8 +62,9 @@ Important: local `.env` values are not visible to GitHub runners.
 After publish succeeds:
 
 1. Install the released version in a clean environment.
-2. Run `honestroles --help` and confirm commands are present (`init`, `doctor`, `runs`).
-3. Run one lineage-writing command (`run`, `report-quality`, `adapter infer`, or `eda` command) and verify `.honestroles/runs/<run_id>/run.json` is created.
+2. Run `honestroles --help` and confirm commands are present (`init`, `doctor`, `reliability`, `runs`).
+3. Run one lineage-writing command (`run`, `report-quality`, `adapter infer`, `eda`, or `reliability check`) and verify `.honestroles/runs/<run_id>/run.json` is created.
+4. If you ran `reliability check`, confirm `dist/reliability/latest/gate_result.json` is written (or your custom `--output-file`).
 
 ## Common Publish Failures
 

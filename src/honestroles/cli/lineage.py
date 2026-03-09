@@ -65,6 +65,8 @@ def _command_key(args: Mapping[str, Any]) -> str:
         return "adapter.infer"
     if command == "eda":
         return f"eda.{args.get('eda_command', '')}"
+    if command == "reliability":
+        return f"reliability.{args.get('reliability_command', '')}"
     if command == "runs":
         return f"runs.{args.get('runs_command', '')}"
     return command
@@ -78,6 +80,7 @@ def should_track(args: Mapping[str, Any]) -> bool:
         "eda.generate",
         "eda.diff",
         "eda.gate",
+        "reliability.check",
     }
 
 
@@ -87,6 +90,7 @@ def _pipeline_related_hashes(args: Mapping[str, Any]) -> tuple[str | None, dict[
 
     pipeline_path = _existing_path(args.get("pipeline_config"))
     plugin_path = _existing_path(args.get("plugin_manifest"))
+    policy_path = _existing_path(args.get("policy_file"))
     hash_sources: list[str] = []
     if pipeline_path is not None:
         hash_sources.append(_hash_file(pipeline_path))
@@ -99,6 +103,8 @@ def _pipeline_related_hashes(args: Mapping[str, Any]) -> tuple[str | None, dict[
             pass
     if plugin_path is not None:
         hash_sources.append(_hash_file(plugin_path))
+    if policy_path is not None:
+        hash_sources.append(_hash_file(policy_path))
 
     config_hash = _sha256_bytes("|".join(sorted(hash_sources)).encode("utf-8"))
     if not hash_sources:
@@ -139,7 +145,7 @@ def _eda_hashes(args: Mapping[str, Any]) -> tuple[str | None, dict[str, str], st
 
 def compute_hashes(args: Mapping[str, Any]) -> tuple[str | None, dict[str, str], str]:
     command = _command_key(args)
-    if command in {"run", "report-quality"}:
+    if command in {"run", "report-quality", "reliability.check"}:
         return _pipeline_related_hashes(args)
     if command == "adapter.infer":
         input_hashes: dict[str, str] = {}
@@ -171,6 +177,12 @@ def build_artifact_paths(args: Mapping[str, Any], payload: Mapping[str, Any] | N
             "adapter_draft": str(output),
             "inference_report": str(output.with_suffix(".report.json")),
         }
+    if command == "reliability.check":
+        output_file = Path(
+            str(args.get("output_file", "dist/reliability/latest/gate_result.json"))
+        )
+        output = output_file.expanduser().resolve()
+        return {"reliability_artifact": str(output)}
     return {}
 
 
@@ -186,6 +198,11 @@ def create_record(
     input_hash, input_hashes, config_hash = compute_hashes(args)
     run_id = uuid.uuid4().hex
     duration_ms = int((finished_at - started_at).total_seconds() * 1000)
+    check_codes: list[str] = []
+    if payload is not None:
+        raw_codes = payload.get("check_codes")
+        if isinstance(raw_codes, list):
+            check_codes = [str(code) for code in raw_codes if str(code).strip()]
     return {
         "schema_version": _SCHEMA_VERSION,
         "run_id": run_id,
@@ -198,6 +215,7 @@ def create_record(
         "input_hashes": input_hashes,
         "config_hash": config_hash,
         "artifact_paths": build_artifact_paths(args, payload),
+        "check_codes": check_codes,
         "error": dict(error) if error is not None else None,
     }
 
@@ -211,7 +229,13 @@ def write_record(record: Mapping[str, Any]) -> Path:
     return target
 
 
-def list_records(limit: int, status: str | None) -> list[dict[str, Any]]:
+def list_records(
+    limit: int,
+    status: str | None,
+    command: str | None = None,
+    since_utc: datetime | None = None,
+    contains_code: str | None = None,
+) -> list[dict[str, Any]]:
     root = runs_root()
     if not root.exists():
         return []
@@ -220,6 +244,26 @@ def list_records(limit: int, status: str | None) -> list[dict[str, Any]]:
         payload = json.loads(run_file.read_text(encoding="utf-8"))
         if status is not None and payload.get("status") != status:
             continue
+        if command is not None and payload.get("command") != command:
+            continue
+        if since_utc is not None:
+            started_at = payload.get("started_at_utc")
+            if not isinstance(started_at, str):
+                continue
+            try:
+                started_dt = datetime.fromisoformat(started_at)
+            except ValueError:
+                continue
+            if started_dt.tzinfo is None:
+                started_dt = started_dt.replace(tzinfo=timezone.utc)
+            else:
+                started_dt = started_dt.astimezone(timezone.utc)
+            if started_dt < since_utc:
+                continue
+        if contains_code:
+            codes = payload.get("check_codes")
+            if not isinstance(codes, list) or contains_code not in {str(v) for v in codes}:
+                continue
         records.append(payload)
     records.sort(key=lambda item: str(item.get("started_at_utc", "")), reverse=True)
     return records[:limit]

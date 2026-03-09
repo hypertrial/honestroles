@@ -42,6 +42,7 @@ If your goal is to use HonestRoles (not build integrations), start here:
 - CLI commands and exit codes: [CLI Reference](reference/cli.md)
 - Runtime API: [Runtime API](reference/runtime-api.md)
 - Pipeline schema: [Pipeline Config Schema](reference/pipeline-config-schema.md)
+- Reliability policy schema: [Reliability Policy Schema](reference/reliability-policy-schema.md)
 - Plugin schema and ABI: [Plugin Manifest Schema](reference/plugin-manifest-schema.md)
 - Stage contracts and behavior: [Stage Contracts](reference/stage-contracts.md)
 - Errors and failure model: [Error Model](reference/error-model.md)

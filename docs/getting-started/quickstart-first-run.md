@@ -56,22 +56,30 @@ $ honestroles init --input-parquet examples/jobs_sample.parquet --pipeline-confi
 $ honestroles doctor --pipeline-config pipeline.toml --plugins plugins.toml --format table
 ```
 
-4. Run the pipeline:
+4. Run policy gate checks (recommended for CI):
+
+```bash
+$ honestroles reliability check --pipeline-config pipeline.toml --plugins plugins.toml --strict --format table
+```
+
+This writes `dist/reliability/latest/gate_result.json` by default.
+
+5. Run the pipeline:
 
 ```bash
 $ honestroles run --pipeline-config pipeline.toml --plugins plugins.toml
 ```
 
-5. Verify output file exists:
+6. Verify output file exists:
 
 ```bash
 $ ls -lh dist/jobs_scored.parquet
 ```
 
-6. Verify run lineage was recorded:
+7. Verify run lineage was recorded:
 
 ```bash
-$ honestroles runs list --limit 5 --format table
+$ honestroles runs list --limit 5 --command reliability.check --format table
 ```
 
 ## Expected result

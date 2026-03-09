@@ -16,6 +16,7 @@ Available commands:
 - `report-quality`
 - `init`
 - `doctor`
+- `reliability check`
 - `adapter infer`
 - `runs list`
 - `runs show`
@@ -43,9 +44,10 @@ Structured-output commands default to JSON and accept `--format {json,table}`.
 | `honestroles config validate` | `--pipeline` | Validates pipeline config | JSON/table normalized config |
 | `honestroles report-quality` | `--pipeline-config`, optional `--plugins` | Runs runtime and computes quality report | JSON/table quality summary |
 | `honestroles init` | `--input-parquet`, optional `--pipeline-config`, `--plugins-manifest`, `--output-parquet`, `--sample-rows`, `--force` | Scaffolds pipeline config + plugin manifest from sample data | JSON/table scaffold summary |
-| `honestroles doctor` | `--pipeline-config`, optional `--plugins`, `--sample-rows` | Validates environment, config, schema readiness, and output path | JSON/table checks + summary |
+| `honestroles doctor` | `--pipeline-config`, optional `--plugins`, `--sample-rows`, `--policy`, `--strict` | Validates environment, config, schema readiness, output path, and reliability policy thresholds | JSON/table checks + summary |
+| `honestroles reliability check` | `--pipeline-config`, optional `--plugins`, `--sample-rows`, `--policy`, `--output-file`, `--strict` | Runs policy-aware reliability checks and writes gate artifact | JSON/table checks + summary + artifact |
 | `honestroles adapter infer` | `--input-parquet`, optional `--output-file`, `--sample-rows`, `--top-candidates`, `--min-confidence`, optional `--print` | Infers draft `[input.adapter]` mapping/coercion config from parquet input | JSON/table artifact summary |
-| `honestroles runs list` | optional `--limit`, `--status` | Lists recorded run lineage entries | JSON/table run rows |
+| `honestroles runs list` | optional `--limit`, `--status`, `--command`, `--since`, `--contains-code` | Lists recorded run lineage entries with filters | JSON/table run rows |
 | `honestroles runs show` | `--run-id` | Shows one recorded run lineage payload | JSON/table run record |
 | `honestroles scaffold-plugin` | `--name`, optional `--output-dir` | Copies bundled plugin template | JSON/table scaffold path + package name |
 | `honestroles eda generate` | `--input-parquet`, optional `--output-dir`, `--quality-profile`, repeated `--quality-weight`, `--top-k`, `--max-rows`, optional `--rules-file` | Builds deterministic profile artifacts (`summary.json`, tables, figures, report) | JSON/table artifact summary |
@@ -69,6 +71,7 @@ Tracked commands:
 - `eda generate`
 - `eda diff`
 - `eda gate`
+- `reliability check`
 
 Run schema fields include:
 
@@ -80,14 +83,15 @@ Run schema fields include:
 - `input_hash`, `input_hashes`
 - `config_hash`
 - `artifact_paths`
+- `check_codes`
 - `error` (present on failures)
 
 ## Exit Codes
 
 | Exit code | Meaning |
 | --- | --- |
-| `0` | Success. Includes `doctor` statuses `pass` and `warn`. |
-| `1` | Generic `HonestRolesError`, failed `eda gate` policy, or `doctor` status `fail`. |
+| `0` | Success. Includes `doctor`/`reliability check` statuses `pass` and `warn` when `--strict` is not set. |
+| `1` | Generic `HonestRolesError`, failed `eda gate` policy, `doctor`/`reliability check` status `fail`, or strict escalation of warn. |
 | `2` | `ConfigValidationError` (invalid args, invalid/missing config, bad run lookup, etc.). |
 | `3` | Plugin load/validation/execution failure. |
 | `4` | `StageExecutionError`. |
@@ -96,10 +100,11 @@ Run schema fields include:
 
 ```bash
 $ honestroles init --input-parquet data/jobs.parquet --pipeline-config pipeline.toml --plugins-manifest plugins.toml
-$ honestroles doctor --pipeline-config pipeline.toml --plugins plugins.toml --format table
+$ honestroles doctor --pipeline-config pipeline.toml --plugins plugins.toml --policy reliability.toml --format table
+$ honestroles reliability check --pipeline-config pipeline.toml --plugins plugins.toml --strict --output-file dist/reliability/latest/gate_result.json --format table
 $ honestroles run --pipeline-config pipeline.toml --plugins plugins.toml --format table
 $ honestroles adapter infer --input-parquet data/jobs.parquet --output-file dist/adapters/adapter-draft.toml
-$ honestroles runs list --limit 10 --format table
+$ honestroles runs list --limit 10 --command reliability.check --contains-code POLICY_NULL_RATE --format table
 $ honestroles runs show --run-id <run_id>
 $ honestroles eda generate --input-parquet data/jobs.parquet --output-dir dist/eda/latest
 $ honestroles eda diff --baseline-dir dist/eda/baseline --candidate-dir dist/eda/candidate --output-dir dist/eda/diff

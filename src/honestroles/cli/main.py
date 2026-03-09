@@ -25,6 +25,7 @@ from .handlers import (
     handle_eda_generate,
     handle_init,
     handle_plugins_validate,
+    handle_reliability_check,
     handle_report_quality,
     handle_run,
     handle_runs_list,
@@ -69,6 +70,10 @@ def _handle_init(args: argparse.Namespace) -> CommandResult:
 
 def _handle_doctor(args: argparse.Namespace) -> CommandResult:
     return handle_doctor(args)
+
+
+def _handle_reliability_check(args: argparse.Namespace) -> CommandResult:
+    return handle_reliability_check(args)
 
 
 def _handle_adapter_infer(args: argparse.Namespace) -> CommandResult:
@@ -161,6 +166,8 @@ def _dispatch(args: argparse.Namespace) -> CommandResult | int | None:
         return _handle_init(args)
     if args.command == "doctor":
         return _handle_doctor(args)
+    if args.command == "reliability" and args.reliability_command == "check":
+        return _handle_reliability_check(args)
     if args.command == "adapter" and args.adapter_command == "infer":
         return _handle_adapter_infer(args)
     if args.command == "scaffold-plugin":

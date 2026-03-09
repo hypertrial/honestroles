@@ -27,19 +27,23 @@ def _print_doctor_table(payload: Mapping[str, Any]) -> None:
             fail_count=summary.get("fail", 0),
         )
     )
-    print("CHECK                 STATUS  MESSAGE")
+    print("CHECK                 CODE                     SEVERITY  MESSAGE")
     checks = payload.get("checks", [])
     if isinstance(checks, list):
         for item in checks:
             if not isinstance(item, Mapping):
                 continue
             check_id = str(item.get("id", ""))
-            status = str(item.get("status", ""))
+            code = str(item.get("code", ""))
+            severity = str(item.get("severity", ""))
             message = str(item.get("message", ""))
-            print(f"{check_id:21} {status:6}  {message}")
+            print(f"{check_id:21} {code:24} {severity:8}  {message}")
             fix = item.get("fix")
             if fix not in (None, ""):
-                print(f"{'':21} {'fix':6}  {fix}")
+                print(f"{'':21} {'fix':24} {'':8}  {fix}")
+            fix_snippet = item.get("fix_snippet")
+            if fix_snippet not in (None, ""):
+                print(f"{'':21} {'snippet':24} {'':8}  available")
 
 
 def _print_runs_table(payload: Mapping[str, Any]) -> None:
@@ -67,6 +71,9 @@ def emit_payload(payload: Mapping[str, Any], output_format: str) -> None:
 
     if isinstance(payload.get("checks"), list) and isinstance(payload.get("summary"), Mapping):
         _print_doctor_table(payload)
+        reliability_artifact = payload.get("reliability_artifact")
+        if isinstance(reliability_artifact, str) and reliability_artifact:
+            print(f"ARTIFACT             {reliability_artifact}")
         return
     if isinstance(payload.get("runs"), list):
         _print_runs_table(payload)

@@ -25,9 +25,17 @@ $ honestroles init --input-parquet data/jobs.parquet --pipeline-config pipeline.
 $ honestroles doctor --pipeline-config pipeline.toml --plugins plugins.toml --format table
 ```
 
-`doctor` exits with `0` for `pass|warn`, `1` for `fail`, and `2` for invalid inputs.
+`doctor` exits with `0` for `pass|warn`, `1` for `fail`, and `2` for invalid inputs/config.
 
-3. Run pipeline execution:
+3. Run policy-aware reliability checks (writes a gate artifact):
+
+```bash
+$ honestroles reliability check --pipeline-config pipeline.toml --plugins plugins.toml --strict --output-file dist/reliability/latest/gate_result.json --format table
+```
+
+`--strict` keeps check severities unchanged but upgrades overall warn status to exit `1`.
+
+4. Run pipeline execution:
 
 ```bash
 $ honestroles run --pipeline-config pipeline.toml --plugins plugins.toml
@@ -39,7 +47,7 @@ For human-readable CI logs, use table mode:
 $ honestroles run --pipeline-config pipeline.toml --plugins plugins.toml --format table
 ```
 
-4. Validate manifest/config artifacts as needed:
+5. Validate manifest/config artifacts as needed:
 
 ```bash
 $ honestroles plugins validate --manifest plugins.toml
@@ -47,14 +55,15 @@ $ honestroles config validate --pipeline pipeline.toml
 $ honestroles report-quality --pipeline-config pipeline.toml --plugins plugins.toml
 ```
 
-5. Inspect lineage records under `.honestroles/runs/`:
+6. Inspect lineage records under `.honestroles/runs/`:
 
 ```bash
 $ honestroles runs list --limit 20 --format table
+$ honestroles runs list --command reliability.check --since 2026-01-01T00:00:00Z --contains-code POLICY_NULL_RATE --format table
 $ honestroles runs show --run-id <run_id>
 ```
 
-6. Run EDA generation/diff/gate workflows:
+7. Run EDA generation/diff/gate workflows:
 
 ```bash
 $ honestroles eda generate --input-parquet jobs.parquet --output-dir dist/eda/latest
@@ -62,7 +71,7 @@ $ honestroles eda diff --baseline-dir dist/eda/baseline --candidate-dir dist/eda
 $ honestroles eda gate --candidate-dir dist/eda/candidate --baseline-dir dist/eda/baseline --rules-file eda-rules.toml
 ```
 
-7. Launch the optional dashboard viewer:
+8. Launch the optional dashboard viewer:
 
 ```bash
 $ honestroles eda dashboard --artifacts-dir dist/eda/latest --host 127.0.0.1 --port 8501
