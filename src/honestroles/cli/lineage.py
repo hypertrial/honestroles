@@ -228,4 +228,3 @@ def list_records(limit: int, status: str | None) -> list[dict[str, Any]]:
 def load_record(run_id: str) -> dict[str, Any]:
     path = runs_root() / run_id / "run.json"
     return json.loads(path.read_text(encoding="utf-8"))
-

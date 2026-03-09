@@ -2,11 +2,14 @@
 
 ## Unreleased
 
+## 0.1.4
+
 - Added `honestroles init` to scaffold `pipeline.toml` and `plugins.toml` from a sample parquet, including adapter inference when available.
 - Added `honestroles doctor` to validate environment, config, schema readiness, required content signals, and output path setup with actionable fixes.
 - Added `honestroles runs list/show` for local run lineage exploration.
 - Added unified CLI output formatting with `--format {json,table}` for structured-output commands, while keeping JSON as the default.
 - Added run lineage persistence in `.honestroles/runs/<run_id>/run.json` for runtime, adapter, and EDA execution commands.
+- Switched release publishing to manual deployment paths (local token script and manual GitHub workflow dispatch) using API token auth.
 
 ## 0.1.3
 

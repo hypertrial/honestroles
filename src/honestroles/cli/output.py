@@ -79,4 +79,3 @@ def emit_error(exc: Exception, output_format: str) -> None:
         print(f"ERROR {exc.__class__.__name__}: {exc}", file=sys.stderr)
         return
     print(str(exc), file=sys.stderr)
-

@@ -260,7 +260,28 @@ Review:
 
 Then adjust source extraction/normalization or update thresholds in `eda-rules.toml` as needed.
 
-## Release Workflow Fails with Missing PyPI Secret
+## Manual Publish Fails with Missing PyPI API Key
+
+Symptom:
+
+```text
+Missing PyPI API key. Set PYPI_API_KEY (or PYPI_API_TOKEN) in env or .env.
+```
+
+Cause:
+
+- `scripts/publish_pypi.sh` could not find `PYPI_API_KEY` or `PYPI_API_TOKEN`.
+
+Fix:
+
+1. Add `PYPI_API_KEY=<pypi-token>` to your shell env or `.env`.
+2. Re-run:
+
+```bash
+$ bash scripts/publish_pypi.sh
+```
+
+## Manual Release Workflow Fails with Missing PyPI Secret
 
 Symptom:
 
@@ -277,23 +298,7 @@ Fix:
 
 1. Add one of these repository secrets:
    `PYPI_API_KEY` or `PYPI_API_TOKEN`.
-2. Re-run the release job.
-
-## Release Workflow Fails with `invalid-publisher`
-
-Symptom:
-
-```text
-invalid-publisher
-```
-
-Cause:
-
-- Trusted publisher configuration in PyPI does not match workflow/repo/tag claims.
-
-Fix:
-
-- Prefer token-based publishing via GitHub secrets, or update trusted publisher claims to exactly match the GitHub workflow identity.
+2. Re-run the manual `Release` workflow (`workflow_dispatch`).
 
 ## `runs show` Cannot Find a Run
 

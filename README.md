@@ -81,9 +81,10 @@ For local profiling data, keep large parquet inputs under `data/` and write gene
 
 ## Maintainer Notes
 
-- Release workflow publishes to PyPI from GitHub Actions secrets (`PYPI_API_KEY` or `PYPI_API_TOKEN`).
-- Local `.env` files are not visible to GitHub runners.
-- Before tagging, run deterministic gate:
+- PyPI publishing is manual and token-based via `bash scripts/publish_pypi.sh`.
+- The script reads `PYPI_API_KEY` (or `PYPI_API_TOKEN`) from env/`.env`.
+- The GitHub `Release` workflow is manual (`workflow_dispatch`) only.
+- Before publish, run deterministic gate:
 
 ```bash
 $ PYTHON_BIN=.venv/bin/python bash scripts/run_coverage.sh
