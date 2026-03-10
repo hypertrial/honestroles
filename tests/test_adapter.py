@@ -243,6 +243,16 @@ def test_adapter_internal_scoring_helpers() -> None:
 
     sample = pl.DataFrame({"x": [None, None]})
     assert _parse_score(sample, "x", "string") == 0.5
+    list_sample = pl.DataFrame({"x": [["python", "sql"], ["ml"]]})
+    assert _parse_score(list_sample, "x", "string") == 1.0
+    assert _parse_score(list_sample, "x", "date_string") == 0.5
+    struct_sample = pl.DataFrame({"x": [{"a": "1"}, {"a": "2"}]})
+    assert _parse_score(struct_sample, "x", "date_string") == 0.5
+    array_sample = pl.DataFrame(
+        {"x": [[1, 2], [3, 4]]},
+        schema={"x": pl.Array(pl.Int64, 2)},
+    )
+    assert _parse_score(array_sample, "x", "date_string") == 0.5
 
 
 def test_coerce_adapter_config_validation_errors() -> None:

@@ -50,11 +50,13 @@ Local equivalent command:
 $ export HONESTROLES_SMOKE_GREENHOUSE_REF=stripe
 $ export HONESTROLES_SMOKE_LEVER_REF=lever
 $ export HONESTROLES_SMOKE_ASHBY_REF=notion
-$ export HONESTROLES_SMOKE_WORKABLE_REF=microsoft
+$ export HONESTROLES_SMOKE_WORKABLE_REF=your-company
 $ PYTHON_BIN=.venv/bin/python bash scripts/run_ingest_smoke.sh
 ```
 
 This flow runs only `smoke`-marked live integration tests and is intentionally isolated from deterministic CI and coverage gates.
+Smoke assertions require non-empty outputs per source (`rows_written > 0` and parquet
+height > 0), so keep refs current before triggering the workflow.
 
 ## Publish (Manual, API Token)
 

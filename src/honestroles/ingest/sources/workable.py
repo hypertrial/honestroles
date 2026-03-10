@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Callable
 from urllib.parse import quote
 
-from honestroles.errors import ConfigValidationError
+from honestroles.errors import ConfigValidationError, HonestRolesError
 
 BASE_URL = "https://www.workable.com"
 ACCOUNT_ENDPOINT = "/api/accounts/{source_ref}?details=true"
@@ -30,13 +30,23 @@ def fetch_workable_jobs(
 
     # Public careers API endpoints. Locations/departments are fetched for parity
     # and schema stability, even when jobs endpoint already contains location strings.
-    account_payload = http_get_json(
-        BASE_URL + ACCOUNT_ENDPOINT.format(source_ref=safe_ref)
+    account_payload = _workable_request_json(
+        BASE_URL + ACCOUNT_ENDPOINT.format(source_ref=safe_ref),
+        source_ref=source_ref,
+        http_get_json=http_get_json,
     )
     request_count += 1
-    http_get_json(BASE_URL + LOCATIONS_ENDPOINT.format(source_ref=safe_ref))
+    _workable_request_json(
+        BASE_URL + LOCATIONS_ENDPOINT.format(source_ref=safe_ref),
+        source_ref=source_ref,
+        http_get_json=http_get_json,
+    )
     request_count += 1
-    http_get_json(BASE_URL + DEPARTMENTS_ENDPOINT.format(source_ref=safe_ref))
+    _workable_request_json(
+        BASE_URL + DEPARTMENTS_ENDPOINT.format(source_ref=safe_ref),
+        source_ref=source_ref,
+        http_get_json=http_get_json,
+    )
     request_count += 1
 
     if not isinstance(account_payload, dict):
@@ -52,3 +62,21 @@ def fetch_workable_jobs(
     # is validated for API symmetry with other connectors.
     out = [item for item in jobs if isinstance(item, dict)]
     return out[:max_jobs], request_count, ()
+
+
+def _workable_request_json(
+    url: str,
+    *,
+    source_ref: str,
+    http_get_json: Callable[[str], Any],
+) -> Any:
+    try:
+        return http_get_json(url)
+    except HonestRolesError as exc:
+        message = str(exc)
+        if "HTTP 404" in message:
+            raise ConfigValidationError(
+                "workable source-ref is invalid or not publicly exposed: "
+                f"'{source_ref}'. Use a public Workable company subdomain."
+            ) from exc
+        raise

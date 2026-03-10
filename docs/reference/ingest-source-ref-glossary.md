@@ -40,12 +40,15 @@ $ honestroles ingest sync --source ashby --source-ref notion
 ## Workable public endpoints
 
 - Source: `workable`
-- `source-ref`: company subdomain
+- `source-ref`: company subdomain with public Workable careers API access
 - Example:
 
 ```bash
-$ honestroles ingest sync --source workable --source-ref workable
+$ honestroles ingest sync --source workable --source-ref your-company
 ```
+
+If the subdomain is invalid or not publicly exposed, ingestion returns a validation
+error with a fix hint.
 
 ## Validation rules
 

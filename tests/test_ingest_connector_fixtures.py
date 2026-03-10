@@ -56,6 +56,22 @@ def test_greenhouse_connector_fixture_pagination_and_normalization() -> None:
     assert row["work_mode"] in {"remote", "hybrid", "onsite", "unknown"}
 
 
+def test_greenhouse_connector_fixture_repeat_page_detection() -> None:
+    page0 = _fixture("greenhouse", "page0.json")
+    calls = {"n": 0}
+
+    def fake_get(_url: str) -> Any:
+        calls["n"] += 1
+        return page0
+
+    jobs, request_count, warnings = fetch_greenhouse_jobs(
+        "acme", max_pages=5, max_jobs=100, http_get_json=fake_get
+    )
+    assert request_count == 2
+    assert len(jobs) > 0
+    assert warnings == ("INGEST_PAGE_REPEAT_DETECTED",)
+
+
 def test_lever_connector_fixture_pagination_and_malformed_payload() -> None:
     payloads = {
         0: _fixture("lever", "page0.json"),

@@ -305,6 +305,45 @@ source_updated_at_max_age_days = 9999
         ingest_service._SOURCE_FETCHERS["greenhouse"] = original
 
 
+def test_sync_source_page_repeat_warning_marks_coverage_incomplete(tmp_path: Path) -> None:
+    def fetcher(
+        _source_ref: str, *, max_pages: int, max_jobs: int, http_get_json
+    ) -> tuple[list[dict[str, Any]], int, tuple[str, ...]]:
+        return (
+            [
+                {
+                    "id": "1",
+                    "title": "Engineer",
+                    "absolute_url": "https://jobs.example/search?gh_jid=1",
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+            ],
+            1,
+            ("INGEST_PAGE_REPEAT_DETECTED",),
+        )
+
+    original = ingest_service._SOURCE_FETCHERS["greenhouse"]
+    ingest_service._SOURCE_FETCHERS["greenhouse"] = fetcher
+    try:
+        result = ingest_service.sync_source(
+            source="greenhouse",
+            source_ref="stripe",
+            output_parquet=tmp_path / "latest.parquet",
+            report_file=tmp_path / "report.json",
+            state_file=tmp_path / "state.json",
+            max_pages=10,
+            max_jobs=100,
+            full_refresh=True,
+            quality_policy_file=None,
+        )
+    finally:
+        ingest_service._SOURCE_FETCHERS["greenhouse"] = original
+
+    assert result.report.coverage_complete is False
+    assert "INGEST_PAGE_REPEAT_DETECTED" in result.report.warnings
+    assert "INGEST_TRUNCATED" in result.report.warnings
+
+
 def test_validate_ingestion_source_failure_writes_report(tmp_path: Path) -> None:
     with pytest.raises(ConfigValidationError):
         ingest_service.validate_ingestion_source(

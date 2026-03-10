@@ -68,7 +68,7 @@ Structured-output commands default to JSON and accept `--format {json,table}`.
 - `greenhouse`: board token
 - `lever`: site/company handle
 - `ashby`: job board name
-- `workable`: subdomain
+- `workable`: company subdomain with public Workable careers API access
 
 Default per-source output locations:
 
@@ -78,6 +78,7 @@ Default per-source output locations:
 - snapshots directory: `dist/ingest/<source>/<source_ref>/snapshots/`
 - catalog parquet: `dist/ingest/<source>/<source_ref>/catalog.parquet`
 - optional raw payload: `dist/ingest/<source>/<source_ref>/raw.jsonl` with `--write-raw`
+  (or adjacent to `--output-parquet` when that flag is set)
 
 Default batch report location:
 
@@ -94,6 +95,9 @@ Default batch report location:
 - `retry_count`, `http_status_counts`
 - `quality_status`, `quality_summary`, `quality_check_codes`
 - `stage_timings_ms`, `warnings`
+- warning codes can include:
+  - `INGEST_TRUNCATED` (run hit limits or could not fully cover source)
+  - `INGEST_PAGE_REPEAT_DETECTED` (source pagination repeated the same page payload)
 - `merge_policy`, `retained_snapshot_count`, `pruned_snapshot_count`, `pruned_inactive_count`
 - `quality_policy_source`, `quality_policy_hash`
 - `high_watermark_before`, `high_watermark_after`

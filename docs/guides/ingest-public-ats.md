@@ -19,7 +19,7 @@ Supported `--source` values:
 - `greenhouse` (board token)
 - `lever` (site/company handle)
 - `ashby` (job board name)
-- `workable` (subdomain)
+- `workable` (company subdomain with public careers API access)
 
 ## Steps
 
@@ -86,7 +86,7 @@ $ honestroles ingest sync-all --manifest ingest.toml --format table
 
 ```bash
 $ honestroles ingest sync --source ashby --source-ref notion --full-refresh
-$ honestroles ingest sync --source workable --source-ref workable --write-raw
+$ honestroles ingest sync --source workable --source-ref your-company --write-raw
 ```
 
 6. Point your runtime pipeline at the latest parquet output:
@@ -112,6 +112,7 @@ Per source, ingestion writes:
 - catalog parquet: `dist/ingest/<source>/<source_ref>/catalog.parquet`
 - sync report: `dist/ingest/<source>/<source_ref>/sync_report.json`
 - optional raw payload: `dist/ingest/<source>/<source_ref>/raw.jsonl`
+  (or adjacent to `--output-parquet` when that flag is explicitly set)
 - state: `.honestroles/ingest/state.json`
 
 Batch runs also write:
@@ -124,10 +125,12 @@ Incremental semantics:
 - `--full-refresh` bypasses incremental filtering.
 - Tombstones are applied only on coverage-complete runs.
 - Truncated runs (hitting `max-pages` or `max-jobs`) do not tombstone missing records.
+- Pagination loop/repeat protection emits `INGEST_PAGE_REPEAT_DETECTED` and marks run coverage incomplete.
 - Merge policy controls latest conflict resolution (`updated_hash`, `first_seen`, `last_seen`).
 - Snapshot retention keeps newest `retain_snapshots`; older snapshots are pruned after successful sync.
 - Catalog compaction prunes inactive rows older than `prune_inactive_days`.
 - Quality policy checks run before latest overwrite; with `--strict-quality`, non-pass quality fails the command.
+- URL dedup preserves identity query keys (`gh_jid`, `job_id`, `jobid`, `posting_id`, `position_id`) and removes tracking params.
 
 ## Next steps
 

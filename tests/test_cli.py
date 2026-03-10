@@ -844,6 +844,43 @@ def test_cli_init_requires_force_when_targets_exist(sample_parquet: Path, tmp_pa
     assert "[input]" in pipeline_path.read_text(encoding="utf-8")
 
 
+def test_cli_init_handles_list_typed_input_columns(tmp_path: Path) -> None:
+    input_path = tmp_path / "jobs.parquet"
+    pl.DataFrame(
+        {
+            "id": ["1", "2"],
+            "title": ["Engineer", "Analyst"],
+            "company": ["A", "B"],
+            "location": ["Remote", "NYC"],
+            "remote": [True, False],
+            "description_text": ["x", "y"],
+            "description_html": ["<p>x</p>", "<p>y</p>"],
+            "skills": [["python", "sql"], ["excel"]],
+            "salary_min": [100000.0, None],
+            "salary_max": [150000.0, None],
+            "apply_url": ["https://x/1", "https://x/2"],
+            "posted_at": ["2026-01-01", "2026-01-02"],
+        }
+    ).write_parquet(input_path)
+    pipeline_path = tmp_path / "pipeline.toml"
+    plugins_path = tmp_path / "plugins.toml"
+
+    code = main(
+        [
+            "init",
+            "--input-parquet",
+            str(input_path),
+            "--pipeline-config",
+            str(pipeline_path),
+            "--plugins-manifest",
+            str(plugins_path),
+        ]
+    )
+    assert code == 0
+    assert pipeline_path.exists()
+    assert plugins_path.exists()
+
+
 def test_cli_doctor_passes_on_valid_pipeline(
     pipeline_config_path: Path, plugin_manifest_path: Path, capsys
 ) -> None:

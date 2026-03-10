@@ -221,7 +221,10 @@ def build_artifact_paths(args: Mapping[str, Any], payload: Mapping[str, Any] | N
             "report_file": str(report_file),
         }
         if bool(args.get("write_raw", False)):
-            artifacts["raw_file"] = str((default_root / "raw.jsonl").expanduser().resolve())
+            if args.get("output_parquet") not in (None, ""):
+                artifacts["raw_file"] = str(output_file.with_name("raw.jsonl"))
+            else:
+                artifacts["raw_file"] = str((default_root / "raw.jsonl").expanduser().resolve())
         return artifacts
     if command == "ingest.validate":
         source = str(args.get("source", "unknown"))

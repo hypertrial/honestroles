@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Added Ingestion Reliability Hotfix Bundle:
+  - Fixed URL dedup keying to preserve identity query params (`gh_jid`, `job_id`, `jobid`, `posting_id`, `position_id`) while still dropping tracking params.
+  - Added Greenhouse repeated-page detection (`INGEST_PAGE_REPEAT_DETECTED`) with coverage-incomplete semantics.
+  - Fixed `honestroles init` adapter inference on list-typed columns by making string parse scoring list-safe.
+  - Improved Workable invalid/non-public subdomain errors with actionable validation guidance.
+  - Aligned `--write-raw` default path with explicit `--output-parquet` roots and updated lineage artifact inference.
+  - Strengthened live ingestion smoke assertions to require non-empty outputs for configured sources.
+  - Updated ingestion docs/troubleshooting/source-ref guidance for pagination warnings, Workable expectations, and raw artifact path behavior.
 - Added Ingestion Reliability & Operability v3:
   - Added `honestroles ingest validate` for fetch+normalize+quality evaluation without latest overwrite.
   - Extended `honestroles ingest sync` with `--quality-policy`, `--strict-quality`, `--merge-policy`, `--retain-snapshots`, and `--prune-inactive-days`.

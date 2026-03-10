@@ -101,7 +101,7 @@ report_file = "dist/ingest/ashby/notion/sync_report.json"
 
 [[sources]]
 source = "workable"
-source_ref = "workable"
+source_ref = "your-company"
 enabled = false
 ```
 

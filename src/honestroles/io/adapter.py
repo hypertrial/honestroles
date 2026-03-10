@@ -310,6 +310,16 @@ def _type_score(cast: AdapterCastType, dtype: pl.DataType) -> float:
 
 
 def _parse_score(sample: pl.DataFrame, column: str, cast: AdapterCastType) -> float:
+    # String targets do not require semantic parsing; treat as parseable and let
+    # name/type scoring determine ranking.
+    if cast == "string":
+        non_null = int(sample.select(pl.col(column).is_not_null().sum()).item())
+        return 0.5 if non_null == 0 else 1.0
+
+    dtype = sample.schema[column]
+    if _is_complex_dtype(dtype):
+        return 0.5
+
     payload: dict[str, Any] = {"from": [column], "cast": cast}
     if cast == "bool":
         payload["true_values"] = list(_DEFAULT_TRUE_VALUES)
@@ -335,6 +345,17 @@ def _parse_score(sample: pl.DataFrame, column: str, cast: AdapterCastType) -> fl
     parsed_count = int(counts["parsed_non_null"])
     successful = max(0, min(candidate_count, parsed_count))
     return max(0.0, min(1.0, successful / candidate_count))
+
+
+def _is_complex_dtype(dtype: pl.DataType) -> bool:
+    if isinstance(dtype, pl.List):
+        return True
+    if isinstance(dtype, pl.Struct):
+        return True
+    array_type = getattr(pl, "Array", None)
+    if array_type is not None and isinstance(dtype, array_type):
+        return True
+    return False
 
 
 def infer_source_adapter(

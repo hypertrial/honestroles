@@ -76,6 +76,30 @@ $ honestroles ingest sync --source greenhouse --source-ref stripe
 
 See [Ingest Source-Ref Glossary](../reference/ingest-source-ref-glossary.md).
 
+## `ingest sync` Fails for Workable with HTTP 404
+
+Symptom:
+
+```text
+workable source-ref is invalid or not publicly exposed: '<ref>'
+```
+
+Cause:
+
+- The subdomain is incorrect.
+- The Workable account exists but does not expose public careers API endpoints.
+
+Fix:
+
+1. Confirm the company uses public Workable careers pages.
+2. Use the Workable subdomain only:
+
+```bash
+$ honestroles ingest sync --source workable --source-ref your-company --format table
+```
+
+3. If the account is private, skip Workable ingestion for that source.
+
 ## `ingest sync` Hits HTTP 429 / Backoff
 
 Symptom:
@@ -151,6 +175,9 @@ If records look stale across runs, verify deterministic merge/retention controls
 - `--merge-policy updated_hash|first_seen|last_seen`
 - `--retain-snapshots`
 - `--prune-inactive-days`
+
+If warnings include `INGEST_PAGE_REPEAT_DETECTED`, the source repeated page payloads.
+Treat the run as coverage-incomplete and rerun later or with adjusted limits.
 
 ## `ingest sync-all` Manifest Validation Fails
 

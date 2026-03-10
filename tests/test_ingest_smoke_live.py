@@ -74,6 +74,7 @@ def test_ingest_sync_live_source_end_to_end(
     assert payload["source"] == source
     assert payload["source_ref"] == source_ref
     assert int(payload["request_count"]) >= 1
+    assert int(payload["rows_written"]) > 0
     assert Path(payload["output_parquet"]).exists()
     assert Path(payload["report_file"]).exists()
     assert Path(payload["raw_file"]).exists()
@@ -86,6 +87,7 @@ def test_ingest_sync_live_source_end_to_end(
     assert report_payload["error"] is None
 
     frame = pl.read_parquet(output_parquet)
+    assert frame.height > 0
     assert frame.height == int(payload["rows_written"])
     for column in CANONICAL_SOURCE_FIELDS:
         assert column in frame.columns

@@ -266,14 +266,46 @@ def test_source_connectors_shapes_and_errors() -> None:
         http_get_json=lambda _u: {"jobs": [{"id": 1}, {"id": 2}]},
     )
     assert len(capped_jobs) == 1
+    greenhouse_counter = {"n": 0}
+
+    def greenhouse_exhausted(_url: str) -> dict[str, Any]:
+        greenhouse_counter["n"] += 1
+        return {"jobs": [{"id": greenhouse_counter["n"]}]}
+
     exhausted_greenhouse_jobs, exhausted_greenhouse_requests, _ = fetch_greenhouse_jobs(
         "acme",
         max_pages=2,
         max_jobs=10,
-        http_get_json=lambda _u: {"jobs": [{"id": 1}]},
+        http_get_json=greenhouse_exhausted,
     )
     assert len(exhausted_greenhouse_jobs) == 2
     assert exhausted_greenhouse_requests == 2
+    repeated_greenhouse_jobs, repeated_greenhouse_requests, repeated_greenhouse_warnings = (
+        fetch_greenhouse_jobs(
+            "acme",
+            max_pages=3,
+            max_jobs=10,
+            http_get_json=lambda _u: {"jobs": [{"id": 1}]},
+        )
+    )
+    assert len(repeated_greenhouse_jobs) == 1
+    assert repeated_greenhouse_requests == 2
+    assert repeated_greenhouse_warnings == ("INGEST_PAGE_REPEAT_DETECTED",)
+    mixed_shape_jobs, mixed_shape_requests, mixed_shape_warnings = fetch_greenhouse_jobs(
+        "acme",
+        max_pages=1,
+        max_jobs=10,
+        http_get_json=lambda _u: {
+            "jobs": [
+                {"id": None, "absolute_url": "https://x/jobs/1"},
+                {"title": "fallback"},
+                "non-dict-item",
+            ]
+        },
+    )
+    assert len(mixed_shape_jobs) == 2
+    assert mixed_shape_requests == 1
+    assert mixed_shape_warnings == ()
 
     lever_calls = {"n": 0}
 
@@ -419,6 +451,26 @@ def test_source_connectors_shapes_and_errors() -> None:
             max_jobs=1,
             http_get_json=lambda _u: {"x": []},
         )
+    with pytest.raises(
+        ConfigValidationError, match="invalid or not publicly exposed"
+    ):
+        fetch_workable_jobs(
+            "acme",
+            max_pages=1,
+            max_jobs=1,
+            http_get_json=lambda _u: (_ for _ in ()).throw(
+                HonestRolesError("ingestion request failed for 'x': HTTP 404 Not Found")
+            ),
+        )
+    with pytest.raises(HonestRolesError, match="HTTP 500"):
+        fetch_workable_jobs(
+            "acme",
+            max_pages=1,
+            max_jobs=1,
+            http_get_json=lambda _u: (_ for _ in ()).throw(
+                HonestRolesError("ingestion request failed for 'x': HTTP 500 server")
+            ),
+        )
 
 
 def test_normalize_records_and_dataframe_paths() -> None:
@@ -489,6 +541,13 @@ def test_dedup_key_precedence_and_normalization() -> None:
     assert key5 == "url:jobs/123"
     key6 = dedup_key({"apply_url": "   ", "job_url": "   ", "title": "A"})
     assert key6.startswith("fallback:")
+    gh_key_one = dedup_key({"apply_url": "https://stripe.com/jobs/search?gh_jid=111&utm=abc"})
+    gh_key_two = dedup_key({"apply_url": "https://stripe.com/jobs/search?gh_jid=222&utm=xyz"})
+    gh_key_tracking_variant = dedup_key(
+        {"apply_url": "https://stripe.com/jobs/search?utm=xyz&gh_jid=111"}
+    )
+    assert gh_key_one != gh_key_two
+    assert gh_key_one == gh_key_tracking_variant
 
     records, dropped = deduplicate_records(
         [
@@ -604,9 +663,24 @@ def test_service_sync_source_success_and_full_refresh(tmp_path: Path) -> None:
         assert max_jobs == 10
         return (
             [
-                {"id": "1", "title": "A", "absolute_url": "https://x/1", "updated_at": "2026-01-02T00:00:00+00:00"},
-                {"id": "1", "title": "A", "absolute_url": "https://x/1?utm=1", "updated_at": "2026-01-02T00:00:00+00:00"},
-                {"id": "2", "title": "B", "absolute_url": "https://x/2", "updated_at": "2026-01-03T00:00:00+00:00"},
+                {
+                    "id": "1",
+                    "title": "A",
+                    "absolute_url": "https://x/jobs/search?gh_jid=1&utm=aaa",
+                    "updated_at": "2026-01-02T00:00:00+00:00",
+                },
+                {
+                    "id": "1",
+                    "title": "A",
+                    "absolute_url": "https://x/jobs/search?utm=bbb&gh_jid=1",
+                    "updated_at": "2026-01-02T00:00:00+00:00",
+                },
+                {
+                    "id": "2",
+                    "title": "B",
+                    "absolute_url": "https://x/jobs/search?gh_jid=2",
+                    "updated_at": "2026-01-03T00:00:00+00:00",
+                },
             ],
             2,
         )
@@ -635,6 +709,7 @@ def test_service_sync_source_success_and_full_refresh(tmp_path: Path) -> None:
     assert Path(payload["output_parquet"]).exists()
     assert Path(payload["report_file"]).exists()
     assert Path(payload["raw_file"]).exists()
+    assert Path(payload["raw_file"]).parent == Path(payload["output_parquet"]).parent
 
     # Incremental drop via state.
     original = ingest_service._SOURCE_FETCHERS["greenhouse"]
@@ -765,6 +840,15 @@ def test_service_helpers_and_cli_handler(monkeypatch: pytest.MonkeyPatch, tmp_pa
     )
     assert "dist/ingest/lever/acme" in str(output_path)
     assert raw_path is not None
+    explicit_output = tmp_path / "custom" / "jobs.parquet"
+    _, _, explicit_raw = ingest_service._resolve_paths(
+        source="lever",
+        source_ref="acme",
+        output_parquet=explicit_output,
+        report_file=None,
+        write_raw=True,
+    )
+    assert explicit_raw == explicit_output.with_name("raw.jsonl").resolve()
     assert ingest_service._duration_ms(
         datetime.now(UTC), datetime.now(UTC) + timedelta(milliseconds=1)
     ) >= 1
@@ -894,6 +978,18 @@ def test_cli_parser_main_dispatch_output_and_lineage_for_ingest(
     assert "output_parquet" in artifacts
     assert "report_file" in artifacts
     assert "raw_file" in artifacts
+    artifacts_custom_output = lineage.build_artifact_paths(
+        {
+            "command": "ingest",
+            "ingest_command": "sync",
+            "source": "lever",
+            "source_ref": "acme",
+            "write_raw": True,
+            "output_parquet": str(tmp_path / "custom" / "jobs.parquet"),
+        },
+        payload=None,
+    )
+    assert artifacts_custom_output["raw_file"].endswith("custom/raw.jsonl")
     artifacts_no_raw = lineage.build_artifact_paths(
         {"command": "ingest", "ingest_command": "sync", "source": "lever", "source_ref": "acme", "write_raw": False},
         payload=None,

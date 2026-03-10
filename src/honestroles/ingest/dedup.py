@@ -2,7 +2,16 @@ from __future__ import annotations
 
 import hashlib
 from typing import Any
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+_IDENTITY_QUERY_KEYS: tuple[str, ...] = (
+    "gh_jid",
+    "job_id",
+    "jobid",
+    "posting_id",
+    "position_id",
+)
+_IDENTITY_QUERY_KEY_SET = set(_IDENTITY_QUERY_KEYS)
 
 
 def deduplicate_records(
@@ -55,7 +64,13 @@ def _normalize_url(value: object) -> str | None:
     parsed = urlparse(text)
     if not parsed.scheme or not parsed.netloc:
         return text.lower()
-    cleaned = parsed._replace(query="", fragment="")
+    pairs = parse_qsl(parsed.query, keep_blank_values=False)
+    identity_pairs = [
+        (key.lower(), val.strip()) for key, val in pairs if key.lower() in _IDENTITY_QUERY_KEY_SET
+    ]
+    identity_pairs.sort()
+    normalized_query = urlencode(identity_pairs)
+    cleaned = parsed._replace(query=normalized_query, fragment="")
     normalized = urlunparse(cleaned)
     return normalized.rstrip("/").lower()
 

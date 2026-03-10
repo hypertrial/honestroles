@@ -671,6 +671,8 @@ def _prepare_records(
         max_jobs=max_jobs,
     )
     warning_codes = set(fetch_warning_codes)
+    if "INGEST_PAGE_REPEAT_DETECTED" in warning_codes:
+        coverage_complete = False
     if not coverage_complete:
         warning_codes.add("INGEST_TRUNCATED")
 
@@ -910,7 +912,12 @@ def _resolve_paths(
         if report_file is not None
         else (default_root / report_name).expanduser().resolve()
     )
-    raw_path = ((default_root / "raw.jsonl").expanduser().resolve() if write_raw else None)
+    raw_path: Path | None = None
+    if write_raw:
+        if output_parquet is not None:
+            raw_path = output_path.with_name("raw.jsonl")
+        else:
+            raw_path = (default_root / "raw.jsonl").expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     if raw_path is not None:
