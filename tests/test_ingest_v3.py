@@ -13,7 +13,6 @@ import pytest
 from honestroles.cli import handlers, lineage, output
 from honestroles.errors import ConfigValidationError, HonestRolesError
 from honestroles.ingest import manifest as ingest_manifest
-from honestroles.ingest import models as ingest_models
 from honestroles.ingest import quality as ingest_quality
 from honestroles.ingest import service as ingest_service
 from honestroles.ingest.models import (
