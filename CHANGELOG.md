@@ -9,6 +9,7 @@
   - Added deterministic dedup key precedence (`apply_url`/`job_url`, then `source+source_job_id`, then normalized fallback hash).
   - Added ingestion metadata columns (`source`, `source_ref`, `source_job_id`, `job_url`, `ingested_at_utc`, `source_payload_hash`) to normalized output.
   - Added lineage tracking for `ingest.sync` runs.
+  - Added dedicated live smoke coverage for connectors (`tests/test_ingest_smoke_live.py`) and a separate manual GitHub Actions flow (`Ingestion Smoke`).
   - Updated CLI/docs with ingestion command, source-ref glossary, and ingestion troubleshooting guidance.
 - Added Reliability Gate v1:
   - New `honestroles reliability check` command with policy-aware checks and artifact output.

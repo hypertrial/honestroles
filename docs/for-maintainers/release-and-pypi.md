@@ -28,6 +28,26 @@ $ honestroles reliability check --pipeline-config /tmp/pipeline.toml --strict --
 
 6. Commit and push `main`.
 
+## Dedicated Ingestion Smoke Flow
+
+Live ATS connector smoke tests run in a separate manual workflow:
+
+- GitHub Actions workflow: `Ingestion Smoke` (`.github/workflows/ingest-smoke.yml`)
+- Trigger: `workflow_dispatch`
+- Inputs: `greenhouse_ref`, `lever_ref`, `ashby_ref`, `workable_ref`
+
+Local equivalent command:
+
+```bash
+$ export HONESTROLES_SMOKE_GREENHOUSE_REF=stripe
+$ export HONESTROLES_SMOKE_LEVER_REF=lever
+$ export HONESTROLES_SMOKE_ASHBY_REF=notion
+$ export HONESTROLES_SMOKE_WORKABLE_REF=microsoft
+$ PYTHON_BIN=.venv/bin/python bash scripts/run_ingest_smoke.sh
+```
+
+This flow runs only `smoke`-marked live integration tests and is intentionally isolated from deterministic CI and coverage gates.
+
 ## Publish (Manual, API Token)
 
 Publishing is manual and token-based.

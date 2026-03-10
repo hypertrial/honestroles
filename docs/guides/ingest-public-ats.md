@@ -128,3 +128,4 @@ Canonical parquet keeps core fields and adds ingestion metadata columns:
 - Validate your source identifier: [Ingest Source-Ref Glossary](../reference/ingest-source-ref-glossary.md)
 - Review all flags and output schema: [CLI Reference](../reference/cli.md)
 - Troubleshoot empty results or rate limiting: [Common Errors](../troubleshooting/common-errors.md)
+- Run the dedicated live smoke flow before release: [Release and PyPI](../for-maintainers/release-and-pypi.md)

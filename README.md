@@ -83,6 +83,10 @@ $ pip install -e ".[dev,docs]"
 $ pytest -q
 $ pytest tests/docs -q
 $ bash scripts/check_docs_refs.sh
+# Optional live connector smoke (requires refs):
+# HONESTROLES_SMOKE_GREENHOUSE_REF, HONESTROLES_SMOKE_LEVER_REF,
+# HONESTROLES_SMOKE_ASHBY_REF, HONESTROLES_SMOKE_WORKABLE_REF
+$ bash scripts/run_ingest_smoke.sh
 ```
 
 For local profiling data, keep large parquet inputs under `data/` and write generated artifacts under `dist/` (both are ignored by git).

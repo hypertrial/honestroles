@@ -1,0 +1,67 @@
+name: Ingestion Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      greenhouse_ref:
+        description: "Greenhouse board token"
+        required: true
+        default: "stripe"
+      lever_ref:
+        description: "Lever site/company handle"
+        required: true
+        default: "lever"
+      ashby_ref:
+        description: "Ashby public job board name"
+        required: true
+        default: "notion"
+      workable_ref:
+        description: "Workable company subdomain"
+        required: true
+        default: "microsoft"
+
+jobs:
+  precommit_fast:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pre-commit
+        run: python -m pip install --upgrade pip pre-commit
+
+      - name: Run fast pre-commit checks
+        run: bash scripts/run_precommit_fast.sh
+
+  ingest_smoke:
+    needs: precommit_fast
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -e ".[dev]"
+
+      - name: Run live ingestion smoke tests
+        env:
+          HONESTROLES_SMOKE_GREENHOUSE_REF: ${{ inputs.greenhouse_ref }}
+          HONESTROLES_SMOKE_LEVER_REF: ${{ inputs.lever_ref }}
+          HONESTROLES_SMOKE_ASHBY_REF: ${{ inputs.ashby_ref }}
+          HONESTROLES_SMOKE_WORKABLE_REF: ${{ inputs.workable_ref }}
+        run: |
+          PYTHON_BIN=.venv/bin/python bash scripts/run_ingest_smoke.sh

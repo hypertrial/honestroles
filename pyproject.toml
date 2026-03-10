@@ -76,9 +76,10 @@ path = "src/honestroles/__about__.py"
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-addopts = ["-m", "not fuzz"]
+addopts = ["-m", "not fuzz and not smoke"]
 markers = [
   "fuzz: property/fuzz tests for malformed and adversarial inputs",
+  "smoke: live/manual smoke tests for end-to-end external integrations",
 ]
 
 [tool.ruff]
