@@ -24,7 +24,8 @@ $ PYTHONPATH=src:plugin_template/src .venv/bin/python -m pytest tests/docs -q
 $ honestroles init --input-parquet examples/jobs_sample.parquet --pipeline-config /tmp/pipeline.toml --plugins-manifest /tmp/plugins.toml --force
 $ honestroles doctor --pipeline-config /tmp/pipeline.toml --format table
 $ honestroles reliability check --pipeline-config /tmp/pipeline.toml --strict --format table
-$ honestroles ingest sync --source greenhouse --source-ref stripe --max-pages 1 --max-jobs 50 --format table
+$ honestroles ingest validate --source greenhouse --source-ref stripe --quality-policy ingest_quality.toml --format table
+$ honestroles ingest sync --source greenhouse --source-ref stripe --max-pages 1 --max-jobs 50 --quality-policy ingest_quality.toml --merge-policy updated_hash --retain-snapshots 30 --prune-inactive-days 90 --format table
 ```
 
 Optional batch smoke (if using ingestion manifests):
@@ -90,7 +91,7 @@ After publish succeeds:
 
 1. Install the released version in a clean environment.
 2. Run `honestroles --help` and confirm commands are present (`init`, `doctor`, `reliability`, `ingest`, `runs`).
-3. Run one lineage-writing command (`run`, `report-quality`, `adapter infer`, `eda`, `reliability check`, `ingest sync`, or `ingest sync-all`) and verify `.honestroles/runs/<run_id>/run.json` is created.
+3. Run one lineage-writing command (`run`, `report-quality`, `adapter infer`, `eda`, `reliability check`, `ingest sync`, `ingest validate`, or `ingest sync-all`) and verify `.honestroles/runs/<run_id>/run.json` is created.
 4. If you ran `reliability check`, confirm `dist/reliability/latest/gate_result.json` is written (or your custom `--output-file`).
 5. If you ran ingestion, confirm latest/snapshot/report artifacts exist under `dist/ingest/...` and batch report exists for `sync-all`.
 

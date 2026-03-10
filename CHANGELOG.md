@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added Ingestion Reliability & Operability v3:
+  - Added `honestroles ingest validate` for fetch+normalize+quality evaluation without latest overwrite.
+  - Extended `honestroles ingest sync` with `--quality-policy`, `--strict-quality`, `--merge-policy`, `--retain-snapshots`, and `--prune-inactive-days`.
+  - Added ingestion quality policy subsystem (`ingest_quality.toml`) with built-in defaults, deterministic check codes, and strict-quality escalation behavior.
+  - Added pre-write quality gating and additive report fields (`quality_status`, `quality_summary`, `quality_check_codes`, `stage_timings_ms`, `warnings`).
+  - Added deterministic merge policy controls (`updated_hash`, `first_seen`, `last_seen`) for catalog/latest conflict resolution.
+  - Added snapshot retention and inactive catalog compaction controls with report counters.
+  - Added ingestion lineage expansions: `ingest.validate` tracking and ingest metrics/timing payloads.
+  - Added fixture-backed connector conformance tests under `tests/fixtures/ingest/*`.
+  - Updated ingestion docs (CLI/reference/guides/troubleshooting/runtime API) for new controls and policy schema.
 - Added Ingestion v2:
   - Added `honestroles ingest sync-all --manifest ingest.toml` for deterministic multi-source batch orchestration.
   - Extended `honestroles ingest sync` with HTTP runtime controls (`--timeout-seconds`, `--max-retries`, `--base-backoff-seconds`, `--user-agent`).

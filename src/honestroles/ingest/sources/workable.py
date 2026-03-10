@@ -19,7 +19,7 @@ def fetch_workable_jobs(
     max_pages: int,
     max_jobs: int,
     http_get_json: Callable[[str], Any],
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int, tuple[str, ...]]:
     if not source_ref.strip():
         raise ConfigValidationError("source-ref must be non-empty")
     if max_pages < 1:
@@ -51,4 +51,4 @@ def fetch_workable_jobs(
     # Public endpoint is treated as a single-page feed in v1; max_pages
     # is validated for API symmetry with other connectors.
     out = [item for item in jobs if isinstance(item, dict)]
-    return out[:max_jobs], request_count
+    return out[:max_jobs], request_count, ()

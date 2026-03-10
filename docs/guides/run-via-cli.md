@@ -17,6 +17,7 @@ Use this for local runs, CI jobs, and operational scripts.
 
 ```bash
 $ honestroles ingest sync --source greenhouse --source-ref stripe --format table
+$ honestroles ingest validate --source greenhouse --source-ref stripe --quality-policy ingest_quality.toml --strict-quality --format table
 ```
 
 Optional batch ingestion:
@@ -73,6 +74,7 @@ $ honestroles report-quality --pipeline-config pipeline.toml --plugins plugins.t
 $ honestroles runs list --limit 20 --format table
 $ honestroles runs list --command reliability.check --since 2026-01-01T00:00:00Z --contains-code POLICY_NULL_RATE --format table
 $ honestroles runs list --command ingest.sync-all --since 2026-01-01T00:00:00Z --format table
+$ honestroles runs list --command ingest.validate --since 2026-01-01T00:00:00Z --contains-code INGEST_QUALITY_NULL_RATE --format table
 $ honestroles runs show --run-id <run_id>
 ```
 
@@ -100,5 +102,6 @@ Commands emit JSON payloads by default (or concise tables with `--format table`)
 
 - Full command and exit-code table: [CLI Reference](../reference/cli.md)
 - Manifest schema for batch ingestion: [Ingest Manifest Schema](../reference/ingest-manifest-schema.md)
+- Ingestion quality policy schema: [Ingest Quality Policy Schema](../reference/ingest-quality-policy-schema.md)
 - Connector/source-ref map: [Ingest Source-Ref Glossary](../reference/ingest-source-ref-glossary.md)
 - Failure handling examples: [Common Errors](../troubleshooting/common-errors.md)

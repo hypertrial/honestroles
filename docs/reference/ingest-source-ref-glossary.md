@@ -1,6 +1,7 @@
 # Ingest Source-Ref Glossary
 
-`honestroles ingest sync` requires `--source` and `--source-ref`.
+`honestroles ingest sync` and `honestroles ingest validate` require `--source`
+and `--source-ref`.
 `honestroles ingest sync-all` uses the same values inside `ingest.toml` `[[sources]]`
 entries.
 

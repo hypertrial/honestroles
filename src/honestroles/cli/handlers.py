@@ -25,7 +25,11 @@ from honestroles.io import (
     infer_source_adapter,
     read_parquet,
 )
-from honestroles.ingest import sync_source, sync_sources_from_manifest
+from honestroles.ingest import (
+    sync_source,
+    sync_sources_from_manifest,
+    validate_ingestion_source,
+)
 from honestroles.plugins.registry import PluginRegistry
 from honestroles.reliability import evaluate_reliability
 from honestroles.runtime import HonestRolesRuntime
@@ -301,8 +305,14 @@ def handle_ingest_sync(args: argparse.Namespace) -> CommandResult:
         max_retries=int(getattr(args, "max_retries", 3)),
         base_backoff_seconds=float(getattr(args, "base_backoff_seconds", 0.25)),
         user_agent=str(getattr(args, "user_agent", "honestroles-ingest/2.0")),
+        quality_policy_file=getattr(args, "quality_policy_file", None),
+        strict_quality=bool(getattr(args, "strict_quality", False)),
+        merge_policy=str(getattr(args, "merge_policy", "updated_hash")),
+        retain_snapshots=int(getattr(args, "retain_snapshots", 30)),
+        prune_inactive_days=int(getattr(args, "prune_inactive_days", 90)),
     )
-    return CommandResult(payload=result.to_payload())
+    exit_code = 0 if result.report.status in {"pass", "warn"} else 1
+    return CommandResult(payload=result.to_payload(), exit_code=exit_code)
 
 
 def handle_ingest_sync_all(args: argparse.Namespace) -> CommandResult:
@@ -312,6 +322,25 @@ def handle_ingest_sync_all(args: argparse.Namespace) -> CommandResult:
         fail_fast=bool(args.fail_fast),
     )
     exit_code = 0 if result.status == "pass" else 1
+    return CommandResult(payload=result.to_payload(), exit_code=exit_code)
+
+
+def handle_ingest_validate(args: argparse.Namespace) -> CommandResult:
+    result = validate_ingestion_source(
+        source=args.source,
+        source_ref=args.source_ref,
+        report_file=args.report_file,
+        write_raw=bool(args.write_raw),
+        max_pages=args.max_pages,
+        max_jobs=args.max_jobs,
+        timeout_seconds=float(getattr(args, "timeout_seconds", 15.0)),
+        max_retries=int(getattr(args, "max_retries", 3)),
+        base_backoff_seconds=float(getattr(args, "base_backoff_seconds", 0.25)),
+        user_agent=str(getattr(args, "user_agent", "honestroles-ingest/2.0")),
+        quality_policy_file=getattr(args, "quality_policy_file", None),
+        strict_quality=bool(getattr(args, "strict_quality", False)),
+    )
+    exit_code = 0 if result.report.status in {"pass", "warn"} else 1
     return CommandResult(payload=result.to_payload(), exit_code=exit_code)
 
 

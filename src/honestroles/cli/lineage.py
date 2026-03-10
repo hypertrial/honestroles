@@ -86,6 +86,7 @@ def should_track(args: Mapping[str, Any]) -> bool:
         "reliability.check",
         "ingest.sync",
         "ingest.sync-all",
+        "ingest.validate",
     }
 
 
@@ -166,7 +167,7 @@ def compute_hashes(args: Mapping[str, Any]) -> tuple[str | None, dict[str, str],
     command = _command_key(args)
     if command in {"run", "report-quality", "reliability.check"}:
         return _pipeline_related_hashes(args)
-    if command in {"ingest.sync", "ingest.sync-all"}:
+    if command in {"ingest.sync", "ingest.sync-all", "ingest.validate"}:
         return _ingest_hashes(args)
     if command == "adapter.infer":
         input_hashes: dict[str, str] = {}
@@ -222,6 +223,18 @@ def build_artifact_paths(args: Mapping[str, Any], payload: Mapping[str, Any] | N
         if bool(args.get("write_raw", False)):
             artifacts["raw_file"] = str((default_root / "raw.jsonl").expanduser().resolve())
         return artifacts
+    if command == "ingest.validate":
+        source = str(args.get("source", "unknown"))
+        source_ref = str(args.get("source_ref", "unknown"))
+        safe_ref = re.sub(r"[^A-Za-z0-9._-]+", "_", source_ref.strip()) or "unknown"
+        default_root = Path("dist/ingest") / source / safe_ref
+        report_file = Path(
+            str(args.get("report_file", default_root / "validate_report.json"))
+        ).expanduser().resolve()
+        artifacts = {"report_file": str(report_file)}
+        if bool(args.get("write_raw", False)):
+            artifacts["raw_file"] = str((default_root / "raw.jsonl").expanduser().resolve())
+        return artifacts
     if command == "ingest.sync-all":
         report_file = Path(
             str(args.get("report_file", "dist/ingest/sync_all_report.json"))
@@ -247,6 +260,7 @@ def create_record(
         raw_codes = payload.get("check_codes")
         if isinstance(raw_codes, list):
             check_codes = [str(code) for code in raw_codes if str(code).strip()]
+    ingest_metrics = _ingest_metrics(_command_key(args), payload)
     return {
         "schema_version": _SCHEMA_VERSION,
         "run_id": run_id,
@@ -260,8 +274,60 @@ def create_record(
         "config_hash": config_hash,
         "artifact_paths": build_artifact_paths(args, payload),
         "check_codes": check_codes,
+        "ingest_metrics": ingest_metrics,
         "error": dict(error) if error is not None else None,
     }
+
+
+def _ingest_metrics(
+    command: str,
+    payload: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    if payload is None:
+        return None
+    if command == "ingest.sync":
+        return {
+            "request_count": _safe_int(payload.get("request_count")),
+            "fetched_count": _safe_int(payload.get("fetched_count")),
+            "normalized_count": _safe_int(payload.get("normalized_count")),
+            "rows_written": _safe_int(payload.get("rows_written")),
+            "quality_status": str(payload.get("quality_status", "pass")),
+            "quality_summary": payload.get("quality_summary", {}),
+            "stage_timings_ms": payload.get("stage_timings_ms", {}),
+            "warnings": payload.get("warnings", []),
+        }
+    if command == "ingest.sync-all":
+        return {
+            "total_sources": _safe_int(payload.get("total_sources")),
+            "pass_count": _safe_int(payload.get("pass_count")),
+            "fail_count": _safe_int(payload.get("fail_count")),
+            "total_request_count": _safe_int(payload.get("total_request_count")),
+            "total_fetched_count": _safe_int(payload.get("total_fetched_count")),
+            "total_rows_written": _safe_int(payload.get("total_rows_written")),
+            "quality_summary": payload.get("quality_summary", {}),
+            "stage_timings_ms": payload.get("stage_timings_ms", {}),
+        }
+    if command == "ingest.validate":
+        return {
+            "request_count": _safe_int(payload.get("request_count")),
+            "fetched_count": _safe_int(payload.get("fetched_count")),
+            "normalized_count": _safe_int(payload.get("normalized_count")),
+            "rows_evaluated": _safe_int(payload.get("rows_evaluated")),
+            "quality_status": str(payload.get("quality_status", "pass")),
+            "quality_summary": payload.get("quality_summary", {}),
+            "stage_timings_ms": payload.get("stage_timings_ms", {}),
+            "warnings": payload.get("warnings", []),
+        }
+    return None
+
+
+def _safe_int(value: object) -> int:
+    try:
+        if value is None:
+            return 0
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def write_record(record: Mapping[str, Any]) -> Path:

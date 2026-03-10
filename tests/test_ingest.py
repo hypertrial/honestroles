@@ -243,7 +243,7 @@ def test_source_connectors_shapes_and_errors() -> None:
             return {"jobs": [{"id": 1}, {"id": 2}]}
         return {"jobs": []}
 
-    jobs, requests = fetch_greenhouse_jobs(
+    jobs, requests, greenhouse_warnings = fetch_greenhouse_jobs(
         "acme",
         max_pages=3,
         max_jobs=10,
@@ -251,6 +251,7 @@ def test_source_connectors_shapes_and_errors() -> None:
     )
     assert len(jobs) == 2
     assert requests == 2
+    assert greenhouse_warnings == ()
 
     with pytest.raises(ConfigValidationError, match="must include 'jobs'"):
         fetch_greenhouse_jobs("acme", max_pages=1, max_jobs=1, http_get_json=lambda _u: {})
@@ -258,14 +259,14 @@ def test_source_connectors_shapes_and_errors() -> None:
         fetch_greenhouse_jobs("acme", max_pages=1, max_jobs=1, http_get_json=lambda _u: {"jobs": {}})
     with pytest.raises(ConfigValidationError, match="non-empty"):
         fetch_greenhouse_jobs("", max_pages=1, max_jobs=1, http_get_json=lambda _u: {"jobs": []})
-    capped_jobs, _ = fetch_greenhouse_jobs(
+    capped_jobs, _, _ = fetch_greenhouse_jobs(
         "acme",
         max_pages=3,
         max_jobs=1,
         http_get_json=lambda _u: {"jobs": [{"id": 1}, {"id": 2}]},
     )
     assert len(capped_jobs) == 1
-    exhausted_greenhouse_jobs, exhausted_greenhouse_requests = fetch_greenhouse_jobs(
+    exhausted_greenhouse_jobs, exhausted_greenhouse_requests, _ = fetch_greenhouse_jobs(
         "acme",
         max_pages=2,
         max_jobs=10,
@@ -282,7 +283,7 @@ def test_source_connectors_shapes_and_errors() -> None:
             return [{"id": "1"}]
         return []
 
-    lever_jobs, lever_requests = fetch_lever_jobs(
+    lever_jobs, lever_requests, lever_warnings = fetch_lever_jobs(
         "acme",
         max_pages=3,
         max_jobs=10,
@@ -290,14 +291,15 @@ def test_source_connectors_shapes_and_errors() -> None:
     )
     assert len(lever_jobs) == 1
     assert lever_requests == 2
-    lever_data_jobs, _ = fetch_lever_jobs(
+    assert lever_warnings == ()
+    lever_data_jobs, _, _ = fetch_lever_jobs(
         "acme",
         max_pages=1,
         max_jobs=1,
         http_get_json=lambda _u: {"data": [{"id": "1"}, {"id": "2"}]},
     )
     assert len(lever_data_jobs) == 1
-    exhausted_lever_jobs, exhausted_lever_requests = fetch_lever_jobs(
+    exhausted_lever_jobs, exhausted_lever_requests, _ = fetch_lever_jobs(
         "acme",
         max_pages=2,
         max_jobs=10,
@@ -316,7 +318,7 @@ def test_source_connectors_shapes_and_errors() -> None:
             {"jobs": [{"id": "2"}], "nextCursor": "abc"},
         ]
     )
-    ashby_jobs, ashby_requests = fetch_ashby_jobs(
+    ashby_jobs, ashby_requests, ashby_warnings = fetch_ashby_jobs(
         "acme",
         max_pages=5,
         max_jobs=10,
@@ -324,7 +326,8 @@ def test_source_connectors_shapes_and_errors() -> None:
     )
     assert len(ashby_jobs) == 2
     assert ashby_requests == 2
-    ashby_no_cursor_jobs, ashby_no_cursor_requests = fetch_ashby_jobs(
+    assert ashby_warnings == ("INGEST_CURSOR_LOOP_DETECTED",)
+    ashby_no_cursor_jobs, ashby_no_cursor_requests, _ = fetch_ashby_jobs(
         "acme",
         max_pages=2,
         max_jobs=10,
@@ -332,7 +335,7 @@ def test_source_connectors_shapes_and_errors() -> None:
     )
     assert len(ashby_no_cursor_jobs) == 1
     assert ashby_no_cursor_requests == 1
-    ashby_empty_jobs, ashby_empty_requests = fetch_ashby_jobs(
+    ashby_empty_jobs, ashby_empty_requests, _ = fetch_ashby_jobs(
         "acme",
         max_pages=2,
         max_jobs=10,
@@ -340,7 +343,7 @@ def test_source_connectors_shapes_and_errors() -> None:
     )
     assert ashby_empty_jobs == []
     assert ashby_empty_requests == 1
-    ashby_limited_jobs, _ = fetch_ashby_jobs(
+    ashby_limited_jobs, _, _ = fetch_ashby_jobs(
         "acme",
         max_pages=3,
         max_jobs=1,
@@ -356,7 +359,7 @@ def test_source_connectors_shapes_and_errors() -> None:
             "nextCursor": f"cursor-{ashby_exhaust_counter['n']}",
         }
 
-    exhausted_ashby_jobs, exhausted_ashby_requests = fetch_ashby_jobs(
+    exhausted_ashby_jobs, exhausted_ashby_requests, _ = fetch_ashby_jobs(
         "acme",
         max_pages=2,
         max_jobs=10,
@@ -380,7 +383,7 @@ def test_source_connectors_shapes_and_errors() -> None:
             return {"jobs": [{"shortcode": "A"}]}
         return {"locations": []}
 
-    workable_jobs, workable_requests = fetch_workable_jobs(
+    workable_jobs, workable_requests, workable_warnings = fetch_workable_jobs(
         "acme",
         max_pages=1,
         max_jobs=10,
@@ -388,6 +391,7 @@ def test_source_connectors_shapes_and_errors() -> None:
     )
     assert len(workable_jobs) == 1
     assert workable_requests == 3
+    assert workable_warnings == ()
     with pytest.raises(ConfigValidationError, match="max-pages"):
         fetch_workable_jobs("acme", max_pages=0, max_jobs=1, http_get_json=lambda _u: {})
     with pytest.raises(ConfigValidationError, match="non-empty"):
@@ -399,7 +403,7 @@ def test_source_connectors_shapes_and_errors() -> None:
             max_jobs=1,
             http_get_json=lambda _u: [],
         )
-    workable_results_jobs, _ = fetch_workable_jobs(
+    workable_results_jobs, _, _ = fetch_workable_jobs(
         "acme",
         max_pages=2,
         max_jobs=1,

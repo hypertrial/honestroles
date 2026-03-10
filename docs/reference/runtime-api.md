@@ -102,6 +102,35 @@ Additive request controls:
 - `max_retries`
 - `base_backoff_seconds`
 - `user_agent`
+- `quality_policy_file`
+- `strict_quality`
+- `merge_policy` (`updated_hash|first_seen|last_seen`)
+- `retain_snapshots`
+- `prune_inactive_days`
+
+Additive result/report fields include:
+
+- `quality_status`, `quality_summary`, `quality_check_codes`
+- `stage_timings_ms`, `warnings`
+- `merge_policy`, `retained_snapshot_count`, `pruned_snapshot_count`, `pruned_inactive_count`
+- `quality_policy_source`, `quality_policy_hash`
+
+Validation-only ingestion API:
+
+```python
+from honestroles import validate_ingestion_source
+
+validation = validate_ingestion_source(
+    source="greenhouse",
+    source_ref="stripe",
+    quality_policy_file="ingest_quality.toml",
+    strict_quality=True,
+)
+print(validation.report.status, validation.rows_evaluated)
+```
+
+`validate_ingestion_source(...) -> IngestionValidationResult` writes a validation
+report and optional raw payload, but does not overwrite latest parquet.
 
 Batch ingestion from manifest:
 
@@ -117,6 +146,7 @@ print(batch.status, batch.total_sources, batch.fail_count)
 - aggregate status/timing fields
 - per-source payloads under `sources`
 - aggregate totals (`total_rows_written`, `total_fetched_count`, `total_request_count`)
+- aggregate quality summary (`quality_summary`)
 - `report_file`
 
 Supported `source` values:

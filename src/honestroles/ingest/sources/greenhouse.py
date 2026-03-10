@@ -17,7 +17,7 @@ def fetch_greenhouse_jobs(
     max_pages: int,
     max_jobs: int,
     http_get_json: Callable[[str], Any],
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int, tuple[str, ...]]:
     if not source_ref.strip():
         raise ConfigValidationError("source-ref must be non-empty")
     jobs: list[dict[str, Any]] = []
@@ -37,4 +37,4 @@ def fetch_greenhouse_jobs(
         jobs.extend(item for item in items if isinstance(item, dict))
         if len(jobs) >= max_jobs:
             break
-    return jobs[:max_jobs], request_count
+    return jobs[:max_jobs], request_count, ()

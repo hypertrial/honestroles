@@ -1,0 +1,21 @@
+schema_version = "1.0"
+min_rows = 1
+required_columns = [
+  "id",
+  "title",
+  "apply_url",
+  "posted_at",
+  "source",
+  "source_ref",
+  "source_job_id",
+  "source_payload_hash",
+]
+
+[null_thresholds]
+id = 0.05
+title = 0.20
+apply_url = 0.40
+
+[freshness]
+posted_at_max_age_days = 365
+source_updated_at_max_age_days = 730

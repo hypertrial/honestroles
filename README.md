@@ -38,7 +38,8 @@ Expected CLI diagnostics include `stage_rows`, `plugin_counts`, and `final_rows`
 ## CLI
 
 ```bash
-$ honestroles ingest sync --source greenhouse --source-ref stripe --format table
+$ honestroles ingest sync --source greenhouse --source-ref stripe --quality-policy ingest_quality.toml --strict-quality --merge-policy updated_hash --retain-snapshots 30 --prune-inactive-days 90 --format table
+$ honestroles ingest validate --source greenhouse --source-ref stripe --quality-policy ingest_quality.toml --strict-quality --format table
 $ honestroles ingest sync-all --manifest ingest.toml --format table
 $ honestroles init --input-parquet data/jobs.parquet --pipeline-config pipeline.toml --plugins-manifest plugins.toml
 $ honestroles doctor --pipeline-config pipeline.toml --plugins plugins.toml --format table
@@ -54,10 +55,31 @@ $ honestroles scaffold-plugin --name my-plugin --output-dir .
 ## Python API
 
 ```python
-from honestroles import HonestRolesRuntime, sync_source, sync_sources_from_manifest
+from honestroles import (
+    HonestRolesRuntime,
+    sync_source,
+    sync_sources_from_manifest,
+    validate_ingestion_source,
+)
 
-ingest = sync_source(source="greenhouse", source_ref="stripe")
+ingest = sync_source(
+    source="greenhouse",
+    source_ref="stripe",
+    quality_policy_file="ingest_quality.toml",
+    strict_quality=False,
+    merge_policy="updated_hash",
+    retain_snapshots=30,
+    prune_inactive_days=90,
+)
 print(ingest.rows_written, ingest.output_parquet)
+
+validation = validate_ingestion_source(
+    source="greenhouse",
+    source_ref="stripe",
+    quality_policy_file="ingest_quality.toml",
+    strict_quality=True,
+)
+print(validation.report.status, validation.rows_evaluated)
 
 batch = sync_sources_from_manifest(manifest_path="ingest.toml")
 print(batch.status, batch.total_sources, batch.fail_count)

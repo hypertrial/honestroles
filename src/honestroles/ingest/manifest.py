@@ -9,6 +9,7 @@ from honestroles.errors import ConfigValidationError
 from honestroles.ingest.models import (
     IngestionDefaults,
     IngestionManifest,
+    IngestionMergePolicy,
     IngestionSourceConfig,
     IngestionSource,
     SUPPORTED_INGEST_SOURCES,
@@ -24,6 +25,11 @@ _DEFAULTS_ALLOWED_KEYS = {
     "max_retries",
     "base_backoff_seconds",
     "user_agent",
+    "quality_policy_file",
+    "strict_quality",
+    "merge_policy",
+    "retain_snapshots",
+    "prune_inactive_days",
 }
 
 _SOURCE_ALLOWED_KEYS = {
@@ -41,6 +47,11 @@ _SOURCE_ALLOWED_KEYS = {
     "max_retries",
     "base_backoff_seconds",
     "user_agent",
+    "quality_policy_file",
+    "strict_quality",
+    "merge_policy",
+    "retain_snapshots",
+    "prune_inactive_days",
 }
 
 
@@ -107,6 +118,31 @@ def _parse_defaults(
         max_retries=_parse_int(raw.get("max_retries"), "defaults.max_retries", default=IngestionDefaults().max_retries, minimum=0),
         base_backoff_seconds=_parse_float(raw.get("base_backoff_seconds"), "defaults.base_backoff_seconds", default=IngestionDefaults().base_backoff_seconds, minimum=0.0),
         user_agent=_parse_string(raw.get("user_agent"), "defaults.user_agent", default=IngestionDefaults().user_agent),
+        quality_policy_file=_parse_optional_path(
+            raw.get("quality_policy_file"), base_dir, "defaults.quality_policy_file"
+        ),
+        strict_quality=_parse_bool(
+            raw.get("strict_quality"),
+            "defaults.strict_quality",
+            default=IngestionDefaults().strict_quality,
+        ),
+        merge_policy=_parse_merge_policy(
+            raw.get("merge_policy"),
+            "defaults.merge_policy",
+            default=IngestionDefaults().merge_policy,
+        ),
+        retain_snapshots=_parse_int(
+            raw.get("retain_snapshots"),
+            "defaults.retain_snapshots",
+            default=IngestionDefaults().retain_snapshots,
+            minimum=1,
+        ),
+        prune_inactive_days=_parse_int(
+            raw.get("prune_inactive_days"),
+            "defaults.prune_inactive_days",
+            default=IngestionDefaults().prune_inactive_days,
+            minimum=0,
+        ),
     )
 
 
@@ -149,6 +185,17 @@ def _parse_source(
         max_retries=_parse_optional_int(raw.get("max_retries"), f"{label}.max_retries", minimum=0),
         base_backoff_seconds=_parse_optional_float(raw.get("base_backoff_seconds"), f"{label}.base_backoff_seconds", minimum=0.0),
         user_agent=_parse_string(raw.get("user_agent"), f"{label}.user_agent", default=None),
+        quality_policy_file=_parse_optional_path(
+            raw.get("quality_policy_file"), base_dir, f"{label}.quality_policy_file"
+        ),
+        strict_quality=_parse_optional_bool(raw.get("strict_quality"), f"{label}.strict_quality"),
+        merge_policy=_parse_optional_merge_policy(raw.get("merge_policy"), f"{label}.merge_policy"),
+        retain_snapshots=_parse_optional_int(
+            raw.get("retain_snapshots"), f"{label}.retain_snapshots", minimum=1
+        ),
+        prune_inactive_days=_parse_optional_int(
+            raw.get("prune_inactive_days"), f"{label}.prune_inactive_days", minimum=0
+        ),
     )
 
 
@@ -242,3 +289,26 @@ def _parse_optional_float(value: object, field_name: str, minimum: float) -> flo
     if parsed < minimum:
         raise ConfigValidationError(f"{field_name} must be >= {minimum}")
     return parsed
+
+
+def _parse_merge_policy(
+    value: object,
+    field_name: str,
+    default: IngestionMergePolicy,
+) -> IngestionMergePolicy:
+    parsed = _parse_string(value, field_name, default=default) or default
+    return _validate_merge_policy(parsed, field_name)
+
+
+def _parse_optional_merge_policy(value: object, field_name: str) -> IngestionMergePolicy | None:
+    parsed = _parse_string(value, field_name, default=None)
+    if parsed is None:
+        return None
+    return _validate_merge_policy(parsed, field_name)
+
+
+def _validate_merge_policy(value: str, field_name: str) -> IngestionMergePolicy:
+    valid: tuple[IngestionMergePolicy, ...] = ("updated_hash", "first_seen", "last_seen")
+    if value not in valid:
+        raise ConfigValidationError(f"{field_name} must be one of: {', '.join(valid)}")
+    return value

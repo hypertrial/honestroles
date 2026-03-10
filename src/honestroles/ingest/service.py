@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import json
 from pathlib import Path
+from time import perf_counter
 import re
 from typing import Any, Callable, Mapping, cast
 import uuid
@@ -18,14 +19,22 @@ from honestroles.ingest.models import (
     BatchIngestionResult,
     INGEST_SCHEMA_VERSION,
     IngestionDefaults,
+    IngestionMergePolicy,
     IngestionReport,
     IngestionResult,
     IngestionSource,
     IngestionSourceConfig,
     IngestionStateEntry,
+    IngestionValidationResult,
     SUPPORTED_INGEST_SOURCES,
 )
 from honestroles.ingest.normalize import normalize_records, normalized_dataframe
+from honestroles.ingest.quality import (
+    IngestQualityPolicy,
+    IngestQualityResult,
+    evaluate_ingest_quality,
+    load_ingest_quality_policy,
+)
 from honestroles.ingest.sources import (
     fetch_ashby_jobs,
     fetch_greenhouse_jobs,
@@ -41,13 +50,18 @@ from honestroles.ingest.state import (
 )
 from honestroles.io import write_parquet
 
-_SOURCE_FETCHERS: dict[str, Callable[..., tuple[list[dict[str, Any]], int]]] = {
+_SOURCE_FETCHERS: dict[str, Callable[..., tuple[list[dict[str, Any]], int, tuple[str, ...]]]] = {
     "greenhouse": fetch_greenhouse_jobs,
     "lever": fetch_lever_jobs,
     "ashby": fetch_ashby_jobs,
     "workable": fetch_workable_jobs,
 }
 _SOURCE_REF_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_VALID_MERGE_POLICIES: tuple[IngestionMergePolicy, ...] = (
+    "updated_hash",
+    "first_seen",
+    "last_seen",
+)
 
 
 @dataclass(slots=True)
@@ -68,6 +82,25 @@ class _CatalogSummary:
     updated_count: int = 0
     unchanged_count: int = 0
     tombstoned_count: int = 0
+    pruned_inactive_count: int = 0
+
+
+@dataclass(slots=True)
+class _PreparedRecords:
+    raw_records: list[dict[str, Any]]
+    request_count: int
+    fetched_count: int
+    normalized_records: list[dict[str, Any]]
+    normalized_count: int
+    incremental_records: list[dict[str, Any]]
+    deduped_records: list[dict[str, Any]]
+    dedup_dropped: int
+    skipped_by_state: int
+    coverage_complete: bool
+    warning_codes: tuple[str, ...]
+    quality_result: IngestQualityResult
+    quality_policy_source: str
+    quality_policy_hash: str
 
 
 def sync_source(
@@ -85,6 +118,11 @@ def sync_source(
     max_retries: int = 3,
     base_backoff_seconds: float = 0.25,
     user_agent: str = "honestroles-ingest/2.0",
+    quality_policy_file: str | Path | None = None,
+    strict_quality: bool = False,
+    merge_policy: IngestionMergePolicy = "updated_hash",
+    retain_snapshots: int = 30,
+    prune_inactive_days: int = 90,
     http_get_json: Callable[[str], Any] = fetch_json,
 ) -> IngestionResult:
     _validate_inputs(
@@ -96,6 +134,9 @@ def sync_source(
         max_retries=max_retries,
         base_backoff_seconds=base_backoff_seconds,
         user_agent=user_agent,
+        merge_policy=merge_policy,
+        retain_snapshots=retain_snapshots,
+        prune_inactive_days=prune_inactive_days,
     )
     source_name = cast(IngestionSource, source)
     output_path, report_path, raw_path = _resolve_paths(
@@ -107,16 +148,21 @@ def sync_source(
     )
     catalog_path = _catalog_path_for(output_path)
     started_at = datetime.now(UTC)
+    stage_timings_ms: dict[str, int] = {}
+    total_started = perf_counter()
+
     request_count = 0
     fetched_count = 0
     normalized_count = 0
     dedup_dropped = 0
     skipped_by_state = 0
-    state_entries: dict[str, IngestionStateEntry] = {}
-    key = state_key(source_name, source_ref)
-    current_entry = None
-    high_before = None
-    warning_codes: list[str] = []
+    high_before: str | None = None
+    written_state: Path | None = None
+    quality_result = evaluate_ingest_quality(records=[], policy=IngestQualityPolicy())
+    quality_policy_source = "builtin"
+    quality_policy_hash: str | None = None
+    warning_codes: set[str] = set()
+
     telemetry = _HttpTelemetry()
     fetch_fn = (
         build_http_getter(
@@ -131,70 +177,134 @@ def sync_source(
     )
 
     try:
+        policy, quality_policy_source, quality_policy_hash = load_ingest_quality_policy(
+            quality_policy_file
+        )
+
+        load_state_started = perf_counter()
         state_entries = load_state(state_file)
+        stage_timings_ms["state_load"] = _elapsed_ms(load_state_started)
+        key = state_key(source_name, source_ref)
         current_entry = state_entries.get(key)
         high_before = current_entry.high_watermark_posted_at if current_entry else None
 
-        fetcher = _SOURCE_FETCHERS[source_name]
-        raw_records, request_count = fetcher(
-            source_ref,
-            max_pages=max_pages,
-            max_jobs=max_jobs,
-            http_get_json=fetch_fn,
-        )
-        fetched_count = len(raw_records)
-
-        if write_raw and raw_path is not None:
-            _write_raw_jsonl(raw_path, raw_records)
-
-        ingested_at = datetime.now(UTC).isoformat()
-        normalized = normalize_records(
-            raw_records,
+        prepared = _prepare_records(
             source=source_name,
             source_ref=source_ref,
-            ingested_at_utc=ingested_at,
-        )
-        normalized_count = len(normalized)
-        incremental_records, _, skipped_by_state = filter_incremental(
-            normalized,
-            entry=current_entry,
-            full_refresh=full_refresh,
-        )
-        deduped_records, dedup_dropped = deduplicate_records(incremental_records)
-        coverage_complete = _is_coverage_complete(
-            request_count=request_count,
             max_pages=max_pages,
-            fetched_count=fetched_count,
             max_jobs=max_jobs,
+            fetch_fn=fetch_fn,
+            write_raw=write_raw,
+            raw_path=raw_path,
+            current_entry=current_entry,
+            full_refresh=full_refresh,
+            policy=policy,
+            quality_policy_source=quality_policy_source,
+            quality_policy_hash=quality_policy_hash,
+            stage_timings_ms=stage_timings_ms,
         )
-        if not coverage_complete:
-            warning_codes.append("INGEST_TRUNCATED")
+
+        request_count = prepared.request_count
+        fetched_count = prepared.fetched_count
+        normalized_count = prepared.normalized_count
+        dedup_dropped = prepared.dedup_dropped
+        skipped_by_state = prepared.skipped_by_state
+        quality_result = prepared.quality_result
+        quality_policy_source = prepared.quality_policy_source
+        quality_policy_hash = prepared.quality_policy_hash
+        warning_codes.update(prepared.warning_codes)
+        warning_codes.update(quality_result.check_codes)
+
+        if strict_quality and quality_result.status != "pass":
+            finished_at = datetime.now(UTC)
+            stage_timings_ms["total"] = _elapsed_ms(total_started)
+            output_paths: dict[str, str] = {"report": str(report_path)}
+            if raw_path is not None and raw_path.exists():
+                output_paths["raw_jsonl"] = str(raw_path)
+            report = IngestionReport(
+                schema_version=INGEST_SCHEMA_VERSION,
+                status="fail",
+                source=source_name,
+                source_ref=source_ref,
+                started_at_utc=started_at.isoformat(),
+                finished_at_utc=finished_at.isoformat(),
+                duration_ms=_duration_ms(started_at, finished_at),
+                request_count=request_count,
+                fetched_count=fetched_count,
+                normalized_count=normalized_count,
+                dedup_dropped=dedup_dropped,
+                high_watermark_before=high_before,
+                high_watermark_after=high_before,
+                output_paths=output_paths,
+                skipped_by_state=skipped_by_state,
+                coverage_complete=prepared.coverage_complete,
+                retry_count=telemetry.retry_count,
+                http_status_counts=telemetry.http_status_counts,
+                quality_status=quality_result.status,
+                quality_summary=quality_result.summary,
+                quality_check_codes=quality_result.check_codes,
+                stage_timings_ms=stage_timings_ms,
+                warnings=tuple(sorted(warning_codes)),
+                merge_policy=merge_policy,
+                quality_policy_source=quality_policy_source,
+                quality_policy_hash=quality_policy_hash,
+                error={
+                    "type": "IngestQualityGateError",
+                    "message": "ingestion quality gate failed in strict mode",
+                },
+            )
+            _write_report(report_path, report.to_dict())
+            check_codes = tuple(sorted(set(warning_codes).union(set(quality_result.check_codes))))
+            return IngestionResult(
+                report=report,
+                output_parquet=output_path,
+                report_file=report_path,
+                raw_file=raw_path,
+                snapshot_file=None,
+                catalog_file=None,
+                state_file=None,
+                rows_written=0,
+                check_codes=check_codes,
+            )
+
+        writes_started = perf_counter()
         snapshot_path = _snapshot_path_for(output_path, started_at)
-        snapshot_frame = normalized_dataframe(deduped_records)
+        snapshot_frame = normalized_dataframe(prepared.deduped_records)
         write_parquet(snapshot_frame, snapshot_path)
 
+        catalog_merge_started = perf_counter()
         catalog = _load_catalog(catalog_path)
         catalog, summary = _apply_catalog_updates(
             catalog=catalog,
-            records=deduped_records,
-            seen_at_utc=ingested_at,
-            coverage_complete=coverage_complete,
+            records=prepared.deduped_records,
+            seen_at_utc=_utc_now_iso(),
+            coverage_complete=prepared.coverage_complete,
+            merge_policy=merge_policy,
+            prune_inactive_days=prune_inactive_days,
         )
         _write_catalog(catalog_path, catalog)
+        stage_timings_ms["catalog_merge"] = _elapsed_ms(catalog_merge_started)
 
         active_records = _active_records_from_catalog(catalog)
         latest_frame = normalized_dataframe(active_records)
         write_parquet(latest_frame, output_path)
 
+        retained_snapshot_count, pruned_snapshot_count = _prune_snapshots(
+            snapshot_path=snapshot_path,
+            retain_snapshots=retain_snapshots,
+        )
+
         finished_at = datetime.now(UTC)
         entry = update_state_entry(
             current_entry,
-            records=deduped_records,
+            records=prepared.deduped_records,
             finished_at_utc=finished_at.isoformat(),
-            coverage_complete=coverage_complete,
+            coverage_complete=prepared.coverage_complete,
         )
         state_entries[key] = entry
         written_state = write_state(state_file, state_entries)
+        stage_timings_ms["writes"] = _elapsed_ms(writes_started)
+        stage_timings_ms["total"] = _elapsed_ms(total_started)
 
         output_paths = {
             "parquet": str(output_path),
@@ -205,6 +315,7 @@ def sync_source(
         }
         if raw_path is not None:
             output_paths["raw_jsonl"] = str(raw_path)
+
         report = IngestionReport(
             schema_version=INGEST_SCHEMA_VERSION,
             status="pass",
@@ -225,12 +336,24 @@ def sync_source(
             unchanged_count=summary.unchanged_count,
             skipped_by_state=skipped_by_state,
             tombstoned_count=summary.tombstoned_count,
-            coverage_complete=coverage_complete,
+            coverage_complete=prepared.coverage_complete,
             retry_count=telemetry.retry_count,
             http_status_counts=telemetry.http_status_counts,
+            quality_status=quality_result.status,
+            quality_summary=quality_result.summary,
+            quality_check_codes=quality_result.check_codes,
+            stage_timings_ms=stage_timings_ms,
+            warnings=tuple(sorted(warning_codes)),
+            merge_policy=merge_policy,
+            retained_snapshot_count=retained_snapshot_count,
+            pruned_snapshot_count=pruned_snapshot_count,
+            pruned_inactive_count=summary.pruned_inactive_count,
+            quality_policy_source=quality_policy_source,
+            quality_policy_hash=quality_policy_hash,
             error=None,
         )
         _write_report(report_path, report.to_dict())
+        check_codes = tuple(sorted(set(warning_codes).union(set(quality_result.check_codes))))
         return IngestionResult(
             report=report,
             output_parquet=output_path,
@@ -240,9 +363,10 @@ def sync_source(
             catalog_file=catalog_path,
             state_file=written_state,
             rows_written=latest_frame.height,
-            check_codes=tuple(sorted(set(warning_codes))),
+            check_codes=check_codes,
         )
     except (ConfigValidationError, HonestRolesError) as exc:
+        stage_timings_ms["total"] = _elapsed_ms(total_started)
         _write_failure_report(
             report_path=report_path,
             source=source_name,
@@ -256,10 +380,17 @@ def sync_source(
             retry_count=telemetry.retry_count,
             http_status_counts=telemetry.http_status_counts,
             error=exc,
+            quality_result=quality_result,
+            stage_timings_ms=stage_timings_ms,
+            warning_codes=tuple(sorted(warning_codes)),
+            merge_policy=merge_policy,
+            quality_policy_source=quality_policy_source,
+            quality_policy_hash=quality_policy_hash,
         )
         raise
     except Exception as exc:
         wrapped = HonestRolesError(f"ingestion sync failed: {exc}")
+        stage_timings_ms["total"] = _elapsed_ms(total_started)
         _write_failure_report(
             report_path=report_path,
             source=source_name,
@@ -273,8 +404,292 @@ def sync_source(
             retry_count=telemetry.retry_count,
             http_status_counts=telemetry.http_status_counts,
             error=wrapped,
+            quality_result=quality_result,
+            stage_timings_ms=stage_timings_ms,
+            warning_codes=tuple(sorted(warning_codes)),
+            merge_policy=merge_policy,
+            quality_policy_source=quality_policy_source,
+            quality_policy_hash=quality_policy_hash,
         )
         raise wrapped from exc
+
+
+def validate_ingestion_source(
+    *,
+    source: str,
+    source_ref: str,
+    report_file: str | Path | None = None,
+    write_raw: bool = False,
+    max_pages: int = 25,
+    max_jobs: int = 5000,
+    timeout_seconds: float = 15.0,
+    max_retries: int = 3,
+    base_backoff_seconds: float = 0.25,
+    user_agent: str = "honestroles-ingest/2.0",
+    quality_policy_file: str | Path | None = None,
+    strict_quality: bool = False,
+    http_get_json: Callable[[str], Any] = fetch_json,
+) -> IngestionValidationResult:
+    _validate_inputs(
+        source=source,
+        source_ref=source_ref,
+        max_pages=max_pages,
+        max_jobs=max_jobs,
+        timeout_seconds=timeout_seconds,
+        max_retries=max_retries,
+        base_backoff_seconds=base_backoff_seconds,
+        user_agent=user_agent,
+        merge_policy="updated_hash",
+        retain_snapshots=30,
+        prune_inactive_days=90,
+    )
+    source_name = cast(IngestionSource, source)
+    _, report_path, raw_path = _resolve_paths(
+        source=source_name,
+        source_ref=source_ref,
+        output_parquet=None,
+        report_file=report_file,
+        write_raw=write_raw,
+        report_name="validate_report.json",
+    )
+    started_at = datetime.now(UTC)
+    stage_timings_ms: dict[str, int] = {}
+    total_started = perf_counter()
+
+    request_count = 0
+    fetched_count = 0
+    normalized_count = 0
+    dedup_dropped = 0
+    warning_codes: set[str] = set()
+    quality_policy_source = "builtin"
+    quality_policy_hash: str | None = None
+    telemetry = _HttpTelemetry()
+    fetch_fn = (
+        build_http_getter(
+            timeout_seconds=timeout_seconds,
+            max_retries=max_retries,
+            base_backoff_seconds=base_backoff_seconds,
+            user_agent=user_agent,
+            on_request=telemetry.observe,
+        )
+        if http_get_json is fetch_json
+        else http_get_json
+    )
+
+    try:
+        policy, quality_policy_source, loaded_policy_hash = load_ingest_quality_policy(
+            quality_policy_file
+        )
+        quality_policy_hash = loaded_policy_hash
+        prepared = _prepare_records(
+            source=source_name,
+            source_ref=source_ref,
+            max_pages=max_pages,
+            max_jobs=max_jobs,
+            fetch_fn=fetch_fn,
+            write_raw=write_raw,
+            raw_path=raw_path,
+            current_entry=None,
+            full_refresh=True,
+            policy=policy,
+            quality_policy_source=quality_policy_source,
+            quality_policy_hash=quality_policy_hash,
+            stage_timings_ms=stage_timings_ms,
+        )
+
+        request_count = prepared.request_count
+        fetched_count = prepared.fetched_count
+        normalized_count = prepared.normalized_count
+        dedup_dropped = prepared.dedup_dropped
+        warning_codes.update(prepared.warning_codes)
+        warning_codes.update(prepared.quality_result.check_codes)
+
+        quality_status = prepared.quality_result.status
+        status = "pass"
+        if quality_status == "warn":
+            status = "warn"
+        if strict_quality and quality_status != "pass":
+            status = "fail"
+
+        finished_at = datetime.now(UTC)
+        stage_timings_ms["total"] = _elapsed_ms(total_started)
+        output_paths = {"report": str(report_path)}
+        if raw_path is not None:
+            output_paths["raw_jsonl"] = str(raw_path)
+
+        report = IngestionReport(
+            schema_version=INGEST_SCHEMA_VERSION,
+            status=status,
+            source=source_name,
+            source_ref=source_ref,
+            started_at_utc=started_at.isoformat(),
+            finished_at_utc=finished_at.isoformat(),
+            duration_ms=_duration_ms(started_at, finished_at),
+            request_count=request_count,
+            fetched_count=fetched_count,
+            normalized_count=normalized_count,
+            dedup_dropped=dedup_dropped,
+            high_watermark_before=None,
+            high_watermark_after=None,
+            output_paths=output_paths,
+            skipped_by_state=0,
+            coverage_complete=prepared.coverage_complete,
+            retry_count=telemetry.retry_count,
+            http_status_counts=telemetry.http_status_counts,
+            quality_status=quality_status,
+            quality_summary=prepared.quality_result.summary,
+            quality_check_codes=prepared.quality_result.check_codes,
+            stage_timings_ms=stage_timings_ms,
+            warnings=tuple(sorted(warning_codes)),
+            merge_policy="updated_hash",
+            quality_policy_source=quality_policy_source,
+            quality_policy_hash=quality_policy_hash,
+            error=None,
+        )
+        _write_report(report_path, report.to_dict())
+
+        check_codes = tuple(
+            sorted(set(warning_codes).union(set(prepared.quality_result.check_codes)))
+        )
+        return IngestionValidationResult(
+            report=report,
+            report_file=report_path,
+            raw_file=raw_path,
+            rows_evaluated=len(prepared.deduped_records),
+            check_codes=check_codes,
+        )
+    except (ConfigValidationError, HonestRolesError) as exc:
+        stage_timings_ms["total"] = _elapsed_ms(total_started)
+        _write_failure_report(
+            report_path=report_path,
+            source=source_name,
+            source_ref=source_ref,
+            started_at=started_at,
+            request_count=request_count,
+            fetched_count=fetched_count,
+            normalized_count=normalized_count,
+            dedup_dropped=dedup_dropped,
+            high_before=None,
+            retry_count=telemetry.retry_count,
+            http_status_counts=telemetry.http_status_counts,
+            error=exc,
+            stage_timings_ms=stage_timings_ms,
+            warning_codes=tuple(sorted(warning_codes)),
+            merge_policy="updated_hash",
+            quality_policy_source=quality_policy_source,
+            quality_policy_hash=quality_policy_hash,
+        )
+        raise
+    except Exception as exc:
+        wrapped = HonestRolesError(f"ingestion validate failed: {exc}")
+        stage_timings_ms["total"] = _elapsed_ms(total_started)
+        _write_failure_report(
+            report_path=report_path,
+            source=source_name,
+            source_ref=source_ref,
+            started_at=started_at,
+            request_count=request_count,
+            fetched_count=fetched_count,
+            normalized_count=normalized_count,
+            dedup_dropped=dedup_dropped,
+            high_before=None,
+            retry_count=telemetry.retry_count,
+            http_status_counts=telemetry.http_status_counts,
+            error=wrapped,
+            stage_timings_ms=stage_timings_ms,
+            warning_codes=tuple(sorted(warning_codes)),
+            merge_policy="updated_hash",
+            quality_policy_source=quality_policy_source,
+            quality_policy_hash=quality_policy_hash,
+        )
+        raise wrapped from exc
+
+
+def _prepare_records(
+    *,
+    source: IngestionSource,
+    source_ref: str,
+    max_pages: int,
+    max_jobs: int,
+    fetch_fn: Callable[[str], Any],
+    write_raw: bool,
+    raw_path: Path | None,
+    current_entry: IngestionStateEntry | None,
+    full_refresh: bool,
+    policy: IngestQualityPolicy,
+    quality_policy_source: str,
+    quality_policy_hash: str,
+    stage_timings_ms: dict[str, int],
+) -> _PreparedRecords:
+    fetch_started = perf_counter()
+    raw_records, request_count, fetch_warning_codes = _fetch_source_records(
+        source=source,
+        source_ref=source_ref,
+        max_pages=max_pages,
+        max_jobs=max_jobs,
+        fetch_fn=fetch_fn,
+    )
+    stage_timings_ms["fetch"] = _elapsed_ms(fetch_started)
+
+    fetched_count = len(raw_records)
+    if write_raw and raw_path is not None:
+        raw_write_started = perf_counter()
+        _write_raw_jsonl(raw_path, raw_records)
+        stage_timings_ms["write_raw"] = _elapsed_ms(raw_write_started)
+
+    normalize_started = perf_counter()
+    ingested_at = _utc_now_iso()
+    normalized = normalize_records(
+        raw_records,
+        source=source,
+        source_ref=source_ref,
+        ingested_at_utc=ingested_at,
+    )
+    stage_timings_ms["normalize"] = _elapsed_ms(normalize_started)
+    normalized_count = len(normalized)
+
+    incremental_started = perf_counter()
+    incremental_records, _, skipped_by_state = filter_incremental(
+        normalized,
+        entry=current_entry,
+        full_refresh=full_refresh,
+    )
+    stage_timings_ms["incremental_filter"] = _elapsed_ms(incremental_started)
+
+    dedup_started = perf_counter()
+    deduped_records, dedup_dropped = deduplicate_records(incremental_records)
+    stage_timings_ms["dedup"] = _elapsed_ms(dedup_started)
+
+    quality_started = perf_counter()
+    quality_result = evaluate_ingest_quality(records=deduped_records, policy=policy)
+    stage_timings_ms["quality"] = _elapsed_ms(quality_started)
+
+    coverage_complete = _is_coverage_complete(
+        request_count=request_count,
+        max_pages=max_pages,
+        fetched_count=fetched_count,
+        max_jobs=max_jobs,
+    )
+    warning_codes = set(fetch_warning_codes)
+    if not coverage_complete:
+        warning_codes.add("INGEST_TRUNCATED")
+
+    return _PreparedRecords(
+        raw_records=raw_records,
+        request_count=request_count,
+        fetched_count=fetched_count,
+        normalized_records=normalized,
+        normalized_count=normalized_count,
+        incremental_records=incremental_records,
+        deduped_records=deduped_records,
+        dedup_dropped=dedup_dropped,
+        skipped_by_state=skipped_by_state,
+        coverage_complete=coverage_complete,
+        warning_codes=tuple(sorted(warning_codes)),
+        quality_result=quality_result,
+        quality_policy_source=quality_policy_source,
+        quality_policy_hash=quality_policy_hash,
+    )
 
 
 def sync_sources_from_manifest(
@@ -285,17 +700,19 @@ def sync_sources_from_manifest(
 ) -> BatchIngestionResult:
     manifest = load_ingest_manifest(manifest_path)
     started_at = datetime.now(UTC)
+    total_started = perf_counter()
+
     source_payloads: list[dict[str, Any]] = []
     pass_count = 0
     fail_count = 0
     total_rows_written = 0
     total_fetched_count = 0
     total_request_count = 0
+    quality_summary = {"pass": 0, "warn": 0, "fail": 0}
     warnings: set[str] = set()
 
-    for source_cfg in manifest.sources:
-        if not source_cfg.enabled:
-            continue
+    enabled_sources = [item for item in manifest.sources if item.enabled]
+    for source_cfg in enabled_sources:
         params = _resolve_source_params(source_cfg, manifest.defaults)
         try:
             result = sync_source(**params)
@@ -305,6 +722,9 @@ def sync_sources_from_manifest(
             total_rows_written += int(payload.get("rows_written", 0))
             total_fetched_count += int(payload.get("fetched_count", 0))
             total_request_count += int(payload.get("request_count", 0))
+            quality_status = str(payload.get("quality_status", "pass"))
+            if quality_status in quality_summary:
+                quality_summary[quality_status] += 1
             for code in payload.get("check_codes", []):
                 warnings.add(str(code))
         except Exception as exc:
@@ -317,9 +737,12 @@ def sync_sources_from_manifest(
                 "rows_written": 0,
                 "fetched_count": 0,
                 "request_count": 0,
+                "quality_status": "fail",
+                "quality_summary": {"pass": 0, "warn": 0, "fail": 1},
                 "error": {"type": exc.__class__.__name__, "message": str(exc)},
             }
             source_payloads.append(fail_payload)
+            quality_summary["fail"] += 1
             if fail_fast:
                 break
 
@@ -337,13 +760,15 @@ def sync_sources_from_manifest(
         started_at_utc=started_at.isoformat(),
         finished_at_utc=finished_at.isoformat(),
         duration_ms=_duration_ms(started_at, finished_at),
-        total_sources=len([item for item in manifest.sources if item.enabled]),
+        total_sources=len(enabled_sources),
         pass_count=pass_count,
         fail_count=fail_count,
         total_rows_written=total_rows_written,
         total_fetched_count=total_fetched_count,
         total_request_count=total_request_count,
+        quality_summary=quality_summary,
         sources=tuple(source_payloads),
+        stage_timings_ms={"total": _elapsed_ms(total_started)},
         report_file=batch_report_path,
         check_codes=tuple(sorted(warnings)),
     )
@@ -377,7 +802,46 @@ def _resolve_source_params(
         if source_cfg.base_backoff_seconds is None
         else source_cfg.base_backoff_seconds,
         "user_agent": defaults.user_agent if source_cfg.user_agent is None else source_cfg.user_agent,
+        "quality_policy_file": defaults.quality_policy_file
+        if source_cfg.quality_policy_file is None
+        else source_cfg.quality_policy_file,
+        "strict_quality": defaults.strict_quality
+        if source_cfg.strict_quality is None
+        else source_cfg.strict_quality,
+        "merge_policy": defaults.merge_policy
+        if source_cfg.merge_policy is None
+        else source_cfg.merge_policy,
+        "retain_snapshots": defaults.retain_snapshots
+        if source_cfg.retain_snapshots is None
+        else source_cfg.retain_snapshots,
+        "prune_inactive_days": defaults.prune_inactive_days
+        if source_cfg.prune_inactive_days is None
+        else source_cfg.prune_inactive_days,
     }
+
+
+def _fetch_source_records(
+    *,
+    source: IngestionSource,
+    source_ref: str,
+    max_pages: int,
+    max_jobs: int,
+    fetch_fn: Callable[[str], Any],
+) -> tuple[list[dict[str, Any]], int, tuple[str, ...]]:
+    fetcher = _SOURCE_FETCHERS[source]
+    raw = fetcher(
+        source_ref,
+        max_pages=max_pages,
+        max_jobs=max_jobs,
+        http_get_json=fetch_fn,
+    )
+    if isinstance(raw, tuple) and len(raw) == 3:
+        records, request_count, warning_codes = raw
+        return records, request_count, tuple(str(item) for item in warning_codes)
+    if isinstance(raw, tuple) and len(raw) == 2:
+        records, request_count = raw
+        return records, request_count, ()
+    raise HonestRolesError(f"invalid source fetcher result from '{source}'")
 
 
 def _validate_inputs(
@@ -390,6 +854,9 @@ def _validate_inputs(
     max_retries: int,
     base_backoff_seconds: float,
     user_agent: str,
+    merge_policy: str,
+    retain_snapshots: int,
+    prune_inactive_days: int,
 ) -> None:
     if source not in SUPPORTED_INGEST_SOURCES:
         valid = ", ".join(SUPPORTED_INGEST_SOURCES)
@@ -412,6 +879,14 @@ def _validate_inputs(
         raise ConfigValidationError("base-backoff-seconds must be >= 0")
     if not user_agent.strip():
         raise ConfigValidationError("user-agent must be non-empty")
+    if merge_policy not in _VALID_MERGE_POLICIES:
+        raise ConfigValidationError(
+            f"merge-policy must be one of: {', '.join(_VALID_MERGE_POLICIES)}"
+        )
+    if retain_snapshots < 1:
+        raise ConfigValidationError("retain-snapshots must be >= 1")
+    if prune_inactive_days < 0:
+        raise ConfigValidationError("prune-inactive-days must be >= 0")
 
 
 def _resolve_paths(
@@ -421,6 +896,7 @@ def _resolve_paths(
     output_parquet: str | Path | None,
     report_file: str | Path | None,
     write_raw: bool,
+    report_name: str = "sync_report.json",
 ) -> tuple[Path, Path, Path | None]:
     slug = re.sub(r"[^A-Za-z0-9._-]+", "_", source_ref.strip())
     default_root = Path("dist/ingest") / source / slug
@@ -432,7 +908,7 @@ def _resolve_paths(
     report_path = (
         Path(report_file).expanduser().resolve()
         if report_file is not None
-        else (default_root / "sync_report.json").expanduser().resolve()
+        else (default_root / report_name).expanduser().resolve()
     )
     raw_path = ((default_root / "raw.jsonl").expanduser().resolve() if write_raw else None)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -488,6 +964,8 @@ def _apply_catalog_updates(
     records: list[dict[str, Any]],
     seen_at_utc: str,
     coverage_complete: bool,
+    merge_policy: IngestionMergePolicy = "updated_hash",
+    prune_inactive_days: int = 90,
 ) -> tuple[list[dict[str, Any]], _CatalogSummary]:
     summary = _CatalogSummary()
     by_key: dict[str, dict[str, Any]] = {}
@@ -518,16 +996,28 @@ def _apply_catalog_updates(
                 "latest_record_json": latest_record_json,
             }
             continue
-        if str(existing.get("last_payload_hash") or "") == payload_hash:
-            summary.unchanged_count += 1
-        else:
-            summary.updated_count += 1
+
         existing["last_seen_at_utc"] = seen_at_utc
         existing["is_active"] = True
-        existing["last_payload_hash"] = payload_hash
-        existing["latest_posted_at"] = posted_at
-        existing["latest_updated_at"] = updated_at
-        existing["latest_record_json"] = latest_record_json
+        if str(existing.get("last_payload_hash") or "") == payload_hash:
+            summary.unchanged_count += 1
+            continue
+
+        should_replace = _should_replace_record(
+            existing=existing,
+            incoming_payload_hash=payload_hash,
+            incoming_posted_at=posted_at,
+            incoming_updated_at=updated_at,
+            merge_policy=merge_policy,
+        )
+        if should_replace:
+            summary.updated_count += 1
+            existing["last_payload_hash"] = payload_hash
+            existing["latest_posted_at"] = posted_at
+            existing["latest_updated_at"] = updated_at
+            existing["latest_record_json"] = latest_record_json
+        else:
+            summary.unchanged_count += 1
 
     if coverage_complete:
         for key, existing in by_key.items():
@@ -537,8 +1027,73 @@ def _apply_catalog_updates(
                 summary.tombstoned_count += 1
             existing["is_active"] = False
 
+    if prune_inactive_days >= 0:
+        cutoff = _parse_iso(seen_at_utc)
+        if cutoff is not None:
+            cutoff = cutoff - timedelta(days=prune_inactive_days)
+            for key in list(by_key):
+                row = by_key[key]
+                if bool(row.get("is_active", False)):
+                    continue
+                last_seen = _parse_iso(_text_or_none(row.get("last_seen_at_utc")))
+                if last_seen is None:
+                    continue
+                if last_seen < cutoff:
+                    summary.pruned_inactive_count += 1
+                    by_key.pop(key, None)
+
     rows = [by_key[key] for key in sorted(by_key)]
     return rows, summary
+
+
+def _should_replace_record(
+    *,
+    existing: Mapping[str, Any],
+    incoming_payload_hash: str,
+    incoming_posted_at: str | None,
+    incoming_updated_at: str | None,
+    merge_policy: IngestionMergePolicy,
+) -> bool:
+    if merge_policy == "first_seen":
+        return False
+    if merge_policy == "last_seen":
+        return True
+
+    existing_updated = _parse_iso(_text_or_none(existing.get("latest_updated_at")))
+    incoming_updated = _parse_iso(incoming_updated_at)
+    compare_updated = _compare_optional_datetimes(existing_updated, incoming_updated)
+    if compare_updated < 0:
+        return True
+    if compare_updated > 0:
+        return False
+
+    existing_posted = _parse_iso(_text_or_none(existing.get("latest_posted_at")))
+    incoming_posted = _parse_iso(incoming_posted_at)
+    compare_posted = _compare_optional_datetimes(existing_posted, incoming_posted)
+    if compare_posted < 0:
+        return True
+    if compare_posted > 0:
+        return False
+
+    existing_hash = str(existing.get("last_payload_hash") or "")
+    return incoming_payload_hash > existing_hash
+
+
+def _compare_optional_datetimes(current: datetime | None, incoming: datetime | None) -> int:
+    # Returns -1 if incoming is newer, 1 if current is newer, 0 when equal/unknown.
+    if current is None and incoming is None:
+        return 0
+    if current is None and incoming is not None:
+        return -1
+    if current is not None and incoming is None:
+        return 1
+    assert current is not None
+    assert incoming is not None
+    if incoming > current:
+        return -1
+    if incoming < current:
+        return 1
+    return 0
 
 
 def _active_records_from_catalog(catalog: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -559,6 +1114,21 @@ def _active_records_from_catalog(catalog: list[dict[str, Any]]) -> list[dict[str
     return active
 
 
+def _prune_snapshots(*, snapshot_path: Path, retain_snapshots: int) -> tuple[int, int]:
+    snapshots_dir = snapshot_path.parent
+    if not snapshots_dir.exists():
+        return 0, 0
+    snapshots = sorted(snapshots_dir.glob("*.parquet"), reverse=True)
+    keep = snapshots[:retain_snapshots]
+    prune = snapshots[retain_snapshots:]
+    for path in prune:
+        try:
+            path.unlink()
+        except OSError:
+            continue
+    return len(keep), len(prune)
+
+
 def _is_coverage_complete(
     *,
     request_count: int,
@@ -571,6 +1141,23 @@ def _is_coverage_complete(
     if fetched_count >= max_jobs:
         return False
     return True
+
+
+def _parse_iso(value: str | None) -> datetime | None:
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _text_or_none(value: object) -> str | None:
@@ -603,8 +1190,19 @@ def _write_failure_report(
     retry_count: int,
     http_status_counts: dict[str, int],
     error: Exception,
+    quality_result: IngestQualityResult | None = None,
+    stage_timings_ms: dict[str, int] | None = None,
+    warning_codes: tuple[str, ...] = (),
+    merge_policy: IngestionMergePolicy = "updated_hash",
+    quality_policy_source: str = "builtin",
+    quality_policy_hash: str | None = None,
 ) -> None:
     finished_at = datetime.now(UTC)
+    effective_quality = (
+        quality_result
+        if quality_result is not None
+        else evaluate_ingest_quality(records=[], policy=IngestQualityPolicy())
+    )
     report = IngestionReport(
         schema_version=INGEST_SCHEMA_VERSION,
         status="fail",
@@ -622,9 +1220,25 @@ def _write_failure_report(
         output_paths={"report": str(report_path)},
         retry_count=retry_count,
         http_status_counts=http_status_counts,
+        quality_status=effective_quality.status,
+        quality_summary=effective_quality.summary,
+        quality_check_codes=effective_quality.check_codes,
+        stage_timings_ms=stage_timings_ms or {},
+        warnings=warning_codes,
+        merge_policy=merge_policy,
+        quality_policy_source=quality_policy_source,
+        quality_policy_hash=quality_policy_hash,
         error={"type": error.__class__.__name__, "message": str(error)},
     )
     _write_report(report_path, report.to_dict())
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def _elapsed_ms(started: float) -> int:
+    return int((perf_counter() - started) * 1000)
 
 
 def _duration_ms(started: datetime, finished: datetime) -> int:

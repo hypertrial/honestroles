@@ -17,13 +17,14 @@ def fetch_ashby_jobs(
     max_pages: int,
     max_jobs: int,
     http_get_json: Callable[[str], Any],
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int, tuple[str, ...]]:
     if not source_ref.strip():
         raise ConfigValidationError("source-ref must be non-empty")
     jobs: list[dict[str, Any]] = []
     request_count = 0
     cursor: str | None = None
     seen_cursors: set[str] = set()
+    warning_codes: set[str] = set()
     safe_ref = quote(source_ref, safe="")
     for _ in range(max_pages):
         cursor_query = f"&cursor={quote(cursor, safe='')}" if cursor else ""
@@ -45,10 +46,11 @@ def fetch_ashby_jobs(
         if not next_cursor:
             break
         if next_cursor in seen_cursors:
+            warning_codes.add("INGEST_CURSOR_LOOP_DETECTED")
             break
         seen_cursors.add(next_cursor)
         cursor = next_cursor
-    return jobs[:max_jobs], request_count
+    return jobs[:max_jobs], request_count, tuple(sorted(warning_codes))
 
 
 def _extract_items(payload: dict[str, Any]) -> list[Any]:

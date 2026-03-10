@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from typing import Any, Callable, Mapping
@@ -63,7 +64,7 @@ def fetch_json(
             if on_request is not None:
                 on_request(exc.code, attempt > 1)
             if attempt <= max_retries and exc.code in _RETRYABLE_HTTP_STATUS:
-                time.sleep(base_backoff_seconds * (2 ** (attempt - 1)))
+                time.sleep(_retry_delay_seconds(url, attempt, base_backoff_seconds))
                 continue
             detail = _http_error_detail(exc)
             raise HonestRolesError(
@@ -73,7 +74,7 @@ def fetch_json(
             if on_request is not None:
                 on_request(None, attempt > 1)
             if attempt <= max_retries:
-                time.sleep(base_backoff_seconds * (2 ** (attempt - 1)))
+                time.sleep(_retry_delay_seconds(url, attempt, base_backoff_seconds))
                 continue
             raise HonestRolesError(
                 f"ingestion request failed for '{url}': {exc.reason}"
@@ -90,3 +91,17 @@ def _http_error_detail(exc: error.HTTPError) -> str:
     except Exception:
         payload = ""
     return payload if payload else "<no-body>"
+
+
+def _retry_delay_seconds(url: str, attempt: int, base_backoff_seconds: float) -> float:
+    if attempt < 1:
+        attempt = 1
+    backoff = base_backoff_seconds * (2 ** (attempt - 1))
+    jitter = _deterministic_jitter(url=url, attempt=attempt)
+    return backoff * jitter
+
+
+def _deterministic_jitter(*, url: str, attempt: int) -> float:
+    seed = hashlib.sha256(f"{url}|{attempt}".encode("utf-8")).hexdigest()[:8]
+    ratio = int(seed, 16) / float(0xFFFFFFFF)
+    return 0.8 + (0.4 * ratio)

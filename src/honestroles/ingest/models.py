@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 IngestionSource = Literal["greenhouse", "lever", "ashby", "workable"]
+IngestionMergePolicy = Literal["updated_hash", "first_seen", "last_seen"]
 SUPPORTED_INGEST_SOURCES: tuple[IngestionSource, ...] = (
     "greenhouse",
     "lever",
@@ -31,6 +32,11 @@ class IngestionRequest:
     max_retries: int = 3
     base_backoff_seconds: float = 0.25
     user_agent: str = "honestroles-ingest/2.0"
+    quality_policy_file: Path | None = None
+    strict_quality: bool = False
+    merge_policy: IngestionMergePolicy = "updated_hash"
+    retain_snapshots: int = 30
+    prune_inactive_days: int = 90
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +102,17 @@ class IngestionReport:
     coverage_complete: bool = False
     retry_count: int = 0
     http_status_counts: dict[str, int] = field(default_factory=dict)
+    quality_status: str = "pass"
+    quality_summary: dict[str, int] = field(default_factory=dict)
+    quality_check_codes: tuple[str, ...] = field(default_factory=tuple)
+    stage_timings_ms: dict[str, int] = field(default_factory=dict)
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+    merge_policy: IngestionMergePolicy = "updated_hash"
+    retained_snapshot_count: int = 0
+    pruned_snapshot_count: int = 0
+    pruned_inactive_count: int = 0
+    quality_policy_source: str = "builtin"
+    quality_policy_hash: str | None = None
     error: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -122,6 +139,21 @@ class IngestionReport:
                 str(key): int(value)
                 for key, value in sorted(self.http_status_counts.items())
             },
+            "quality_status": self.quality_status,
+            "quality_summary": {
+                str(key): int(value) for key, value in sorted(self.quality_summary.items())
+            },
+            "quality_check_codes": list(self.quality_check_codes),
+            "stage_timings_ms": {
+                str(key): int(value) for key, value in sorted(self.stage_timings_ms.items())
+            },
+            "warnings": list(self.warnings),
+            "merge_policy": self.merge_policy,
+            "retained_snapshot_count": int(self.retained_snapshot_count),
+            "pruned_snapshot_count": int(self.pruned_snapshot_count),
+            "pruned_inactive_count": int(self.pruned_inactive_count),
+            "quality_policy_source": self.quality_policy_source,
+            "quality_policy_hash": self.quality_policy_hash,
             "high_watermark_before": self.high_watermark_before,
             "high_watermark_after": self.high_watermark_after,
             "output_paths": dict(sorted(self.output_paths.items())),
@@ -159,6 +191,24 @@ class IngestionResult:
 
 
 @dataclass(frozen=True, slots=True)
+class IngestionValidationResult:
+    report: IngestionReport
+    report_file: Path
+    raw_file: Path | None = None
+    rows_evaluated: int = 0
+    check_codes: tuple[str, ...] = field(default_factory=tuple)
+
+    def to_payload(self) -> dict[str, Any]:
+        payload = self.report.to_dict()
+        payload["report_file"] = str(self.report_file)
+        payload["rows_evaluated"] = int(self.rows_evaluated)
+        payload["check_codes"] = list(self.check_codes)
+        if self.raw_file is not None:
+            payload["raw_file"] = str(self.raw_file)
+        return payload
+
+
+@dataclass(frozen=True, slots=True)
 class IngestionSourceConfig:
     source: IngestionSource
     source_ref: str
@@ -174,6 +224,11 @@ class IngestionSourceConfig:
     max_retries: int | None = None
     base_backoff_seconds: float | None = None
     user_agent: str | None = None
+    quality_policy_file: Path | None = None
+    strict_quality: bool | None = None
+    merge_policy: IngestionMergePolicy | None = None
+    retain_snapshots: int | None = None
+    prune_inactive_days: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,6 +242,11 @@ class IngestionDefaults:
     max_retries: int = 3
     base_backoff_seconds: float = 0.25
     user_agent: str = "honestroles-ingest/2.0"
+    quality_policy_file: Path | None = None
+    strict_quality: bool = False
+    merge_policy: IngestionMergePolicy = "updated_hash"
+    retain_snapshots: int = 30
+    prune_inactive_days: int = 90
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,7 +269,11 @@ class BatchIngestionResult:
     total_rows_written: int
     total_fetched_count: int
     total_request_count: int
-    sources: tuple[dict[str, Any], ...]
+    quality_summary: dict[str, int] = field(
+        default_factory=lambda: {"pass": 0, "warn": 0, "fail": 0}
+    )
+    sources: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    stage_timings_ms: dict[str, int] = field(default_factory=dict)
     report_file: Path | None = None
     check_codes: tuple[str, ...] = field(default_factory=tuple)
 
@@ -226,6 +290,12 @@ class BatchIngestionResult:
             "total_rows_written": self.total_rows_written,
             "total_fetched_count": self.total_fetched_count,
             "total_request_count": self.total_request_count,
+            "quality_summary": {
+                str(key): int(value) for key, value in sorted(self.quality_summary.items())
+            },
+            "stage_timings_ms": {
+                str(key): int(value) for key, value in sorted(self.stage_timings_ms.items())
+            },
             "sources": list(self.sources),
             "check_codes": list(self.check_codes),
         }

@@ -97,6 +97,32 @@ Fix:
 - Re-run after cooldown; retries/backoff are built in for transient failures.
 - Split large sources into separate scheduled runs.
 
+## `ingest sync` / `ingest validate` Fails in Strict Quality Mode
+
+Symptom:
+
+- Command exits with code `1` and quality check codes are present.
+
+Cause:
+
+- `--strict-quality` escalates any non-pass quality result.
+
+Fix:
+
+1. Run validation first to inspect checks without latest overwrite:
+
+```bash
+$ honestroles ingest validate --source greenhouse --source-ref stripe --quality-policy ingest_quality.toml --format table
+```
+
+2. Tune thresholds in `ingest_quality.toml` only when justified.
+   See [Ingest Quality Policy Schema](../reference/ingest-quality-policy-schema.md).
+3. Re-run strict mode for CI gating:
+
+```bash
+$ honestroles ingest sync --source greenhouse --source-ref stripe --quality-policy ingest_quality.toml --strict-quality --format table
+```
+
 ## `ingest sync` Returns Empty Result Set
 
 Symptom:
@@ -119,6 +145,12 @@ $ honestroles ingest sync --source lever --source-ref netflix --full-refresh --f
 If you expected tombstones (inactive records) to be applied, confirm the run was
 coverage-complete. Truncated runs (hitting `max-pages` or `max-jobs`) do not
 apply tombstones.
+
+If records look stale across runs, verify deterministic merge/retention controls:
+
+- `--merge-policy updated_hash|first_seen|last_seen`
+- `--retain-snapshots`
+- `--prune-inactive-days`
 
 ## `ingest sync-all` Manifest Validation Fails
 

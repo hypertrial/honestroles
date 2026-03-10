@@ -62,16 +62,32 @@ def _print_runs_table(payload: Mapping[str, Any]) -> None:
 
 
 def _print_ingest_table(payload: Mapping[str, Any]) -> None:
+    rows_value = payload.get("rows_written")
+    if rows_value is None:
+        rows_value = payload.get("rows_evaluated")
     print(
-        "SYNC source={source} ref={ref} fetched={fetched} normalized={normalized} rows={rows} dedup_dropped={dropped}".format(
+        "SYNC source={source} ref={ref} fetched={fetched} normalized={normalized} rows={rows} dedup_dropped={dropped} quality={quality}".format(
             source=_stringify(payload.get("source")),
             ref=_stringify(payload.get("source_ref")),
             fetched=_stringify(payload.get("fetched_count")),
             normalized=_stringify(payload.get("normalized_count")),
-            rows=_stringify(payload.get("rows_written")),
+            rows=_stringify(rows_value),
             dropped=_stringify(payload.get("dedup_dropped")),
+            quality=_stringify(payload.get("quality_status")),
         )
     )
+    quality_summary = payload.get("quality_summary")
+    if isinstance(quality_summary, Mapping):
+        print(
+            "QUALITY pass={pass_count} warn={warn_count} fail={fail_count}".format(
+                pass_count=_stringify(quality_summary.get("pass")),
+                warn_count=_stringify(quality_summary.get("warn")),
+                fail_count=_stringify(quality_summary.get("fail")),
+            )
+        )
+    warnings = payload.get("warnings")
+    if isinstance(warnings, list) and warnings:
+        print(f"warnings             {', '.join(str(item) for item in warnings)}")
     output_paths = payload.get("output_paths")
     if isinstance(output_paths, Mapping):
         for key in sorted(output_paths):
@@ -108,6 +124,15 @@ def _print_ingest_batch_table(payload: Mapping[str, Any]) -> None:
     report_file = payload.get("report_file")
     if report_file not in (None, ""):
         print(f"report_file           {_stringify(report_file)}")
+    quality_summary = payload.get("quality_summary")
+    if isinstance(quality_summary, Mapping):
+        print(
+            "QUALITY pass={pass_count} warn={warn_count} fail={fail_count}".format(
+                pass_count=_stringify(quality_summary.get("pass")),
+                warn_count=_stringify(quality_summary.get("warn")),
+                fail_count=_stringify(quality_summary.get("fail")),
+            )
+        )
 
 
 def emit_payload(payload: Mapping[str, Any], output_format: str) -> None:
@@ -134,7 +159,10 @@ def emit_payload(payload: Mapping[str, Any], output_format: str) -> None:
         payload.get("schema_version") is not None
         and payload.get("source") is not None
         and payload.get("source_ref") is not None
-        and payload.get("rows_written") is not None
+        and (
+            payload.get("rows_written") is not None
+            or payload.get("rows_evaluated") is not None
+        )
     ):
         _print_ingest_table(payload)
         return

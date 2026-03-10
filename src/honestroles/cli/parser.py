@@ -99,6 +99,15 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_sync.add_argument("--max-retries", type=int, default=3)
     ingest_sync.add_argument("--base-backoff-seconds", type=float, default=0.25)
     ingest_sync.add_argument("--user-agent", default="honestroles-ingest/2.0")
+    ingest_sync.add_argument("--quality-policy", dest="quality_policy_file", default=None)
+    ingest_sync.add_argument("--strict-quality", action="store_true")
+    ingest_sync.add_argument(
+        "--merge-policy",
+        choices=["updated_hash", "first_seen", "last_seen"],
+        default="updated_hash",
+    )
+    ingest_sync.add_argument("--retain-snapshots", type=int, default=30)
+    ingest_sync.add_argument("--prune-inactive-days", type=int, default=90)
     _add_format_arg(ingest_sync)
 
     ingest_sync_all = ingest_sub.add_parser(
@@ -109,6 +118,28 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_sync_all.add_argument("--report-file", default=None)
     ingest_sync_all.add_argument("--fail-fast", action="store_true")
     _add_format_arg(ingest_sync_all)
+
+    ingest_validate = ingest_sub.add_parser(
+        "validate",
+        help="Fetch + normalize + quality-evaluate ingestion source without latest overwrite",
+    )
+    ingest_validate.add_argument(
+        "--source",
+        required=True,
+        choices=["greenhouse", "lever", "ashby", "workable"],
+    )
+    ingest_validate.add_argument("--source-ref", required=True)
+    ingest_validate.add_argument("--report-file", default=None)
+    ingest_validate.add_argument("--write-raw", action="store_true")
+    ingest_validate.add_argument("--max-pages", type=int, default=25)
+    ingest_validate.add_argument("--max-jobs", type=int, default=5000)
+    ingest_validate.add_argument("--timeout-seconds", type=float, default=15.0)
+    ingest_validate.add_argument("--max-retries", type=int, default=3)
+    ingest_validate.add_argument("--base-backoff-seconds", type=float, default=0.25)
+    ingest_validate.add_argument("--user-agent", default="honestroles-ingest/2.0")
+    ingest_validate.add_argument("--quality-policy", dest="quality_policy_file", default=None)
+    ingest_validate.add_argument("--strict-quality", action="store_true")
+    _add_format_arg(ingest_validate)
 
     scaffold_parser = sub.add_parser(
         "scaffold-plugin",
