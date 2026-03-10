@@ -31,7 +31,8 @@ $ pip install -e ".[dev,docs]"
 
 ## Expected result
 
-You should see `honestroles` commands including `run`, `plugins`, `config`, `report-quality`, and `scaffold-plugin`.
+You should see `honestroles` commands including `run`, `init`, `doctor`,
+`reliability`, `ingest`, `runs`, and `scaffold-plugin`.
 
 ## Next steps
 

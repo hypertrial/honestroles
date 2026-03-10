@@ -95,7 +95,20 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_sync.add_argument("--max-pages", type=int, default=25)
     ingest_sync.add_argument("--max-jobs", type=int, default=5000)
     ingest_sync.add_argument("--full-refresh", action="store_true")
+    ingest_sync.add_argument("--timeout-seconds", type=float, default=15.0)
+    ingest_sync.add_argument("--max-retries", type=int, default=3)
+    ingest_sync.add_argument("--base-backoff-seconds", type=float, default=0.25)
+    ingest_sync.add_argument("--user-agent", default="honestroles-ingest/2.0")
     _add_format_arg(ingest_sync)
+
+    ingest_sync_all = ingest_sub.add_parser(
+        "sync-all",
+        help="Run multi-source ingestion from ingest.toml manifest",
+    )
+    ingest_sync_all.add_argument("--manifest", required=True)
+    ingest_sync_all.add_argument("--report-file", default=None)
+    ingest_sync_all.add_argument("--fail-fast", action="store_true")
+    _add_format_arg(ingest_sync_all)
 
     scaffold_parser = sub.add_parser(
         "scaffold-plugin",

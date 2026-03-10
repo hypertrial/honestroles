@@ -85,6 +85,7 @@ def should_track(args: Mapping[str, Any]) -> bool:
         "eda.gate",
         "reliability.check",
         "ingest.sync",
+        "ingest.sync-all",
     }
 
 
@@ -149,6 +150,9 @@ def _eda_hashes(args: Mapping[str, Any]) -> tuple[str | None, dict[str, str], st
 
 def _ingest_hashes(args: Mapping[str, Any]) -> tuple[str | None, dict[str, str], str]:
     input_hashes: dict[str, str] = {}
+    manifest_path = _existing_path(args.get("manifest"))
+    if manifest_path is not None:
+        input_hashes["manifest"] = _hash_file(manifest_path)
     state_path = _existing_path(args.get("state_file"))
     if state_path is not None:
         input_hashes["state_file"] = _hash_file(state_path)
@@ -162,7 +166,7 @@ def compute_hashes(args: Mapping[str, Any]) -> tuple[str | None, dict[str, str],
     command = _command_key(args)
     if command in {"run", "report-quality", "reliability.check"}:
         return _pipeline_related_hashes(args)
-    if command == "ingest.sync":
+    if command in {"ingest.sync", "ingest.sync-all"}:
         return _ingest_hashes(args)
     if command == "adapter.infer":
         input_hashes: dict[str, str] = {}
@@ -218,6 +222,11 @@ def build_artifact_paths(args: Mapping[str, Any], payload: Mapping[str, Any] | N
         if bool(args.get("write_raw", False)):
             artifacts["raw_file"] = str((default_root / "raw.jsonl").expanduser().resolve())
         return artifacts
+    if command == "ingest.sync-all":
+        report_file = Path(
+            str(args.get("report_file", "dist/ingest/sync_all_report.json"))
+        ).expanduser().resolve()
+        return {"report_file": str(report_file)}
     return {}
 
 

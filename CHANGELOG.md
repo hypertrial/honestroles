@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added Ingestion v2:
+  - Added `honestroles ingest sync-all --manifest ingest.toml` for deterministic multi-source batch orchestration.
+  - Extended `honestroles ingest sync` with HTTP runtime controls (`--timeout-seconds`, `--max-retries`, `--base-backoff-seconds`, `--user-agent`).
+  - Added manifest loader/API surface (`sync_sources_from_manifest`) and `ingest.toml` defaults+per-source override model.
+  - Added snapshot + latest storage model with per-run snapshot parquet and catalog-backed latest rebuild.
+  - Upgraded incremental semantics to v2 state with posted+updated watermarks and coverage-aware tombstones.
+  - Added additive normalization fields: `source_updated_at`, `work_mode`, `salary_currency`, `salary_interval`, `employment_type`, `seniority`.
+  - Extended ingestion reports with lifecycle and telemetry fields (`new_count`, `updated_count`, `unchanged_count`, `skipped_by_state`, `tombstoned_count`, `coverage_complete`, `retry_count`, `http_status_counts`).
+  - Added lineage tracking for `ingest.sync-all`.
+  - Updated docs for batch ingestion, manifest schema, operational semantics, and troubleshooting.
 - Added Ingestion Connectors v1:
   - New `honestroles ingest sync` command to fetch public ATS postings from Greenhouse, Lever, Ashby public postings, and Workable public endpoints.
   - Added deterministic ingestion pipeline with canonical parquet output, sync report artifact, optional raw JSONL, and incremental sync state.

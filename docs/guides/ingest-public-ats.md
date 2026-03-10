@@ -1,79 +1,79 @@
 # Ingest from Public ATS APIs
 
-Use `honestroles ingest sync` to fetch public postings from supported ATS APIs and write canonical parquet input for normal HonestRoles runs.
+Use HonestRoles ingestion commands to fetch public postings from supported ATS APIs
+and write canonical parquet input for pipeline runs.
 
 ## When to use
 
-Use this when you do not already have parquet input and want ToS-safe ingestion from public job-board endpoints.
+Use this when you do not already have parquet input and want deterministic,
+ToS-safe ingestion from official public ATS endpoints.
 
 ## Prerequisites
 
-- HonestRoles installed
-- Internet access to supported public ATS endpoints
-- Valid `--source-ref` for the chosen source
-
-## Steps
-
-1. Run a sync command:
-
-```bash
-$ honestroles ingest sync --source <source> --source-ref <ref>
-```
+- HonestRoles installed.
+- Internet access to supported ATS APIs.
+- Valid `--source-ref` values for the sources you ingest.
 
 Supported `--source` values:
 
-- `greenhouse`
-- `lever`
-- `ashby`
-- `workable`
+- `greenhouse` (board token)
+- `lever` (site/company handle)
+- `ashby` (job board name)
+- `workable` (subdomain)
 
-2. Use one of these source-specific examples:
+## Steps
 
-Greenhouse:
+1. Run one source directly:
 
 ```bash
 $ honestroles ingest sync --source greenhouse --source-ref stripe --format table
 ```
 
-Lever:
+2. Optional: tune operational controls (`timeout`, retries, and backoff):
 
 ```bash
-$ honestroles ingest sync --source lever --source-ref netflix --format table
+$ honestroles ingest sync \
+  --source lever \
+  --source-ref netflix \
+  --max-pages 10 \
+  --max-jobs 1000 \
+  --timeout-seconds 20 \
+  --max-retries 5 \
+  --base-backoff-seconds 0.5 \
+  --user-agent "honestroles-batch/1.0" \
+  --format table
 ```
 
-Ashby public postings:
+3. Optional: use batch ingestion with `ingest.toml`:
+
+```toml
+[defaults]
+state_file = ".honestroles/ingest/state.json"
+max_pages = 25
+max_jobs = 5000
+
+[[sources]]
+source = "greenhouse"
+source_ref = "stripe"
+
+[[sources]]
+source = "lever"
+source_ref = "netflix"
+max_pages = 10
+```
 
 ```bash
-$ honestroles ingest sync --source ashby --source-ref notion --format table
+$ honestroles ingest sync-all --manifest ingest.toml --format table
 ```
 
-Workable public endpoints:
+4. Optional: force a refresh or write raw payload:
 
 ```bash
-$ honestroles ingest sync --source workable --source-ref workable --format table
+$ honestroles ingest sync --source ashby --source-ref notion --full-refresh
+$ honestroles ingest sync --source workable --source-ref workable --write-raw
 ```
 
-3. Optional flags for operational control:
-
-Limit request scope:
-
-```bash
-$ honestroles ingest sync --source lever --source-ref netflix --max-pages 5 --max-jobs 800
-```
-
-Force full refresh (ignore watermark/recent IDs):
-
-```bash
-$ honestroles ingest sync --source greenhouse --source-ref stripe --full-refresh
-```
-
-Write raw payload for debugging:
-
-```bash
-$ honestroles ingest sync --source ashby --source-ref notion --write-raw
-```
-
-4. Point your pipeline input at the generated parquet:
+5. Point your runtime pipeline at the latest parquet output:
 
 ```toml
 [input]
@@ -81,7 +81,7 @@ kind = "parquet"
 path = "dist/ingest/greenhouse/stripe/jobs.parquet"
 ```
 
-5. Run the pipeline normally:
+6. Run the runtime pipeline:
 
 ```bash
 $ honestroles run --pipeline-config pipeline.toml
@@ -89,43 +89,29 @@ $ honestroles run --pipeline-config pipeline.toml
 
 ## Expected result
 
-Each sync writes these artifacts by default:
+Per source, ingestion writes:
 
-- canonical parquet: `dist/ingest/<source>/<source_ref>/jobs.parquet`
+- latest parquet: `dist/ingest/<source>/<source_ref>/jobs.parquet`
+- per-run snapshot parquet: `dist/ingest/<source>/<source_ref>/snapshots/<stamp>-<run>.parquet`
+- catalog parquet: `dist/ingest/<source>/<source_ref>/catalog.parquet`
 - sync report: `dist/ingest/<source>/<source_ref>/sync_report.json`
-- state file: `.honestroles/ingest/state.json`
+- optional raw payload: `dist/ingest/<source>/<source_ref>/raw.jsonl`
+- state: `.honestroles/ingest/state.json`
 
-Optional artifact:
+Batch runs also write:
 
-- raw payload JSONL: `dist/ingest/<source>/<source_ref>/raw.jsonl` with `--write-raw`
+- `dist/ingest/sync_all_report.json` (or custom `--report-file`)
 
-Default sync behavior is incremental:
+Incremental semantics:
 
-- previously seen `source_job_id` values are skipped
-- records older than stored `high_watermark_posted_at` are skipped
-- dedup uses deterministic key precedence
-
-`sync_report.json` includes:
-
-- `schema_version`, `status`, `source`, `source_ref`
-- `started_at_utc`, `finished_at_utc`, `duration_ms`
-- `request_count`, `fetched_count`, `normalized_count`, `dedup_dropped`
-- `high_watermark_before`, `high_watermark_after`
-- `output_paths` (`parquet`, `report`, optional `raw_jsonl`)
-- optional `error` (`type`, `message`) on failures
-
-Canonical parquet keeps core fields and adds ingestion metadata columns:
-
-- `source`
-- `source_ref`
-- `source_job_id`
-- `job_url`
-- `ingested_at_utc`
-- `source_payload_hash`
+- Filtering uses posted+updated watermarks and recent IDs.
+- `--full-refresh` bypasses incremental filtering.
+- Tombstones are applied only on coverage-complete runs.
+- Truncated runs (hitting `max-pages` or `max-jobs`) do not tombstone missing records.
 
 ## Next steps
 
-- Validate your source identifier: [Ingest Source-Ref Glossary](../reference/ingest-source-ref-glossary.md)
-- Review all flags and output schema: [CLI Reference](../reference/cli.md)
-- Troubleshoot empty results or rate limiting: [Common Errors](../troubleshooting/common-errors.md)
-- Run the dedicated live smoke flow before release: [Release and PyPI](../for-maintainers/release-and-pypi.md)
+- Full flags and payload fields: [CLI Reference](../reference/cli.md)
+- Batch schema details: [Ingest Manifest Schema](../reference/ingest-manifest-schema.md)
+- Source identifier lookup: [Ingest Source-Ref Glossary](../reference/ingest-source-ref-glossary.md)
+- Failure handling and retry tuning: [Common Errors](../troubleshooting/common-errors.md)

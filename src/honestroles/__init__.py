@@ -39,12 +39,18 @@ from honestroles.eda import (
     load_eda_rules,
 )
 from honestroles.ingest import (
+    BatchIngestionResult,
+    IngestionDefaults,
+    IngestionManifest,
     IngestionReport,
     IngestionRequest,
     IngestionResult,
     IngestionSource,
+    IngestionSourceConfig,
     IngestionStateEntry,
+    load_ingest_manifest,
     sync_source,
+    sync_sources_from_manifest,
 )
 from honestroles.io import (
     AdapterInferenceResult,
@@ -97,10 +103,14 @@ __all__ = [
     "EDARules",
     "DriftRules",
     "GateRules",
+    "BatchIngestionResult",
+    "IngestionDefaults",
+    "IngestionManifest",
     "IngestionReport",
     "IngestionRequest",
     "IngestionResult",
     "IngestionSource",
+    "IngestionSourceConfig",
     "IngestionStateEntry",
     "EDAProfileResult",
     "FilterPlugin",
@@ -143,6 +153,7 @@ __all__ = [
     "generate_eda_diff_artifacts",
     "load_eda_artifacts",
     "load_eda_rules",
+    "load_ingest_manifest",
     "load_pipeline_config",
     "load_plugin_manifest",
     "normalize_source_data_contract",
@@ -154,4 +165,5 @@ __all__ = [
     "validate_source_data_contract",
     "write_parquet",
     "sync_source",
+    "sync_sources_from_manifest",
 ]

@@ -18,6 +18,14 @@ INGEST_METADATA_FIELDS: tuple[str, ...] = (
     "ingested_at_utc",
     "source_payload_hash",
 )
+INGEST_ADDITIONAL_FIELDS: tuple[str, ...] = (
+    "source_updated_at",
+    "work_mode",
+    "salary_currency",
+    "salary_interval",
+    "employment_type",
+    "seniority",
+)
 
 
 def normalize_records(
@@ -58,6 +66,12 @@ def _normalize_one(raw: Mapping[str, Any], *, source: str, source_ref: str) -> d
     base["source_ref"] = source_ref
     base["source_job_id"] = _text_or_none(base.get("source_job_id"))
     base["job_url"] = _text_or_none(base.get("job_url") or base.get("apply_url"))
+    base["source_updated_at"] = _coerce_timestamp(base.get("source_updated_at"))
+    base["work_mode"] = _normalize_work_mode(base.get("work_mode"), base.get("location"))
+    base["salary_currency"] = _text_or_none(base.get("salary_currency"))
+    base["salary_interval"] = _text_or_none(base.get("salary_interval"))
+    base["employment_type"] = _text_or_none(base.get("employment_type"))
+    base["seniority"] = _text_or_none(base.get("seniority"))
     return base
 
 
@@ -78,6 +92,12 @@ def _extract_greenhouse(raw: Mapping[str, Any]) -> dict[str, Any]:
         "salary_max": None,
         "apply_url": _text_or_none(raw.get("absolute_url")),
         "posted_at": _coerce_timestamp(raw.get("updated_at") or raw.get("created_at")),
+        "source_updated_at": _coerce_timestamp(raw.get("updated_at")),
+        "work_mode": _infer_work_mode(location),
+        "salary_currency": _text_or_none(raw.get("currency")),
+        "salary_interval": None,
+        "employment_type": _text_or_none(raw.get("employment_type")),
+        "seniority": _text_or_none(raw.get("seniority")),
         "source_job_id": _text_or_none(raw.get("id")),
         "job_url": _text_or_none(raw.get("absolute_url")),
     }
@@ -109,6 +129,16 @@ def _extract_lever(raw: Mapping[str, Any]) -> dict[str, Any]:
         "salary_max": None,
         "apply_url": apply_url,
         "posted_at": created_text,
+        "source_updated_at": _coerce_timestamp(raw.get("updatedAt") or raw.get("createdAt")),
+        "work_mode": _infer_work_mode(location),
+        "salary_currency": _text_or_none(raw.get("salaryCurrency")),
+        "salary_interval": _text_or_none(raw.get("salaryInterval")),
+        "employment_type": _text_or_none(raw.get("categories", {}).get("commitment"))
+        if isinstance(raw.get("categories"), Mapping)
+        else None,
+        "seniority": _text_or_none(raw.get("categories", {}).get("level"))
+        if isinstance(raw.get("categories"), Mapping)
+        else None,
         "source_job_id": _text_or_none(raw.get("id")),
         "job_url": apply_url,
     }
@@ -138,6 +168,12 @@ def _extract_ashby(raw: Mapping[str, Any]) -> dict[str, Any]:
             or raw.get("updatedAt")
             or raw.get("postedAt")
         ),
+        "source_updated_at": _coerce_timestamp(raw.get("updatedAt")),
+        "work_mode": _infer_work_mode(location),
+        "salary_currency": _text_or_none(raw.get("salaryCurrency")),
+        "salary_interval": _text_or_none(raw.get("salaryInterval")),
+        "employment_type": _text_or_none(raw.get("employmentType")),
+        "seniority": _text_or_none(raw.get("seniority")),
         "source_job_id": _text_or_none(raw.get("id") or raw.get("jobId")),
         "job_url": apply_url,
     }
@@ -166,6 +202,12 @@ def _extract_workable(raw: Mapping[str, Any]) -> dict[str, Any]:
         "salary_max": _coerce_float(raw.get("salary_max")),
         "apply_url": apply_url,
         "posted_at": _coerce_timestamp(raw.get("published") or raw.get("updated_at")),
+        "source_updated_at": _coerce_timestamp(raw.get("updated_at")),
+        "work_mode": _infer_work_mode(location),
+        "salary_currency": _text_or_none(raw.get("salary_currency_code")),
+        "salary_interval": _text_or_none(raw.get("salary_interval")),
+        "employment_type": _text_or_none(raw.get("employment_type")),
+        "seniority": _text_or_none(raw.get("experience_level")),
         "source_job_id": _text_or_none(raw.get("shortcode") or raw.get("id")),
         "job_url": apply_url,
     }
@@ -186,13 +228,23 @@ def _extract_generic(raw: Mapping[str, Any]) -> dict[str, Any]:
         "salary_max": _coerce_float(raw.get("salary_max")),
         "apply_url": apply_url,
         "posted_at": _coerce_timestamp(raw.get("posted_at")),
+        "source_updated_at": _coerce_timestamp(raw.get("updated_at")),
+        "work_mode": _infer_work_mode(raw.get("location")),
+        "salary_currency": _text_or_none(raw.get("salary_currency")),
+        "salary_interval": _text_or_none(raw.get("salary_interval")),
+        "employment_type": _text_or_none(raw.get("employment_type")),
+        "seniority": _text_or_none(raw.get("seniority")),
         "source_job_id": _text_or_none(raw.get("id")),
         "job_url": apply_url,
     }
 
 
 def _ensure_metadata_columns(frame: pl.DataFrame) -> pl.DataFrame:
-    missing = [name for name in INGEST_METADATA_FIELDS if name not in frame.columns]
+    missing = [
+        name
+        for name in (*INGEST_METADATA_FIELDS, *INGEST_ADDITIONAL_FIELDS)
+        if name not in frame.columns
+    ]
     if missing:
         frame = frame.with_columns(
             [pl.lit(None, dtype=pl.String).alias(name) for name in missing]
@@ -204,6 +256,12 @@ def _ensure_metadata_columns(frame: pl.DataFrame) -> pl.DataFrame:
         pl.col("job_url").cast(pl.String, strict=False),
         pl.col("ingested_at_utc").cast(pl.String, strict=False),
         pl.col("source_payload_hash").cast(pl.String, strict=False),
+        pl.col("source_updated_at").cast(pl.String, strict=False),
+        pl.col("work_mode").cast(pl.String, strict=False),
+        pl.col("salary_currency").cast(pl.String, strict=False),
+        pl.col("salary_interval").cast(pl.String, strict=False),
+        pl.col("employment_type").cast(pl.String, strict=False),
+        pl.col("seniority").cast(pl.String, strict=False),
     )
 
 
@@ -221,6 +279,8 @@ def _empty_normalized_frame() -> pl.DataFrame:
         columns[name] = pl.Series(name=name, values=[], dtype=dtype)
     for name in INGEST_METADATA_FIELDS:
         columns[name] = pl.Series(name=name, values=[], dtype=pl.String)
+    for name in INGEST_ADDITIONAL_FIELDS:
+        columns[name] = pl.Series(name=name, values=[], dtype=pl.String)
     return pl.DataFrame(columns)
 
 
@@ -234,6 +294,29 @@ def _infer_remote(value: object) -> bool | None:
     if "hybrid" in lowered or "onsite" in lowered or "on-site" in lowered:
         return False
     return None
+
+
+def _infer_work_mode(value: object) -> str:
+    text = _text_or_none(value)
+    if text is None:
+        return "unknown"
+    lowered = text.lower()
+    if "remote" in lowered:
+        return "remote"
+    if "hybrid" in lowered:
+        return "hybrid"
+    if "onsite" in lowered or "on-site" in lowered:
+        return "onsite"
+    return "unknown"
+
+
+def _normalize_work_mode(value: object, location: object) -> str:
+    text = _text_or_none(value)
+    if text is not None:
+        mode = _infer_work_mode(text)
+        if mode != "unknown":
+            return mode
+    return _infer_work_mode(location)
 
 
 def _text_or_none(value: object) -> str | None:

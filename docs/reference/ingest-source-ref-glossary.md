@@ -1,6 +1,8 @@
 # Ingest Source-Ref Glossary
 
 `honestroles ingest sync` requires `--source` and `--source-ref`.
+`honestroles ingest sync-all` uses the same values inside `ingest.toml` `[[sources]]`
+entries.
 
 `--source-ref` identifies the public board/account endpoint per ATS connector.
 
@@ -52,3 +54,15 @@ $ honestroles ingest sync --source workable --source-ref workable
 - `.`
 - `_`
 - `-`
+
+## `sync-all` Mapping Example
+
+```toml
+[[sources]]
+source = "greenhouse"
+source_ref = "stripe"
+
+[[sources]]
+source = "lever"
+source_ref = "netflix"
+```

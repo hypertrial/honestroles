@@ -78,6 +78,38 @@ def _print_ingest_table(payload: Mapping[str, Any]) -> None:
             print(f"{str(key):20} {_stringify(output_paths[key])}")
 
 
+def _print_ingest_batch_table(payload: Mapping[str, Any]) -> None:
+    print(
+        "BATCH total_sources={total} pass={passed} fail={failed} rows={rows} fetched={fetched} requests={requests}".format(
+            total=_stringify(payload.get("total_sources")),
+            passed=_stringify(payload.get("pass_count")),
+            failed=_stringify(payload.get("fail_count")),
+            rows=_stringify(payload.get("total_rows_written")),
+            fetched=_stringify(payload.get("total_fetched_count")),
+            requests=_stringify(payload.get("total_request_count")),
+        )
+    )
+    print("SOURCE       REF                  STATUS  ROWS  FETCHED  REQUESTS")
+    sources = payload.get("sources")
+    if isinstance(sources, list):
+        for item in sources:
+            if not isinstance(item, Mapping):
+                continue
+            print(
+                "{source:12} {ref:20} {status:6}  {rows:4}  {fetched:7}  {requests:8}".format(
+                    source=str(item.get("source", ""))[:12],
+                    ref=str(item.get("source_ref", ""))[:20],
+                    status=str(item.get("status", "")),
+                    rows=str(item.get("rows_written", 0)),
+                    fetched=str(item.get("fetched_count", 0)),
+                    requests=str(item.get("request_count", 0)),
+                )
+            )
+    report_file = payload.get("report_file")
+    if report_file not in (None, ""):
+        print(f"report_file           {_stringify(report_file)}")
+
+
 def emit_payload(payload: Mapping[str, Any], output_format: str) -> None:
     if output_format == "json":
         print(json.dumps(payload, indent=2, sort_keys=True))
@@ -94,6 +126,9 @@ def emit_payload(payload: Mapping[str, Any], output_format: str) -> None:
         return
     if isinstance(payload.get("runs"), list):
         _print_runs_table(payload)
+        return
+    if isinstance(payload.get("sources"), list) and payload.get("total_sources") is not None:
+        _print_ingest_batch_table(payload)
         return
     if (
         payload.get("schema_version") is not None

@@ -39,6 +39,7 @@ Expected CLI diagnostics include `stage_rows`, `plugin_counts`, and `final_rows`
 
 ```bash
 $ honestroles ingest sync --source greenhouse --source-ref stripe --format table
+$ honestroles ingest sync-all --manifest ingest.toml --format table
 $ honestroles init --input-parquet data/jobs.parquet --pipeline-config pipeline.toml --plugins-manifest plugins.toml
 $ honestroles doctor --pipeline-config pipeline.toml --plugins plugins.toml --format table
 $ honestroles reliability check --pipeline-config pipeline.toml --plugins plugins.toml --strict --format table
@@ -53,10 +54,13 @@ $ honestroles scaffold-plugin --name my-plugin --output-dir .
 ## Python API
 
 ```python
-from honestroles import HonestRolesRuntime, sync_source
+from honestroles import HonestRolesRuntime, sync_source, sync_sources_from_manifest
 
 ingest = sync_source(source="greenhouse", source_ref="stripe")
 print(ingest.rows_written, ingest.output_parquet)
+
+batch = sync_sources_from_manifest(manifest_path="ingest.toml")
+print(batch.status, batch.total_sources, batch.fail_count)
 
 runtime = HonestRolesRuntime.from_configs(
     pipeline_config_path="pipeline.toml",

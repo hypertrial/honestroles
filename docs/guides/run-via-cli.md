@@ -19,6 +19,12 @@ Use this for local runs, CI jobs, and operational scripts.
 $ honestroles ingest sync --source greenhouse --source-ref stripe --format table
 ```
 
+Optional batch ingestion:
+
+```bash
+$ honestroles ingest sync-all --manifest ingest.toml --format table
+```
+
 2. Scaffold starter config files from a sample parquet:
 
 ```bash
@@ -66,6 +72,7 @@ $ honestroles report-quality --pipeline-config pipeline.toml --plugins plugins.t
 ```bash
 $ honestroles runs list --limit 20 --format table
 $ honestroles runs list --command reliability.check --since 2026-01-01T00:00:00Z --contains-code POLICY_NULL_RATE --format table
+$ honestroles runs list --command ingest.sync-all --since 2026-01-01T00:00:00Z --format table
 $ honestroles runs show --run-id <run_id>
 ```
 
@@ -92,5 +99,6 @@ Commands emit JSON payloads by default (or concise tables with `--format table`)
 ## Next steps
 
 - Full command and exit-code table: [CLI Reference](../reference/cli.md)
+- Manifest schema for batch ingestion: [Ingest Manifest Schema](../reference/ingest-manifest-schema.md)
 - Connector/source-ref map: [Ingest Source-Ref Glossary](../reference/ingest-source-ref-glossary.md)
 - Failure handling examples: [Common Errors](../troubleshooting/common-errors.md)

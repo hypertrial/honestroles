@@ -25,7 +25,7 @@ from honestroles.io import (
     infer_source_adapter,
     read_parquet,
 )
-from honestroles.ingest import sync_source
+from honestroles.ingest import sync_source, sync_sources_from_manifest
 from honestroles.plugins.registry import PluginRegistry
 from honestroles.reliability import evaluate_reliability
 from honestroles.runtime import HonestRolesRuntime
@@ -297,8 +297,22 @@ def handle_ingest_sync(args: argparse.Namespace) -> CommandResult:
         max_pages=args.max_pages,
         max_jobs=args.max_jobs,
         full_refresh=bool(args.full_refresh),
+        timeout_seconds=float(getattr(args, "timeout_seconds", 15.0)),
+        max_retries=int(getattr(args, "max_retries", 3)),
+        base_backoff_seconds=float(getattr(args, "base_backoff_seconds", 0.25)),
+        user_agent=str(getattr(args, "user_agent", "honestroles-ingest/2.0")),
     )
     return CommandResult(payload=result.to_payload())
+
+
+def handle_ingest_sync_all(args: argparse.Namespace) -> CommandResult:
+    result = sync_sources_from_manifest(
+        manifest_path=args.manifest,
+        report_file=args.report_file,
+        fail_fast=bool(args.fail_fast),
+    )
+    exit_code = 0 if result.status == "pass" else 1
+    return CommandResult(payload=result.to_payload(), exit_code=exit_code)
 
 
 def handle_run(args: argparse.Namespace) -> CommandResult:

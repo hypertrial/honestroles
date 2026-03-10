@@ -36,3 +36,22 @@ Use `doctor` for local debugging and `reliability check --strict` for CI gates.
 In a separate `reliability.toml` file passed with `--policy`.
 
 Reliability thresholds are intentionally not embedded in `pipeline.toml` in v1.
+
+## What is the difference between `ingest sync` and `ingest sync-all`?
+
+- `ingest sync` runs one source directly from CLI flags.
+- `ingest sync-all` runs multiple enabled sources from `ingest.toml` in order.
+
+Both write deterministic reports and latest parquet outputs.
+
+## Why did missing jobs not get tombstoned?
+
+Tombstones are only applied when coverage is complete.
+
+If a run is truncated by `max-pages` or `max-jobs`, HonestRoles marks
+`coverage_complete = false` and does not tombstone missing records.
+
+## What is snapshot vs latest parquet?
+
+- Snapshot parquet is per-run immutable output under `snapshots/`.
+- Latest parquet is rebuilt from active catalog records and used as runtime handoff.

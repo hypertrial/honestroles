@@ -15,11 +15,14 @@ from honestroles import sync_source
 from honestroles.cli import handlers, lineage, output
 from honestroles.errors import ConfigValidationError, HonestRolesError
 from honestroles.ingest import (
+    BatchIngestionResult,
     INGEST_SCHEMA_VERSION,
     IngestionReport,
     IngestionRequest,
     IngestionResult,
     IngestionStateEntry,
+    load_ingest_manifest,
+    sync_sources_from_manifest,
 )
 from honestroles.ingest import http as ingest_http
 from honestroles.ingest import models as ingest_models
@@ -56,11 +59,15 @@ def test_ingest_model_roundtrips() -> None:
     entry = IngestionStateEntry.from_mapping(
         {
             "high_watermark_posted_at": "2026-01-01T00:00:00+00:00",
+            "high_watermark_updated_at": "2026-01-01T12:00:00+00:00",
             "last_success_at_utc": "2026-01-02T00:00:00+00:00",
+            "last_coverage_complete": True,
             "recent_source_job_ids": ["1", "", "2"],
         }
     )
     assert entry.recent_source_job_ids == ("1", "2")
+    assert entry.high_watermark_updated_at == "2026-01-01T12:00:00+00:00"
+    assert entry.last_coverage_complete is True
     assert IngestionStateEntry.from_mapping(None).recent_source_job_ids == ()
     assert IngestionStateEntry.from_mapping({"recent_source_job_ids": "bad"}).recent_source_job_ids == ()
     assert ingest_models._string_or_none(" ") is None
@@ -82,6 +89,14 @@ def test_ingest_model_roundtrips() -> None:
         high_watermark_before=None,
         high_watermark_after="2026-01-01T00:00:00+00:00",
         output_paths={"report": "/tmp/r.json", "parquet": "/tmp/o.parquet"},
+        new_count=1,
+        updated_count=1,
+        unchanged_count=1,
+        skipped_by_state=1,
+        tombstoned_count=0,
+        coverage_complete=True,
+        retry_count=2,
+        http_status_counts={"200": 3},
     )
     result = IngestionResult(
         report=report,
@@ -92,6 +107,43 @@ def test_ingest_model_roundtrips() -> None:
     payload = result.to_payload()
     assert payload["schema_version"] == INGEST_SCHEMA_VERSION
     assert payload["rows_written"] == 2
+    assert payload["new_count"] == 1
+
+    batch = BatchIngestionResult(
+        schema_version=INGEST_SCHEMA_VERSION,
+        status="pass",
+        started_at_utc="2026-01-01T00:00:00+00:00",
+        finished_at_utc="2026-01-01T00:00:10+00:00",
+        duration_ms=10000,
+        total_sources=1,
+        pass_count=1,
+        fail_count=0,
+        total_rows_written=2,
+        total_fetched_count=3,
+        total_request_count=2,
+        sources=(payload,),
+        report_file=Path("/tmp/batch.json"),
+        check_codes=("INGEST_TRUNCATED",),
+    )
+    batch_payload = batch.to_payload()
+    assert batch_payload["total_sources"] == 1
+    assert batch_payload["check_codes"] == ["INGEST_TRUNCATED"]
+    batch_without_report = BatchIngestionResult(
+        schema_version=INGEST_SCHEMA_VERSION,
+        status="pass",
+        started_at_utc="2026-01-01T00:00:00+00:00",
+        finished_at_utc="2026-01-01T00:00:01+00:00",
+        duration_ms=1000,
+        total_sources=0,
+        pass_count=0,
+        fail_count=0,
+        total_rows_written=0,
+        total_fetched_count=0,
+        total_request_count=0,
+        sources=(),
+        report_file=None,
+    )
+    assert "report_file" not in batch_without_report.to_payload()
 
 
 def test_http_fetch_json_success_and_error_paths(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -468,7 +520,7 @@ def test_state_load_write_filter_update(tmp_path: Path) -> None:
     assert ingest_state._parse_iso("  ") is None
     assert ingest_state._text_or_none(None) is None
 
-    filtered, before = ingest_state.filter_incremental(
+    filtered, before, skipped_count = ingest_state.filter_incremental(
         [
             {"source_job_id": "1", "posted_at": "2026-01-03T00:00:00+00:00"},
             {"source_job_id": "2", "posted_at": "2025-01-01T00:00:00+00:00"},
@@ -479,26 +531,30 @@ def test_state_load_write_filter_update(tmp_path: Path) -> None:
     )
     assert before == "2026-01-01T00:00:00+00:00"
     assert [row["source_job_id"] for row in filtered] == ["3"]
+    assert skipped_count == 2
 
-    no_filter, _ = ingest_state.filter_incremental(
+    no_filter, _, skipped_refresh = ingest_state.filter_incremental(
         [{"source_job_id": "1"}],
         entry=entry,
         full_refresh=True,
     )
     assert len(no_filter) == 1
+    assert skipped_refresh == 0
 
-    unchanged, watermark = ingest_state.filter_incremental(
+    unchanged, watermark, skipped_unchanged = ingest_state.filter_incremental(
         [{"source_job_id": "x"}],
         entry=IngestionStateEntry(),
         full_refresh=False,
     )
     assert len(unchanged) == 1
     assert watermark is None
+    assert skipped_unchanged == 0
 
     updated = ingest_state.update_state_entry(
         entry,
         records=[{"source_job_id": str(i), "posted_at": "2026-03-01T00:00:00+00:00"} for i in range(520)],
         finished_at_utc="2026-03-01T00:00:01+00:00",
+        coverage_complete=False,
     )
     assert len(updated.recent_source_job_ids) == 500
     assert updated.high_watermark_posted_at == "2026-03-01T00:00:00+00:00"
@@ -506,8 +562,10 @@ def test_state_load_write_filter_update(tmp_path: Path) -> None:
         IngestionStateEntry(),
         records=[{"posted_at": "2026-03-01T00:00:00+00:00"}],
         finished_at_utc="2026-03-01T00:00:01+00:00",
+        coverage_complete=True,
     )
     assert updated_without_id.recent_source_job_ids == ()
+    assert updated_without_id.last_coverage_complete is True
 
     bad = tmp_path / "bad.json"
     bad.write_text("{", encoding="utf-8")
@@ -546,7 +604,7 @@ def test_service_sync_source_success_and_full_refresh(tmp_path: Path) -> None:
                 {"id": "1", "title": "A", "absolute_url": "https://x/1?utm=1", "updated_at": "2026-01-02T00:00:00+00:00"},
                 {"id": "2", "title": "B", "absolute_url": "https://x/2", "updated_at": "2026-01-03T00:00:00+00:00"},
             ],
-            3,
+            2,
         )
 
     original = ingest_service._SOURCE_FETCHERS["greenhouse"]
@@ -592,7 +650,8 @@ def test_service_sync_source_success_and_full_refresh(tmp_path: Path) -> None:
         )
     finally:
         ingest_service._SOURCE_FETCHERS["greenhouse"] = original
-    assert second.rows_written == 0
+    assert second.rows_written == 2
+    assert second.report.skipped_by_state >= 1
 
     # Full refresh bypasses state filter.
     original = ingest_service._SOURCE_FETCHERS["greenhouse"]
@@ -877,3 +936,955 @@ def test_cli_parser_main_dispatch_output_and_lineage_for_ingest(
         },
         "table",
     )
+
+
+def test_load_ingest_manifest_success_and_failures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    abs_output = (tmp_path / "absolute-jobs.parquet").resolve()
+    manifest_path = tmp_path / "ingest.toml"
+    manifest_path.write_text(
+        f"""
+[defaults]
+state_file = "state.json"
+write_raw = true
+max_pages = 7
+max_jobs = 123
+full_refresh = false
+timeout_seconds = 9.5
+max_retries = 2
+base_backoff_seconds = 0.4
+user_agent = "ua-test"
+
+[[sources]]
+source = "greenhouse"
+source_ref = "stripe"
+enabled = true
+output_parquet = "{abs_output}"
+report_file = "out/report.json"
+state_file = "per-source-state.json"
+write_raw = false
+max_pages = 2
+max_jobs = 42
+full_refresh = true
+timeout_seconds = 2.5
+max_retries = 1
+base_backoff_seconds = 0.1
+user_agent = "ua-override"
+
+[[sources]]
+source = "lever"
+source_ref = "netflix"
+enabled = false
+""".strip(),
+        encoding="utf-8",
+    )
+    manifest = load_ingest_manifest(manifest_path)
+    assert manifest.path == manifest_path.resolve()
+    assert manifest.defaults.max_pages == 7
+    assert manifest.defaults.user_agent == "ua-test"
+    assert manifest.defaults.state_file == (tmp_path / "state.json").resolve()
+    assert len(manifest.sources) == 2
+    first = manifest.sources[0]
+    assert first.source == "greenhouse"
+    assert first.output_parquet == abs_output
+    assert first.state_file == (tmp_path / "per-source-state.json").resolve()
+    assert first.timeout_seconds == 2.5
+    assert first.max_retries == 1
+    assert manifest.sources[1].enabled is False
+
+    with pytest.raises(ConfigValidationError, match="cannot read ingest manifest"):
+        load_ingest_manifest(tmp_path / "missing.toml")
+
+    bad = tmp_path / "bad.toml"
+    bad.write_text("invalid = [", encoding="utf-8")
+    with pytest.raises(ConfigValidationError, match="invalid TOML"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[defaults]
+oops = 1
+[[sources]]
+source = "lever"
+source_ref = "x"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="unknown defaults keys"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+defaults = []
+[[sources]]
+source = "lever"
+source_ref = "x"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="\\[defaults\\] must be a table"):
+        load_ingest_manifest(bad)
+
+    bad.write_text("sources = []", encoding="utf-8")
+    with pytest.raises(ConfigValidationError, match="at least one"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+sources = "bad"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="\\[\\[sources\\]\\] must be provided"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+sources = [1]
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="entry 0 must be a table"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[[sources]]
+source_ref = "x"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="sources\\[0\\].source is required"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[defaults]
+write_raw = "no"
+[[sources]]
+source = "lever"
+source_ref = "x"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="defaults.write_raw must be a boolean"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[defaults]
+timeout_seconds = 0
+[[sources]]
+source = "lever"
+source_ref = "x"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="defaults.timeout_seconds must be >= 0.1"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[defaults]
+max_pages = 0
+[[sources]]
+source = "lever"
+source_ref = "x"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="defaults.max_pages must be >= 1"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[defaults]
+max_retries = -1
+[[sources]]
+source = "lever"
+source_ref = "x"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="defaults.max_retries must be >= 0"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[defaults]
+state_file = 1
+[[sources]]
+source = "lever"
+source_ref = "x"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="defaults.state_file must be a string path"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[defaults]
+max_jobs = "x"
+[[sources]]
+source = "lever"
+source_ref = "x"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="defaults.max_jobs must be an integer"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[[sources]]
+source = "lever"
+source_ref = "x"
+max_jobs = "x"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ConfigValidationError,
+        match="sources\\[0\\].max_jobs must be an integer",
+    ):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[defaults]
+base_backoff_seconds = "x"
+[[sources]]
+source = "lever"
+source_ref = "x"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ConfigValidationError,
+        match="defaults.base_backoff_seconds must be numeric",
+    ):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[[sources]]
+source = "bad"
+source_ref = "x"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="must be one of"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[[sources]]
+source = "lever"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="source_ref is required"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[[sources]]
+source = "lever"
+source_ref = " "
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="must be non-empty"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[[sources]]
+source = "lever"
+source_ref = "x"
+enabled = "yes"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="sources\\[0\\].enabled must be a boolean"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[[sources]]
+source = "lever"
+source_ref = "x"
+write_raw = "bad"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ConfigValidationError,
+        match="sources\\[0\\].write_raw must be a boolean",
+    ):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[[sources]]
+source = "lever"
+source_ref = "x"
+max_pages = 0
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="sources\\[0\\].max_pages must be >= 1"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[[sources]]
+source = "lever"
+source_ref = "x"
+max_pages = "x"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ConfigValidationError,
+        match="sources\\[0\\].max_pages must be an integer",
+    ):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[[sources]]
+source = "lever"
+source_ref = "x"
+max_retries = -1
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="sources\\[0\\].max_retries must be >= 0"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[[sources]]
+source = "lever"
+source_ref = "x"
+base_backoff_seconds = -1
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ConfigValidationError,
+        match="sources\\[0\\].base_backoff_seconds must be >= 0.0",
+    ):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[[sources]]
+source = "lever"
+source_ref = "x"
+timeout_seconds = "x"
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ConfigValidationError,
+        match="sources\\[0\\].timeout_seconds must be numeric",
+    ):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[[sources]]
+source = "lever"
+source_ref = "x"
+user_agent = 1
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="sources\\[0\\].user_agent must be a string"):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[[sources]]
+source = "lever"
+source_ref = "x"
+output_parquet = 1
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ConfigValidationError,
+        match="sources\\[0\\].output_parquet must be a string path",
+    ):
+        load_ingest_manifest(bad)
+
+    bad.write_text(
+        """
+[[sources]]
+source = "lever"
+source_ref = "x"
+unknown = 1
+""".strip(),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigValidationError, match="unknown keys in \\[\\[sources\\]\\] 0"):
+        load_ingest_manifest(bad)
+
+    monkeypatch.setattr(
+        importlib.import_module("honestroles.ingest.manifest").tomllib,
+        "loads",
+        lambda _text: [],
+    )
+    bad.write_text("x = 1", encoding="utf-8")
+    with pytest.raises(ConfigValidationError, match="root must be a table"):
+        load_ingest_manifest(bad)
+
+
+def test_http_getter_wrapper_and_callbacks(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+    original_fetch_json = ingest_http.fetch_json
+
+    def fake_fetch_json(url: str, **kwargs: Any) -> dict[str, bool]:
+        captured["url"] = url
+        captured["kwargs"] = kwargs
+        callback = kwargs["on_request"]
+        callback(200, False)
+        return {"ok": True}
+
+    monkeypatch.setattr(ingest_http, "fetch_json", fake_fetch_json)
+    events: list[tuple[int | None, bool]] = []
+    getter = ingest_http.build_http_getter(
+        timeout_seconds=3.0,
+        max_retries=4,
+        base_backoff_seconds=0.5,
+        user_agent="ua",
+        on_request=lambda code, retry: events.append((code, retry)),
+    )
+    assert getter("https://example.com") == {"ok": True}
+    assert captured["url"] == "https://example.com"
+    kwargs = captured["kwargs"]
+    assert kwargs["timeout_seconds"] == 3.0
+    assert kwargs["max_retries"] == 4
+    assert kwargs["base_backoff_seconds"] == 0.5
+    assert kwargs["headers"]["User-Agent"] == "ua"
+    assert events == [(200, False)]
+    monkeypatch.setattr(ingest_http, "fetch_json", original_fetch_json)
+
+    callback_events: list[tuple[int | None, bool]] = []
+    monkeypatch.setattr(
+        ingest_http.request,
+        "urlopen",
+        lambda _req, timeout=0: _DummyResponse("{}"),
+    )
+    ingest_http.fetch_json(
+        "https://ok.example.com",
+        on_request=lambda code, retry: callback_events.append((code, retry)),
+    )
+    assert callback_events == [(200, False)]
+
+    def http_fail(_req, timeout=0):
+        raise error.HTTPError(
+            "https://bad",
+            400,
+            "bad",
+            hdrs=None,
+            fp=_DummyResponse("x"),
+        )
+
+    callback_events.clear()
+    monkeypatch.setattr(ingest_http.request, "urlopen", http_fail)
+    with pytest.raises(HonestRolesError, match="HTTP 400"):
+        ingest_http.fetch_json(
+            "https://bad.example.com",
+            max_retries=0,
+            on_request=lambda code, retry: callback_events.append((code, retry)),
+        )
+    assert callback_events == [(400, False)]
+
+    def url_fail(_req, timeout=0):
+        raise error.URLError("down")
+
+    callback_events.clear()
+    monkeypatch.setattr(ingest_http.request, "urlopen", url_fail)
+    monkeypatch.setattr(ingest_http.time, "sleep", lambda _s: None)
+    with pytest.raises(HonestRolesError, match="down"):
+        ingest_http.fetch_json(
+            "https://down.example.com",
+            max_retries=0,
+            on_request=lambda code, retry: callback_events.append((code, retry)),
+        )
+    assert callback_events == [(None, False)]
+
+
+def test_ingest_service_v2_helpers_and_batch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    telemetry = ingest_service._HttpTelemetry()
+    telemetry.observe(200, False)
+    telemetry.observe(None, True)
+    assert telemetry.http_status_counts["200"] == 1
+    assert telemetry.http_status_counts["network_error"] == 1
+    assert telemetry.retry_count == 1
+
+    observed_policy: dict[str, Any] = {}
+
+    def fake_builder(**kwargs: Any):
+        observed_policy.update(kwargs)
+        return lambda _url: {"ok": True}
+
+    def truncated_fetcher(
+        source_ref: str, *, max_pages: int, max_jobs: int, http_get_json
+    ) -> tuple[list[dict[str, Any]], int]:
+        assert source_ref == "stripe"
+        assert http_get_json("https://policy.example.com") == {"ok": True}
+        return (
+            [{"id": "1", "title": "A", "absolute_url": "https://x/1"}],
+            max_pages,
+        )
+
+    monkeypatch.setattr(ingest_service, "build_http_getter", fake_builder)
+    original_fetcher = ingest_service._SOURCE_FETCHERS["greenhouse"]
+    ingest_service._SOURCE_FETCHERS["greenhouse"] = truncated_fetcher
+    try:
+        result = ingest_service.sync_source(
+            source="greenhouse",
+            source_ref="stripe",
+            output_parquet=tmp_path / "latest.parquet",
+            report_file=tmp_path / "sync_report.json",
+            state_file=tmp_path / "state.json",
+            timeout_seconds=2.0,
+            max_retries=5,
+            base_backoff_seconds=0.75,
+            user_agent="ua-v2",
+            max_pages=1,
+            max_jobs=100,
+        )
+    finally:
+        ingest_service._SOURCE_FETCHERS["greenhouse"] = original_fetcher
+
+    assert result.report.coverage_complete is False
+    assert "INGEST_TRUNCATED" in result.check_codes
+    assert result.snapshot_file is not None and result.snapshot_file.exists()
+    assert result.catalog_file is not None and result.catalog_file.exists()
+    assert result.state_file is not None and result.state_file.exists()
+    assert observed_policy["timeout_seconds"] == 2.0
+    assert observed_policy["max_retries"] == 5
+    assert observed_policy["base_backoff_seconds"] == 0.75
+    assert observed_policy["user_agent"] == "ua-v2"
+    assert callable(observed_policy["on_request"])
+
+    def empty_fetcher(
+        _source_ref: str, *, max_pages: int, max_jobs: int, http_get_json
+    ) -> tuple[list[dict[str, Any]], int]:
+        return ([], 0)
+
+    ingest_service._SOURCE_FETCHERS["greenhouse"] = empty_fetcher
+    try:
+        empty_result = ingest_service.sync_source(
+            source="greenhouse",
+            source_ref="stripe",
+            output_parquet=tmp_path / "latest_empty.parquet",
+            report_file=tmp_path / "sync_report_empty.json",
+            state_file=tmp_path / "state_empty.json",
+            max_pages=2,
+            max_jobs=2,
+        )
+    finally:
+        ingest_service._SOURCE_FETCHERS["greenhouse"] = original_fetcher
+    assert empty_result.rows_written == 0
+    catalog_frame = pl.read_parquet(tmp_path / "catalog.parquet")
+    assert "stable_key" in catalog_frame.columns
+
+    with pytest.raises(ConfigValidationError, match="timeout-seconds"):
+        ingest_service.sync_source(
+            source="lever",
+            source_ref="ok",
+            timeout_seconds=0,
+        )
+    with pytest.raises(ConfigValidationError, match="max-retries"):
+        ingest_service.sync_source(
+            source="lever",
+            source_ref="ok",
+            max_retries=-1,
+        )
+    with pytest.raises(ConfigValidationError, match="base-backoff-seconds"):
+        ingest_service.sync_source(
+            source="lever",
+            source_ref="ok",
+            base_backoff_seconds=-0.1,
+        )
+    with pytest.raises(ConfigValidationError, match="user-agent must be non-empty"):
+        ingest_service.sync_source(
+            source="lever",
+            source_ref="ok",
+            user_agent=" ",
+        )
+
+    row = {
+        "source": "lever",
+        "source_job_id": "1",
+        "source_payload_hash": "new",
+        "posted_at": "2026-01-01T00:00:00+00:00",
+        "source_updated_at": "2026-01-03T00:00:00+00:00",
+        "title": "Role",
+        "company": "C",
+        "location": "L",
+    }
+    key = dedup_key(row)
+    old = {
+        "stable_key": key,
+        "first_seen_at_utc": "2026-01-01T00:00:00+00:00",
+        "last_seen_at_utc": "2026-01-01T00:00:00+00:00",
+        "is_active": True,
+        "last_payload_hash": "old",
+        "latest_posted_at": "2026-01-01T00:00:00+00:00",
+        "latest_updated_at": "2026-01-01T00:00:00+00:00",
+        "latest_record_json": json.dumps(row, sort_keys=True),
+    }
+    stale = {
+        "stable_key": "source-id:lever::gone",
+        "first_seen_at_utc": "2026-01-01T00:00:00+00:00",
+        "last_seen_at_utc": "2026-01-01T00:00:00+00:00",
+        "is_active": False,
+        "last_payload_hash": "gone",
+        "latest_posted_at": None,
+        "latest_updated_at": None,
+        "latest_record_json": json.dumps({"id": "gone"}),
+    }
+    tombstone_candidate = {
+        "stable_key": "source-id:lever::tombstone",
+        "first_seen_at_utc": "2026-01-01T00:00:00+00:00",
+        "last_seen_at_utc": "2026-01-01T00:00:00+00:00",
+        "is_active": True,
+        "last_payload_hash": "old",
+        "latest_posted_at": None,
+        "latest_updated_at": None,
+        "latest_record_json": json.dumps({"id": "t"}),
+    }
+    missing_key = {"stable_key": " ", "is_active": True}
+    catalog, summary = ingest_service._apply_catalog_updates(
+        catalog=[old, stale, tombstone_candidate, missing_key],
+        records=[row],
+        seen_at_utc="2026-01-04T00:00:00+00:00",
+        coverage_complete=True,
+    )
+    assert summary.updated_count == 1
+    assert summary.tombstoned_count == 1
+    assert len(catalog) == 3
+
+    active = ingest_service._active_records_from_catalog(
+        [
+            {"is_active": False, "latest_record_json": json.dumps({"id": "x"})},
+            {"is_active": True, "latest_record_json": None},
+            {"is_active": True, "latest_record_json": "{"},
+            {"is_active": True, "latest_record_json": json.dumps([1, 2])},
+            {
+                "is_active": True,
+                "latest_record_json": json.dumps(
+                    {"source": "lever", "source_job_id": "2"}
+                ),
+            },
+        ]
+    )
+    assert active == [{"source": "lever", "source_job_id": "2"}]
+    assert ingest_service._is_coverage_complete(
+        request_count=2,
+        max_pages=2,
+        fetched_count=1,
+        max_jobs=10,
+    ) is False
+    assert ingest_service._is_coverage_complete(
+        request_count=1,
+        max_pages=5,
+        fetched_count=10,
+        max_jobs=10,
+    ) is False
+    assert ingest_service._is_coverage_complete(
+        request_count=1,
+        max_pages=5,
+        fetched_count=1,
+        max_jobs=10,
+    ) is True
+    assert ingest_service._text_or_none(None) is None
+    ingest_service._write_catalog(tmp_path / "empty_catalog.parquet", [])
+    empty_catalog = pl.read_parquet(tmp_path / "empty_catalog.parquet")
+    assert empty_catalog.columns[0] == "stable_key"
+
+    manifest_path = tmp_path / "manifest.toml"
+    manifest_path.write_text(
+        """
+[defaults]
+state_file = "state.json"
+write_raw = false
+max_pages = 3
+max_jobs = 11
+timeout_seconds = 4.0
+max_retries = 1
+base_backoff_seconds = 0.2
+user_agent = "ua-default"
+
+[[sources]]
+source = "greenhouse"
+source_ref = "stripe"
+enabled = false
+
+[[sources]]
+source = "greenhouse"
+source_ref = "stripe"
+enabled = true
+max_pages = 2
+
+    [[sources]]
+    source = "lever"
+    source_ref = "netflix"
+    enabled = true
+
+    [[sources]]
+    source = "ashby"
+    source_ref = "notion"
+    enabled = true
+""".strip(),
+        encoding="utf-8",
+    )
+
+    calls: list[dict[str, Any]] = []
+
+    def fake_sync_source(**kwargs: Any) -> IngestionResult:
+        calls.append(kwargs)
+        if kwargs["source"] == "lever":
+            raise HonestRolesError("boom")
+        report = IngestionReport(
+            schema_version=INGEST_SCHEMA_VERSION,
+            status="pass",
+            source="greenhouse",
+            source_ref="stripe",
+            started_at_utc="2026-01-01T00:00:00+00:00",
+            finished_at_utc="2026-01-01T00:00:01+00:00",
+            duration_ms=1000,
+            request_count=2,
+            fetched_count=3,
+            normalized_count=3,
+            dedup_dropped=0,
+            high_watermark_before=None,
+            high_watermark_after="2026-01-01T00:00:00+00:00",
+            output_paths={"parquet": str(tmp_path / "jobs.parquet")},
+        )
+        return IngestionResult(
+            report=report,
+            output_parquet=tmp_path / "jobs.parquet",
+            report_file=tmp_path / "sync.json",
+            rows_written=2,
+            check_codes=("INGEST_TRUNCATED",),
+        )
+
+    monkeypatch.setattr(ingest_service, "sync_source", fake_sync_source)
+    batch = sync_sources_from_manifest(
+        manifest_path=manifest_path,
+        report_file=tmp_path / "batch_report.json",
+        fail_fast=False,
+    )
+    assert batch.status == "fail"
+    assert batch.pass_count == 2
+    assert batch.fail_count == 1
+    assert batch.total_rows_written == 4
+    assert batch.check_codes == ("INGEST_TRUNCATED",)
+    assert batch.report_file.exists()
+    assert calls[0]["max_pages"] == 2
+    assert calls[0]["max_jobs"] == 11
+    assert calls[0]["timeout_seconds"] == 4.0
+    assert len(calls) == 3
+
+    calls.clear()
+    batch = sync_sources_from_manifest(
+        manifest_path=manifest_path,
+        report_file=tmp_path / "batch_report_ff.json",
+        fail_fast=True,
+    )
+    assert batch.status == "fail"
+    assert len(batch.sources) == 2
+    assert [call["source"] for call in calls] == ["greenhouse", "lever"]
+
+
+def test_cli_and_lineage_paths_for_sync_all(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    manifest = tmp_path / "ingest.toml"
+    manifest.write_text(
+        """
+[[sources]]
+source = "lever"
+source_ref = "netflix"
+""".strip(),
+        encoding="utf-8",
+    )
+    parser = importlib.import_module("honestroles.cli.parser").build_parser()
+    parsed = parser.parse_args(
+        [
+            "ingest",
+            "sync-all",
+            "--manifest",
+            str(manifest),
+            "--fail-fast",
+            "--format",
+            "table",
+        ]
+    )
+    assert parsed.ingest_command == "sync-all"
+    assert parsed.fail_fast is True
+
+    main_mod = importlib.import_module("honestroles.cli.main")
+    monkeypatch.setattr(main_mod, "should_track", lambda _args: False)
+    monkeypatch.setattr(
+        main_mod,
+        "handle_ingest_sync_all",
+        lambda _args: handlers.CommandResult(
+            payload={
+                "schema_version": INGEST_SCHEMA_VERSION,
+                "status": "pass",
+                "total_sources": 1,
+                "pass_count": 1,
+                "fail_count": 0,
+                "total_rows_written": 3,
+                "total_fetched_count": 4,
+                "total_request_count": 2,
+                "sources": [
+                    {
+                        "source": "lever",
+                        "source_ref": "netflix",
+                        "status": "pass",
+                        "rows_written": 3,
+                        "fetched_count": 4,
+                        "request_count": 2,
+                    }
+                ],
+                "report_file": str(tmp_path / "batch_report.json"),
+            },
+            exit_code=0,
+        ),
+    )
+    code = main_mod.main(
+        [
+            "ingest",
+            "sync-all",
+            "--manifest",
+            str(manifest),
+            "--format",
+            "table",
+        ]
+    )
+    assert code == 0
+    rendered = capsys.readouterr().out
+    assert "BATCH total_sources=1" in rendered
+    assert "SOURCE       REF" in rendered
+    assert "report_file" in rendered
+
+    pass_result = BatchIngestionResult(
+        schema_version=INGEST_SCHEMA_VERSION,
+        status="pass",
+        started_at_utc="2026-01-01T00:00:00+00:00",
+        finished_at_utc="2026-01-01T00:00:01+00:00",
+        duration_ms=1000,
+        total_sources=1,
+        pass_count=1,
+        fail_count=0,
+        total_rows_written=1,
+        total_fetched_count=1,
+        total_request_count=1,
+        sources=(),
+        report_file=tmp_path / "batch_report.json",
+        check_codes=(),
+    )
+    fail_result = BatchIngestionResult(
+        schema_version=INGEST_SCHEMA_VERSION,
+        status="fail",
+        started_at_utc="2026-01-01T00:00:00+00:00",
+        finished_at_utc="2026-01-01T00:00:01+00:00",
+        duration_ms=1000,
+        total_sources=1,
+        pass_count=0,
+        fail_count=1,
+        total_rows_written=0,
+        total_fetched_count=0,
+        total_request_count=0,
+        sources=(),
+        report_file=tmp_path / "batch_fail_report.json",
+        check_codes=(),
+    )
+    monkeypatch.setattr(handlers, "sync_sources_from_manifest", lambda **_kwargs: pass_result)
+    assert handlers.handle_ingest_sync_all(parsed).exit_code == 0
+    monkeypatch.setattr(handlers, "sync_sources_from_manifest", lambda **_kwargs: fail_result)
+    assert handlers.handle_ingest_sync_all(parsed).exit_code == 1
+
+    assert lineage.should_track({"command": "ingest", "ingest_command": "sync-all"})
+    input_hash, input_hashes, config_hash = lineage.compute_hashes(
+        {
+            "command": "ingest",
+            "ingest_command": "sync-all",
+            "manifest": str(manifest),
+        }
+    )
+    assert input_hash is None
+    assert "manifest" in input_hashes
+    assert config_hash
+    artifacts = lineage.build_artifact_paths(
+        {
+            "command": "ingest",
+            "ingest_command": "sync-all",
+        },
+        payload=None,
+    )
+    assert artifacts["report_file"].endswith("dist/ingest/sync_all_report.json")
+
+
+def test_state_helper_branches() -> None:
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    later = datetime(2026, 1, 2, tzinfo=UTC)
+    assert ingest_state._max_dt(None, later) == later
+    assert ingest_state._max_dt(now, None) == now
+    assert ingest_state._max_dt(now, later) == later
+
+
+def test_output_batch_and_normalize_work_mode_branches(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output.emit_payload(
+        {
+            "status": "pass",
+            "total_sources": 1,
+            "pass_count": 1,
+            "fail_count": 0,
+            "total_rows_written": 1,
+            "total_fetched_count": 1,
+            "total_request_count": 1,
+            "sources": [1],
+        },
+        "table",
+    )
+    rendered = capsys.readouterr().out
+    assert "BATCH total_sources=1" in rendered
+    assert "report_file" not in rendered
+    output._print_ingest_batch_table(
+        {
+            "total_sources": 0,
+            "pass_count": 0,
+            "fail_count": 0,
+            "total_rows_written": 0,
+            "total_fetched_count": 0,
+            "total_request_count": 0,
+            "sources": {"bad": "shape"},
+        }
+    )
+    assert "SOURCE       REF" in capsys.readouterr().out
+
+    assert ingest_normalize._infer_work_mode("on-site") == "onsite"
+    assert (
+        ingest_normalize._normalize_work_mode("unknown", "Hybrid")
+        == "hybrid"
+    )
+    assert ingest_normalize._normalize_work_mode(None, "Remote") == "remote"

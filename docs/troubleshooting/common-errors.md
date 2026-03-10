@@ -89,6 +89,11 @@ Cause:
 Fix:
 
 - Reduce scope with `--max-pages` and/or `--max-jobs`.
+- Tune retry controls for your environment:
+  - `--timeout-seconds`
+  - `--max-retries`
+  - `--base-backoff-seconds`
+  - `--user-agent`
 - Re-run after cooldown; retries/backoff are built in for transient failures.
 - Split large sources into separate scheduled runs.
 
@@ -109,6 +114,34 @@ Run a full refresh to bypass state filtering:
 
 ```bash
 $ honestroles ingest sync --source lever --source-ref netflix --full-refresh --format table
+```
+
+If you expected tombstones (inactive records) to be applied, confirm the run was
+coverage-complete. Truncated runs (hitting `max-pages` or `max-jobs`) do not
+apply tombstones.
+
+## `ingest sync-all` Manifest Validation Fails
+
+Symptom:
+
+```text
+invalid ingest manifest ...
+```
+
+Cause:
+
+- Missing required `[[sources]]` entries.
+- Invalid key types in `[defaults]` or `[[sources]]`.
+- Unsupported `source` values.
+
+Fix:
+
+1. Validate fields against [Ingest Manifest Schema](../reference/ingest-manifest-schema.md).
+2. Use only supported sources: `greenhouse|lever|ashby|workable`.
+3. Re-run:
+
+```bash
+$ honestroles ingest sync-all --manifest ingest.toml --format table
 ```
 
 ## Reset Ingestion State

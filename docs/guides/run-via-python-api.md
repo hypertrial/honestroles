@@ -14,13 +14,18 @@ Use this for services, orchestration tasks, and integration tests.
 ## Steps
 
 ```python
-from honestroles import HonestRolesRuntime, sync_source
+from honestroles import HonestRolesRuntime, sync_source, sync_sources_from_manifest
 
 ingest = sync_source(
     source="greenhouse",
     source_ref="stripe",
+    timeout_seconds=20,
+    max_retries=5,
 )
 print(ingest.rows_written, ingest.output_parquet)
+
+batch = sync_sources_from_manifest(manifest_path="ingest.toml")
+print(batch.status, batch.total_sources, batch.fail_count)
 
 runtime = HonestRolesRuntime.from_configs(
     pipeline_config_path="pipeline.toml",

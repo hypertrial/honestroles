@@ -74,7 +74,7 @@ The runtime seeds Python randomness from `runtime.random_seed` at run start. Fix
 
 ## Ingestion API
 
-Use `sync_source(...)` to ingest public ATS postings into canonical parquet:
+Use `sync_source(...)` to ingest one public ATS source into canonical parquet:
 
 ```python
 from honestroles import sync_source
@@ -85,13 +85,39 @@ result = sync_source(
 )
 ```
 
-`sync_source(...) -> IngestionResult` fields:
+`sync_source(...) -> IngestionResult` fields include:
 
 - `report`: `IngestionReport`
-- `output_parquet`: resolved parquet path
+- `output_parquet`: resolved latest parquet path
 - `report_file`: resolved sync report path
 - `raw_file`: optional raw JSONL path (when `write_raw=True`)
-- `rows_written`: final row count written
+- `snapshot_file`: per-run snapshot parquet path
+- `catalog_file`: catalog parquet path
+- `state_file`: state file path written
+- `rows_written`: active latest row count written
+
+Additive request controls:
+
+- `timeout_seconds`
+- `max_retries`
+- `base_backoff_seconds`
+- `user_agent`
+
+Batch ingestion from manifest:
+
+```python
+from honestroles import sync_sources_from_manifest
+
+batch = sync_sources_from_manifest(manifest_path="ingest.toml", fail_fast=False)
+print(batch.status, batch.total_sources, batch.fail_count)
+```
+
+`sync_sources_from_manifest(...) -> BatchIngestionResult` includes:
+
+- aggregate status/timing fields
+- per-source payloads under `sources`
+- aggregate totals (`total_rows_written`, `total_fetched_count`, `total_request_count`)
+- `report_file`
 
 Supported `source` values:
 

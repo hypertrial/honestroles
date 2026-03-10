@@ -42,6 +42,7 @@ If your goal is to use HonestRoles (not build integrations), start here:
 
 - CLI commands and exit codes: [CLI Reference](reference/cli.md)
 - Runtime API: [Runtime API](reference/runtime-api.md)
+- Ingestion batch manifest schema: [Ingest Manifest Schema](reference/ingest-manifest-schema.md)
 - Connector source-ref map: [Ingest Source-Ref Glossary](reference/ingest-source-ref-glossary.md)
 - Pipeline schema: [Pipeline Config Schema](reference/pipeline-config-schema.md)
 - Reliability policy schema: [Reliability Policy Schema](reference/reliability-policy-schema.md)

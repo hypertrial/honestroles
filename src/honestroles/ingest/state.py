@@ -7,7 +7,7 @@ from typing import Any
 
 from honestroles.errors import ConfigValidationError
 from honestroles.ingest.models import (
-    INGEST_SCHEMA_VERSION,
+    INGEST_STATE_SCHEMA_VERSION,
     IngestionStateEntry,
 )
 
@@ -45,7 +45,7 @@ def write_state(path: str | Path, entries: dict[str, IngestionStateEntry]) -> Pa
     state_path = Path(path).expanduser().resolve()
     state_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "schema_version": INGEST_SCHEMA_VERSION,
+        "schema_version": INGEST_STATE_SCHEMA_VERSION,
         "entries": {k: v.to_dict() for k, v in sorted(entries.items())},
     }
     state_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -57,25 +57,33 @@ def filter_incremental(
     *,
     entry: IngestionStateEntry | None,
     full_refresh: bool,
-) -> tuple[list[dict[str, Any]], str | None]:
+) -> tuple[list[dict[str, Any]], str | None, int]:
     if full_refresh or entry is None:
-        return records, entry.high_watermark_posted_at if entry else None
+        return records, entry.high_watermark_posted_at if entry else None, 0
     watermark = entry.high_watermark_posted_at
+    watermark_updated = entry.high_watermark_updated_at
     seen_ids = set(entry.recent_source_job_ids)
     if not watermark and not seen_ids:
-        return records, watermark
+        return records, watermark, 0
 
     filtered: list[dict[str, Any]] = []
     watermark_dt = _parse_iso(watermark)
+    watermark_updated_dt = _parse_iso(watermark_updated)
+    skipped = 0
     for record in records:
         source_job_id = _text_or_none(record.get("source_job_id"))
         if source_job_id is not None and source_job_id in seen_ids:
+            skipped += 1
             continue
         posted_dt = _parse_iso(_text_or_none(record.get("posted_at")))
-        if watermark_dt is not None and posted_dt is not None and posted_dt <= watermark_dt:
+        updated_dt = _parse_iso(_text_or_none(record.get("source_updated_at")))
+        effective_dt = _max_dt(posted_dt, updated_dt)
+        effective_watermark = _max_dt(watermark_dt, watermark_updated_dt)
+        if effective_watermark is not None and effective_dt is not None and effective_dt <= effective_watermark:
+            skipped += 1
             continue
         filtered.append(record)
-    return filtered, watermark
+    return filtered, watermark, skipped
 
 
 def update_state_entry(
@@ -83,14 +91,21 @@ def update_state_entry(
     *,
     records: list[dict[str, Any]],
     finished_at_utc: str,
+    coverage_complete: bool,
 ) -> IngestionStateEntry:
     watermark_dt = _parse_iso(current.high_watermark_posted_at if current else None)
+    watermark_updated_dt = _parse_iso(current.high_watermark_updated_at if current else None)
     ids: list[str] = list(current.recent_source_job_ids if current else ())
 
     for record in records:
         posted_dt = _parse_iso(_text_or_none(record.get("posted_at")))
         if posted_dt is not None and (watermark_dt is None or posted_dt > watermark_dt):
             watermark_dt = posted_dt
+        updated_dt = _parse_iso(_text_or_none(record.get("source_updated_at")))
+        if updated_dt is not None and (
+            watermark_updated_dt is None or updated_dt > watermark_updated_dt
+        ):
+            watermark_updated_dt = updated_dt
         source_job_id = _text_or_none(record.get("source_job_id"))
         if source_job_id:
             ids.append(source_job_id)
@@ -100,11 +115,24 @@ def update_state_entry(
     watermark = watermark_dt.isoformat() if watermark_dt is not None else (
         current.high_watermark_posted_at if current else None
     )
+    watermark_updated = watermark_updated_dt.isoformat() if watermark_updated_dt is not None else (
+        current.high_watermark_updated_at if current else None
+    )
     return IngestionStateEntry(
         high_watermark_posted_at=watermark,
+        high_watermark_updated_at=watermark_updated,
         last_success_at_utc=finished_at_utc,
+        last_coverage_complete=bool(coverage_complete),
         recent_source_job_ids=tuple(ids),
     )
+
+
+def _max_dt(first: datetime | None, second: datetime | None) -> datetime | None:
+    if first is None:
+        return second
+    if second is None:
+        return first
+    return first if first >= second else second
 
 
 def _parse_iso(value: str | None) -> datetime | None:

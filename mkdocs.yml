@@ -66,6 +66,7 @@ nav:
       - Reference:
           - CLI: reference/cli.md
           - Runtime API: reference/runtime-api.md
+          - Ingest Manifest Schema: reference/ingest-manifest-schema.md
           - Ingest Source-Ref Glossary: reference/ingest-source-ref-glossary.md
           - Pipeline Config Schema: reference/pipeline-config-schema.md
           - Reliability Policy Schema: reference/reliability-policy-schema.md

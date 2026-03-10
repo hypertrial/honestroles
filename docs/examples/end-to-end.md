@@ -15,6 +15,14 @@ $ python examples/create_sample_dataset.py
 $ honestroles run --pipeline-config examples/sample_pipeline.toml --plugins examples/sample_plugins.toml
 ```
 
+Optional ingestion-first path:
+
+```bash
+$ honestroles ingest sync --source greenhouse --source-ref stripe --format table
+# or batch:
+$ honestroles ingest sync-all --manifest ingest.toml --format table
+```
+
 ## Inspect Output
 
 ```bash
@@ -36,3 +44,4 @@ $ honestroles plugins validate --manifest examples/sample_plugins.toml
 
 - Output semantics: [Understand Output](../guides/understand-output.md)
 - CLI contract: [CLI Reference](../reference/cli.md)
+- Batch manifest schema: [Ingest Manifest Schema](../reference/ingest-manifest-schema.md)
