@@ -229,4 +229,71 @@ def build_parser() -> argparse.ArgumentParser:
     runs_show.add_argument("--run-id", required=True)
     _add_format_arg(runs_show)
 
+    recommend_parser = sub.add_parser(
+        "recommend",
+        help="Deterministic candidate-job recommendation operations",
+    )
+    recommend_sub = recommend_parser.add_subparsers(dest="recommend_command", required=True)
+
+    recommend_build = recommend_sub.add_parser(
+        "build-index",
+        help="Build API-ready retrieval index artifacts from cleaned parquet jobs",
+    )
+    recommend_build.add_argument("--input-parquet", required=True)
+    recommend_build.add_argument("--output-dir", default=None)
+    recommend_build.add_argument("--policy", dest="policy_file", default=None)
+    _add_format_arg(recommend_build)
+
+    recommend_match = recommend_sub.add_parser(
+        "match",
+        help="Match a candidate profile against a built index",
+    )
+    recommend_match.add_argument("--index-dir", required=True)
+    recommend_match.add_argument("--candidate-json", default=None)
+    recommend_match.add_argument("--resume-text", default=None)
+    recommend_match.add_argument("--profile-id", default=None)
+    recommend_match.add_argument("--top-k", type=int, default=25)
+    recommend_match.add_argument("--policy", dest="policy_file", default=None)
+    recommend_match.add_argument("--include-excluded", action="store_true")
+    _add_format_arg(recommend_match)
+
+    recommend_evaluate = recommend_sub.add_parser(
+        "evaluate",
+        help="Evaluate recommendation quality with offline golden sets",
+    )
+    recommend_evaluate.add_argument("--index-dir", required=True)
+    recommend_evaluate.add_argument("--golden-set", required=True)
+    recommend_evaluate.add_argument("--thresholds", dest="thresholds_file", default=None)
+    recommend_evaluate.add_argument("--policy", dest="policy_file", default=None)
+    _add_format_arg(recommend_evaluate)
+
+    recommend_feedback = recommend_sub.add_parser(
+        "feedback",
+        help="Record and inspect recommendation feedback events",
+    )
+    feedback_sub = recommend_feedback.add_subparsers(
+        dest="recommend_feedback_command", required=True
+    )
+
+    feedback_add = feedback_sub.add_parser(
+        "add",
+        help="Record a feedback event and update profile weights",
+    )
+    feedback_add.add_argument("--profile-id", required=True)
+    feedback_add.add_argument("--job-id", required=True)
+    feedback_add.add_argument(
+        "--event",
+        required=True,
+        choices=["not_relevant", "applied", "interviewed"],
+    )
+    feedback_add.add_argument("--meta-json", dest="meta_json_file", default=None)
+    _add_format_arg(feedback_add)
+
+    feedback_summary = feedback_sub.add_parser(
+        "summarize",
+        help="Summarize feedback events and current profile weighting state",
+    )
+    feedback_summary.add_argument("--profile-id", default=None)
+    _add_format_arg(feedback_summary)
+
     return parser

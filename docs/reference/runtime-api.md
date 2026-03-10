@@ -157,3 +157,54 @@ Supported `source` values:
 - `lever`
 - `ashby`
 - `workable`
+
+## Recommendation API
+
+Build API-ready retrieval artifacts:
+
+```python
+from honestroles import build_retrieval_index
+
+index = build_retrieval_index(
+    input_parquet="dist/ingest/greenhouse/stripe/jobs.parquet",
+    policy_file="recommendation.toml",
+)
+print(index.index_id, index.index_dir)
+```
+
+Match jobs from an index:
+
+```python
+from honestroles import match_jobs
+
+matches = match_jobs(
+    index_dir=index.index_dir,
+    candidate_json="examples/candidate.json",
+    top_k=25,
+    include_excluded=True,
+)
+print(matches.eligible_count, len(matches.results))
+```
+
+Evaluate recommendation quality:
+
+```python
+from honestroles import evaluate_relevance
+
+evaluation = evaluate_relevance(
+    index_dir=index.index_dir,
+    golden_set="examples/recommend_golden_set.json",
+    thresholds_file="recommend_eval.toml",
+)
+print(evaluation.status, evaluation.metrics)
+```
+
+Feedback primitives:
+
+```python
+from honestroles import record_feedback_event, summarize_feedback
+
+record_feedback_event(profile_id="jane_doe", job_id="12345", event="interviewed")
+summary = summarize_feedback(profile_id="jane_doe")
+print(summary.total_events, summary.weights)
+```

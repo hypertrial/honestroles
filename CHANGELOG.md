@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added Relevance & Agent API v1:
+  - Added new recommendation CLI group: `recommend build-index`, `recommend match`, `recommend evaluate`, `recommend feedback add`, and `recommend feedback summarize`.
+  - Added deterministic candidate profile contract and parsers (`candidate JSON` + plain-text resume parsing).
+  - Added hard eligibility filters before ranking (`location`, `work_mode`, `employment_type`, `salary`, `visa`) with deterministic exclusion codes.
+  - Added explainable deterministic scorer with tunable `recommendation.toml` signal weights and machine-readable `match_reasons`/`required_missing_skills`.
+  - Added JSON-first retrieval index artifacts for Next.js APIs: `manifest.json`, `jobs_latest.jsonl`, `facets.json`, and sharded token index files.
+  - Added offline relevance evaluation harness with `precision@k`/`recall@k` and threshold policy support via `recommend_eval.toml`.
+  - Added feedback primitives with append-only event history and bounded per-profile reweighting state.
+  - Added lineage tracking and recommend metrics for all new recommendation commands.
+  - Updated README and docs (guide + CLI/API references + policy schemas) for recommendation workflows.
 - Added Ingestion Data Quality Recovery v1:
   - Corrected connector normalization mappings for Greenhouse, Lever, Ashby, and Workable to improve `company`, `posted_at`, `description_text`, and remote/location coverage.
   - Added shared normalization fallbacks for company identity (`source_ref`), source-specific posted timestamp fallback chains, and deterministic HTML-to-text conversion.

@@ -30,6 +30,11 @@ from .handlers import (
     handle_plugins_validate,
     handle_reliability_check,
     handle_report_quality,
+    handle_recommend_build_index,
+    handle_recommend_evaluate,
+    handle_recommend_feedback_add,
+    handle_recommend_feedback_summarize,
+    handle_recommend_match,
     handle_run,
     handle_runs_list,
     handle_runs_show,
@@ -119,6 +124,26 @@ def _handle_runs_show(args: argparse.Namespace) -> CommandResult:
     return handle_runs_show(args)
 
 
+def _handle_recommend_build_index(args: argparse.Namespace) -> CommandResult:
+    return handle_recommend_build_index(args)
+
+
+def _handle_recommend_match(args: argparse.Namespace) -> CommandResult:
+    return handle_recommend_match(args)
+
+
+def _handle_recommend_evaluate(args: argparse.Namespace) -> CommandResult:
+    return handle_recommend_evaluate(args)
+
+
+def _handle_recommend_feedback_add(args: argparse.Namespace) -> CommandResult:
+    return handle_recommend_feedback_add(args)
+
+
+def _handle_recommend_feedback_summarize(args: argparse.Namespace) -> CommandResult:
+    return handle_recommend_feedback_summarize(args)
+
+
 def _handle_eda_dashboard(args: argparse.Namespace) -> int:
     bundle = load_eda_artifacts(args.artifacts_dir)
     if bundle.summary is None:
@@ -205,6 +230,24 @@ def _dispatch(args: argparse.Namespace) -> CommandResult | int | None:
         return _handle_runs_list(args)
     if args.command == "runs" and args.runs_command == "show":
         return _handle_runs_show(args)
+    if args.command == "recommend" and args.recommend_command == "build-index":
+        return _handle_recommend_build_index(args)
+    if args.command == "recommend" and args.recommend_command == "match":
+        return _handle_recommend_match(args)
+    if args.command == "recommend" and args.recommend_command == "evaluate":
+        return _handle_recommend_evaluate(args)
+    if (
+        args.command == "recommend"
+        and args.recommend_command == "feedback"
+        and args.recommend_feedback_command == "add"
+    ):
+        return _handle_recommend_feedback_add(args)
+    if (
+        args.command == "recommend"
+        and args.recommend_command == "feedback"
+        and args.recommend_feedback_command == "summarize"
+    ):
+        return _handle_recommend_feedback_summarize(args)
     return None
 
 

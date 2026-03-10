@@ -276,6 +276,58 @@ Use this mapping for fast remediation:
 | `POLICY_NULL_RATE` | Reduce null rates via mapping/cleaning of flagged fields. |
 | `POLICY_FRESHNESS` | Use a valid date column and update source extraction cadence/threshold. |
 
+## `recommend match` Fails with Candidate Input Error
+
+Symptom:
+
+```text
+provide exactly one of --candidate-json or --resume-text
+```
+
+Cause:
+
+- Both candidate inputs were provided, or neither was provided.
+
+Fix:
+
+```bash
+$ honestroles recommend match --index-dir dist/recommend/index/<index_id> --candidate-json examples/candidate.json
+```
+
+or
+
+```bash
+$ honestroles recommend match --index-dir dist/recommend/index/<index_id> --resume-text examples/resume.txt --profile-id jane_doe
+```
+
+## `recommend evaluate` Fails Quality Thresholds
+
+Symptom:
+
+- Exit code `1` with checks such as:
+  - `EVAL_PRECISION_AT_10_BELOW_THRESHOLD`
+  - `EVAL_RECALL_AT_25_BELOW_THRESHOLD`
+
+Fix:
+
+1. Inspect metrics:
+
+```bash
+$ honestroles recommend evaluate --index-dir dist/recommend/index/<index_id> --golden-set examples/recommend_golden_set.json --format table
+```
+
+2. Improve matching policy / profile coverage first, then adjust `recommend_eval.toml` only if needed.
+
+## Recommendation Filter Codes
+
+With `--include-excluded`, each excluded row includes deterministic reasons:
+
+- `FILTER_LOCATION`
+- `FILTER_WORK_MODE`
+- `FILTER_EMPLOYMENT_TYPE`
+- `FILTER_SALARY`
+- `FILTER_VISA`
+
 ## Plugin Callable Reference Fails
 
 Symptom:

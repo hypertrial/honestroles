@@ -23,6 +23,11 @@ Available commands:
 - `adapter infer`
 - `runs list`
 - `runs show`
+- `recommend build-index`
+- `recommend match`
+- `recommend evaluate`
+- `recommend feedback add`
+- `recommend feedback summarize`
 - `scaffold-plugin`
 - `eda generate`
 - `eda diff`
@@ -55,6 +60,11 @@ Structured-output commands default to JSON and accept `--format {json,table}`.
 | `honestroles adapter infer` | `--input-parquet`, optional `--output-file`, `--sample-rows`, `--top-candidates`, `--min-confidence`, optional `--print` | Infers draft `[input.adapter]` mapping/coercion config from parquet input | JSON/table artifact summary |
 | `honestroles runs list` | optional `--limit`, `--status`, `--command`, `--since`, `--contains-code` | Lists recorded run lineage entries with filters | JSON/table run rows |
 | `honestroles runs show` | `--run-id` | Shows one recorded run lineage payload | JSON/table run record |
+| `honestroles recommend build-index` | `--input-parquet`, optional `--output-dir`, `--policy` | Builds deterministic retrieval index artifacts for API serving | JSON/table index summary |
+| `honestroles recommend match` | `--index-dir`, exactly one of `--candidate-json` or `--resume-text`, optional `--profile-id`, `--top-k`, `--policy`, `--include-excluded` | Produces ranked, explainable matches from index artifacts | JSON/table match summary |
+| `honestroles recommend evaluate` | `--index-dir`, `--golden-set`, optional `--thresholds`, optional `--policy` | Computes `precision@k` / `recall@k` and enforces thresholds | JSON/table eval summary |
+| `honestroles recommend feedback add` | `--profile-id`, `--job-id`, `--event`, optional `--meta-json` | Appends feedback event and updates profile weights | JSON/table feedback event summary |
+| `honestroles recommend feedback summarize` | optional `--profile-id` | Summarizes feedback history and effective profile weights | JSON/table feedback summary |
 | `honestroles scaffold-plugin` | `--name`, optional `--output-dir` | Copies bundled plugin template | JSON/table scaffold path + package name |
 | `honestroles eda generate` | `--input-parquet`, optional `--output-dir`, `--quality-profile`, repeated `--quality-weight`, `--top-k`, `--max-rows`, optional `--rules-file` | Builds deterministic profile artifacts (`summary.json`, tables, figures, report) | JSON/table artifact summary |
 | `honestroles eda diff` | `--baseline-dir`, `--candidate-dir`, optional `--output-dir`, optional `--rules-file` | Compares two profile artifact dirs and writes diff artifacts (`diff.json`, drift tables) | JSON/table diff summary |
@@ -133,6 +143,38 @@ Default batch report location:
 For full manifest schema details, see [Ingest Manifest Schema](./ingest-manifest-schema.md).
 For quality policy schema details, see [Ingest Quality Policy Schema](./ingest-quality-policy-schema.md).
 
+## `recommend build-index`, `recommend match`, `recommend evaluate`, `recommend feedback`
+
+`recommend build-index` default output root is:
+
+- `dist/recommend/index/<index_id>/manifest.json`
+- `dist/recommend/index/<index_id>/jobs_latest.jsonl`
+- `dist/recommend/index/<index_id>/facets.json`
+- `dist/recommend/index/<index_id>/quality_summary.json`
+- `dist/recommend/index/<index_id>/shards/*.json`
+
+`recommend match` agent-facing result fields:
+
+- `job_id`
+- `score`
+- `match_reasons`
+- `required_missing_skills`
+- `apply_url`
+- `posted_at`
+- `source`
+- `quality_flags`
+
+With `--include-excluded`, payload additionally includes `excluded_jobs` and
+deterministic `exclude_reasons` codes.
+
+`recommend evaluate` computes averaged `precision@k` and `recall@k` from a
+golden-set JSON and enforces `recommend_eval.toml` thresholds.
+
+`recommend feedback add/summarize` persists feedback state in:
+
+- `.honestroles/recommend/feedback/events.jsonl`
+- `.honestroles/recommend/feedback/weights/<profile_id>.json`
+
 ## Run Lineage
 
 Tracked commands write a run record to:
@@ -153,6 +195,11 @@ Tracked commands:
 - `ingest sync`
 - `ingest validate`
 - `ingest sync-all`
+- `recommend build-index`
+- `recommend match`
+- `recommend evaluate`
+- `recommend feedback add`
+- `recommend feedback summarize`
 
 Run schema fields include:
 
@@ -191,6 +238,11 @@ $ honestroles run --pipeline-config pipeline.toml --plugins plugins.toml --forma
 $ honestroles adapter infer --input-parquet data/jobs.parquet --output-file dist/adapters/adapter-draft.toml
 $ honestroles runs list --limit 10 --command ingest.sync-all --contains-code INGEST_TRUNCATED --format table
 $ honestroles runs show --run-id <run_id>
+$ honestroles recommend build-index --input-parquet dist/ingest/greenhouse/stripe/jobs.parquet --policy recommendation.toml
+$ honestroles recommend match --index-dir dist/recommend/index/<index_id> --candidate-json examples/candidate.json --top-k 25 --include-excluded
+$ honestroles recommend evaluate --index-dir dist/recommend/index/<index_id> --golden-set examples/recommend_golden_set.json --thresholds recommend_eval.toml
+$ honestroles recommend feedback add --profile-id jane_doe --job-id 12345 --event interviewed
+$ honestroles recommend feedback summarize --profile-id jane_doe
 $ honestroles eda generate --input-parquet data/jobs.parquet --output-dir dist/eda/latest
 $ honestroles eda diff --baseline-dir dist/eda/baseline --candidate-dir dist/eda/candidate --output-dir dist/eda/diff
 $ honestroles eda gate --candidate-dir dist/eda/candidate --baseline-dir dist/eda/baseline --rules-file eda-rules.toml

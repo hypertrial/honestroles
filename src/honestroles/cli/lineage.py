@@ -72,6 +72,12 @@ def _command_key(args: Mapping[str, Any]) -> str:
         return f"ingest.{args.get('ingest_command', '')}"
     if command == "runs":
         return f"runs.{args.get('runs_command', '')}"
+    if command == "recommend":
+        recommend_command = str(args.get("recommend_command", ""))
+        if recommend_command == "feedback":
+            feedback_command = str(args.get("recommend_feedback_command", ""))
+            return f"recommend.feedback.{feedback_command}"
+        return f"recommend.{recommend_command}"
     return command
 
 
@@ -87,6 +93,11 @@ def should_track(args: Mapping[str, Any]) -> bool:
         "ingest.sync",
         "ingest.sync-all",
         "ingest.validate",
+        "recommend.build-index",
+        "recommend.match",
+        "recommend.evaluate",
+        "recommend.feedback.add",
+        "recommend.feedback.summarize",
     }
 
 
@@ -177,6 +188,25 @@ def compute_hashes(args: Mapping[str, Any]) -> tuple[str | None, dict[str, str],
             input_hashes["input_parquet"] = digest
             return digest, input_hashes, _sha256_bytes(digest.encode("utf-8"))
         return None, input_hashes, _args_fingerprint(args)
+    if command.startswith("recommend."):
+        input_hashes: dict[str, str] = {}
+        for key in (
+            "input_parquet",
+            "index_dir",
+            "candidate_json",
+            "resume_text",
+            "golden_set",
+            "policy_file",
+            "thresholds_file",
+            "meta_json_file",
+        ):
+            path = _existing_path(args.get(key))
+            if path is not None:
+                input_hashes[key] = _hash_input_path(path)
+        config_hash = _sha256_bytes(
+            "|".join([_args_fingerprint(args)] + [input_hashes[key] for key in sorted(input_hashes)]).encode("utf-8")
+        )
+        return None, input_hashes, config_hash
     if command.startswith("eda."):
         return _eda_hashes(args)
     return None, {}, _args_fingerprint(args)
@@ -243,6 +273,30 @@ def build_artifact_paths(args: Mapping[str, Any], payload: Mapping[str, Any] | N
             str(args.get("report_file", "dist/ingest/sync_all_report.json"))
         ).expanduser().resolve()
         return {"report_file": str(report_file)}
+    if command == "recommend.build-index":
+        output_dir = args.get("output_dir")
+        if output_dir not in (None, ""):
+            root = Path(str(output_dir)).expanduser().resolve()
+            return {
+                "index_dir": str(root),
+                "manifest_file": str(root / "manifest.json"),
+                "jobs_file": str(root / "jobs_latest.jsonl"),
+                "facets_file": str(root / "facets.json"),
+                "quality_summary_file": str(root / "quality_summary.json"),
+            }
+        return {}
+    if command in {"recommend.match", "recommend.evaluate"}:
+        return {}
+    if command == "recommend.feedback.add":
+        profile_id = str(args.get("profile_id", "")).strip().lower()
+        root = (Path.cwd() / ".honestroles" / "recommend" / "feedback").resolve()
+        artifacts = {"events_file": str(root / "events.jsonl")}
+        if profile_id:
+            artifacts["weights_file"] = str(root / "weights" / f"{profile_id}.json")
+        return artifacts
+    if command == "recommend.feedback.summarize":
+        root = (Path.cwd() / ".honestroles" / "recommend" / "feedback").resolve()
+        return {"events_file": str(root / "events.jsonl")}
     return {}
 
 
@@ -264,6 +318,7 @@ def create_record(
         if isinstance(raw_codes, list):
             check_codes = [str(code) for code in raw_codes if str(code).strip()]
     ingest_metrics = _ingest_metrics(_command_key(args), payload)
+    recommend_metrics = _recommend_metrics(_command_key(args), payload)
     return {
         "schema_version": _SCHEMA_VERSION,
         "run_id": run_id,
@@ -278,6 +333,7 @@ def create_record(
         "artifact_paths": build_artifact_paths(args, payload),
         "check_codes": check_codes,
         "ingest_metrics": ingest_metrics,
+        "recommend_metrics": recommend_metrics,
         "error": dict(error) if error is not None else None,
     }
 
@@ -323,6 +379,49 @@ def _ingest_metrics(
             "key_field_completeness": payload.get("key_field_completeness", {}),
             "stage_timings_ms": payload.get("stage_timings_ms", {}),
             "warnings": payload.get("warnings", []),
+        }
+    return None
+
+
+def _recommend_metrics(
+    command: str,
+    payload: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    if payload is None:
+        return None
+    if command == "recommend.build-index":
+        return {
+            "index_id": str(payload.get("index_id", "")),
+            "jobs_count": _safe_int(payload.get("jobs_count")),
+            "token_count": _safe_int(payload.get("token_count")),
+            "shard_count": _safe_int(payload.get("shard_count")),
+        }
+    if command == "recommend.match":
+        return {
+            "eligible_count": _safe_int(payload.get("eligible_count")),
+            "excluded_count": _safe_int(payload.get("excluded_count")),
+            "total_jobs": _safe_int(payload.get("total_jobs")),
+            "top_k": _safe_int(payload.get("top_k")),
+        }
+    if command == "recommend.evaluate":
+        return {
+            "cases_evaluated": _safe_int(payload.get("cases_evaluated")),
+            "metrics": payload.get("metrics", {}),
+            "thresholds": payload.get("thresholds", {}),
+            "failing_checks": payload.get("failing_checks", []),
+        }
+    if command == "recommend.feedback.add":
+        return {
+            "profile_id": str(payload.get("profile_id", "")),
+            "event": str(payload.get("event", "")),
+            "duplicate": bool(payload.get("duplicate", False)),
+            "total_events": _safe_int(payload.get("total_events")),
+        }
+    if command == "recommend.feedback.summarize":
+        return {
+            "profile_id": payload.get("profile_id"),
+            "total_events": _safe_int(payload.get("total_events")),
+            "counts": payload.get("counts", {}),
         }
     return None
 

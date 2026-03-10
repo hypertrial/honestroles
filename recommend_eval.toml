@@ -1,0 +1,5 @@
+# Offline recommendation evaluation thresholds
+
+ks = [10, 25, 50]
+precision_at_10_min = 0.60
+recall_at_25_min = 0.70

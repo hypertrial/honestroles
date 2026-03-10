@@ -41,6 +41,10 @@ Expected CLI diagnostics include `stage_rows`, `plugin_counts`, and `final_rows`
 $ honestroles ingest sync --source greenhouse --source-ref stripe --quality-policy ingest_quality.toml --strict-quality --merge-policy updated_hash --retain-snapshots 30 --prune-inactive-days 90 --format table
 $ honestroles ingest validate --source greenhouse --source-ref stripe --quality-policy ingest_quality.toml --strict-quality --format table
 $ honestroles ingest sync-all --manifest ingest.toml --format table
+$ honestroles recommend build-index --input-parquet dist/ingest/greenhouse/stripe/jobs.parquet --policy recommendation.toml --format table
+$ honestroles recommend match --index-dir dist/recommend/index/<index_id> --candidate-json examples/candidate.json --top-k 25 --include-excluded --format table
+$ honestroles recommend evaluate --index-dir dist/recommend/index/<index_id> --golden-set examples/recommend_golden_set.json --thresholds recommend_eval.toml --format table
+$ honestroles recommend feedback add --profile-id jane_doe --job-id 12345 --event interviewed --format table
 $ honestroles init --input-parquet data/jobs.parquet --pipeline-config pipeline.toml --plugins-manifest plugins.toml
 $ honestroles doctor --pipeline-config pipeline.toml --plugins plugins.toml --format table
 $ honestroles reliability check --pipeline-config pipeline.toml --plugins plugins.toml --strict --format table
@@ -57,8 +61,13 @@ $ honestroles scaffold-plugin --name my-plugin --output-dir .
 ```python
 from honestroles import (
     HonestRolesRuntime,
+    build_retrieval_index,
+    evaluate_relevance,
+    match_jobs,
+    record_feedback_event,
     sync_source,
     sync_sources_from_manifest,
+    summarize_feedback,
     validate_ingestion_source,
 )
 
@@ -83,6 +92,28 @@ print(validation.report.status, validation.rows_evaluated)
 
 batch = sync_sources_from_manifest(manifest_path="ingest.toml")
 print(batch.status, batch.total_sources, batch.fail_count)
+
+index = build_retrieval_index(
+    input_parquet="dist/ingest/greenhouse/stripe/jobs.parquet",
+    policy_file="recommendation.toml",
+)
+matches = match_jobs(
+    index_dir=index.index_dir,
+    candidate_json="examples/candidate.json",
+    top_k=25,
+    include_excluded=True,
+)
+print(matches.status, len(matches.results))
+
+evaluation = evaluate_relevance(
+    index_dir=index.index_dir,
+    golden_set="examples/recommend_golden_set.json",
+    thresholds_file="recommend_eval.toml",
+)
+print(evaluation.status, evaluation.metrics)
+
+record_feedback_event(profile_id="jane_doe", job_id="12345", event="interviewed")
+print(summarize_feedback(profile_id="jane_doe").weights)
 
 runtime = HonestRolesRuntime.from_configs(
     pipeline_config_path="pipeline.toml",

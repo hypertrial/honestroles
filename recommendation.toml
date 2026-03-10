@@ -1,0 +1,12 @@
+# Recommendation scoring policy
+# Weights are normalized at runtime.
+
+[weights]
+skills = 0.35
+title = 0.20
+location_work_mode = 0.15
+seniority = 0.10
+recency = 0.10
+compensation = 0.10
+
+reason_limit = 3

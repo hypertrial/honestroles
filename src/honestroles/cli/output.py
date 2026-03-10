@@ -135,6 +135,89 @@ def _print_ingest_batch_table(payload: Mapping[str, Any]) -> None:
         )
 
 
+def _print_recommend_index_table(payload: Mapping[str, Any]) -> None:
+    print(
+        "INDEX index_id={index_id} jobs={jobs} tokens={tokens} shards={shards}".format(
+            index_id=_stringify(payload.get("index_id")),
+            jobs=_stringify(payload.get("jobs_count")),
+            tokens=_stringify(payload.get("token_count")),
+            shards=_stringify(payload.get("shard_count")),
+        )
+    )
+    for key in ("index_dir", "manifest_file", "jobs_file", "facets_file", "quality_summary_file"):
+        if key in payload:
+            print(f"{key:20} {_stringify(payload.get(key))}")
+
+
+def _print_recommend_match_table(payload: Mapping[str, Any]) -> None:
+    print(
+        "MATCH profile={profile} total={total} eligible={eligible} excluded={excluded} top_k={top_k}".format(
+            profile=_stringify(payload.get("profile", {}).get("profile_id") if isinstance(payload.get("profile"), Mapping) else None),
+            total=_stringify(payload.get("total_jobs")),
+            eligible=_stringify(payload.get("eligible_count")),
+            excluded=_stringify(payload.get("excluded_count")),
+            top_k=_stringify(payload.get("top_k")),
+        )
+    )
+    print("JOB_ID                SCORE    SOURCE       POSTED_AT")
+    results = payload.get("results", [])
+    if isinstance(results, list):
+        for item in results[:10]:
+            if not isinstance(item, Mapping):
+                continue
+            print(
+                "{job_id:20} {score:7}  {source:10}  {posted}".format(
+                    job_id=str(item.get("job_id", ""))[:20],
+                    score=f"{float(item.get('score', 0.0)):.4f}",
+                    source=str(item.get("source", ""))[:10],
+                    posted=str(item.get("posted_at", ""))[:26],
+                )
+            )
+
+
+def _print_recommend_eval_table(payload: Mapping[str, Any]) -> None:
+    print(
+        "EVAL cases={cases} status={status}".format(
+            cases=_stringify(payload.get("cases_evaluated")),
+            status=_stringify(payload.get("status")),
+        )
+    )
+    metrics = payload.get("metrics")
+    if isinstance(metrics, Mapping):
+        for key in sorted(metrics):
+            print(f"{key:20} {_stringify(metrics[key])}")
+    failing = payload.get("failing_checks")
+    if isinstance(failing, list) and failing:
+        print(f"failing_checks        {', '.join(str(item) for item in failing)}")
+
+
+def _print_recommend_feedback_table(payload: Mapping[str, Any]) -> None:
+    if payload.get("event") is not None:
+        print(
+            "FEEDBACK profile={profile} event={event} duplicate={duplicate} total_events={total}".format(
+                profile=_stringify(payload.get("profile_id")),
+                event=_stringify(payload.get("event")),
+                duplicate=_stringify(payload.get("duplicate")),
+                total=_stringify(payload.get("total_events")),
+            )
+        )
+    else:
+        print(
+            "FEEDBACK SUMMARY profile={profile} total_events={total}".format(
+                profile=_stringify(payload.get("profile_id")),
+                total=_stringify(payload.get("total_events")),
+            )
+        )
+    counts = payload.get("counts")
+    if isinstance(counts, Mapping):
+        for key in sorted(counts):
+            print(f"count.{key:14} {_stringify(counts[key])}")
+    weights = payload.get("weights")
+    if isinstance(weights, Mapping):
+        for key in sorted(weights):
+            print(f"weight.{key:13} {_stringify(weights[key])}")
+
+
 def emit_payload(payload: Mapping[str, Any], output_format: str) -> None:
     if output_format == "json":
         print(json.dumps(payload, indent=2, sort_keys=True))
@@ -154,6 +237,22 @@ def emit_payload(payload: Mapping[str, Any], output_format: str) -> None:
         return
     if isinstance(payload.get("sources"), list) and payload.get("total_sources") is not None:
         _print_ingest_batch_table(payload)
+        return
+    if payload.get("index_id") is not None and payload.get("jobs_count") is not None:
+        _print_recommend_index_table(payload)
+        return
+    if (
+        isinstance(payload.get("results"), list)
+        and payload.get("eligible_count") is not None
+        and payload.get("excluded_count") is not None
+    ):
+        _print_recommend_match_table(payload)
+        return
+    if isinstance(payload.get("metrics"), Mapping) and payload.get("cases_evaluated") is not None:
+        _print_recommend_eval_table(payload)
+        return
+    if payload.get("event") is not None or payload.get("profile_counts") is not None:
+        _print_recommend_feedback_table(payload)
         return
     if (
         payload.get("schema_version") is not None

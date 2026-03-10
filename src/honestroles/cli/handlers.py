@@ -31,6 +31,13 @@ from honestroles.ingest import (
     validate_ingestion_source,
 )
 from honestroles.plugins.registry import PluginRegistry
+from honestroles.recommend import (
+    build_retrieval_index,
+    evaluate_relevance,
+    match_jobs,
+    record_feedback_event,
+    summarize_feedback,
+)
 from honestroles.reliability import evaluate_reliability
 from honestroles.runtime import HonestRolesRuntime
 
@@ -342,6 +349,56 @@ def handle_ingest_validate(args: argparse.Namespace) -> CommandResult:
     )
     exit_code = 0 if result.report.status in {"pass", "warn"} else 1
     return CommandResult(payload=result.to_payload(), exit_code=exit_code)
+
+
+def handle_recommend_build_index(args: argparse.Namespace) -> CommandResult:
+    result = build_retrieval_index(
+        input_parquet=args.input_parquet,
+        output_dir=args.output_dir,
+        policy_file=getattr(args, "policy_file", None),
+    )
+    return CommandResult(payload=result.to_payload(), exit_code=0)
+
+
+def handle_recommend_match(args: argparse.Namespace) -> CommandResult:
+    result = match_jobs(
+        index_dir=args.index_dir,
+        candidate_json=getattr(args, "candidate_json", None),
+        resume_text=getattr(args, "resume_text", None),
+        profile_id=getattr(args, "profile_id", None),
+        top_k=int(getattr(args, "top_k", 25)),
+        policy_file=getattr(args, "policy_file", None),
+        include_excluded=bool(getattr(args, "include_excluded", False)),
+    )
+    return CommandResult(payload=result.to_payload(), exit_code=0)
+
+
+def handle_recommend_evaluate(args: argparse.Namespace) -> CommandResult:
+    result = evaluate_relevance(
+        index_dir=args.index_dir,
+        golden_set=args.golden_set,
+        thresholds_file=getattr(args, "thresholds_file", None),
+        policy_file=getattr(args, "policy_file", None),
+    )
+    return CommandResult(
+        payload=result.to_payload(),
+        exit_code=0 if result.status == "pass" else 1,
+    )
+
+
+def handle_recommend_feedback_add(args: argparse.Namespace) -> CommandResult:
+    result = record_feedback_event(
+        profile_id=args.profile_id,
+        job_id=args.job_id,
+        event=args.event,
+        meta_json_file=getattr(args, "meta_json_file", None),
+    )
+    return CommandResult(payload=result.to_payload(), exit_code=0)
+
+
+def handle_recommend_feedback_summarize(args: argparse.Namespace) -> CommandResult:
+    result = summarize_feedback(profile_id=getattr(args, "profile_id", None))
+    return CommandResult(payload=result.to_payload(), exit_code=0)
 
 
 def handle_run(args: argparse.Namespace) -> CommandResult:
