@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
+import re
 from typing import Any, Mapping
 import uuid
 
@@ -67,6 +68,8 @@ def _command_key(args: Mapping[str, Any]) -> str:
         return f"eda.{args.get('eda_command', '')}"
     if command == "reliability":
         return f"reliability.{args.get('reliability_command', '')}"
+    if command == "ingest":
+        return f"ingest.{args.get('ingest_command', '')}"
     if command == "runs":
         return f"runs.{args.get('runs_command', '')}"
     return command
@@ -81,6 +84,7 @@ def should_track(args: Mapping[str, Any]) -> bool:
         "eda.diff",
         "eda.gate",
         "reliability.check",
+        "ingest.sync",
     }
 
 
@@ -143,10 +147,23 @@ def _eda_hashes(args: Mapping[str, Any]) -> tuple[str | None, dict[str, str], st
     return input_hash, input_hashes, config_hash
 
 
+def _ingest_hashes(args: Mapping[str, Any]) -> tuple[str | None, dict[str, str], str]:
+    input_hashes: dict[str, str] = {}
+    state_path = _existing_path(args.get("state_file"))
+    if state_path is not None:
+        input_hashes["state_file"] = _hash_file(state_path)
+    args_hash = _args_fingerprint(args)
+    hash_sources = [args_hash] + [input_hashes[key] for key in sorted(input_hashes)]
+    config_hash = _sha256_bytes("|".join(hash_sources).encode("utf-8"))
+    return None, input_hashes, config_hash
+
+
 def compute_hashes(args: Mapping[str, Any]) -> tuple[str | None, dict[str, str], str]:
     command = _command_key(args)
     if command in {"run", "report-quality", "reliability.check"}:
         return _pipeline_related_hashes(args)
+    if command == "ingest.sync":
+        return _ingest_hashes(args)
     if command == "adapter.infer":
         input_hashes: dict[str, str] = {}
         input_path = _existing_path(args.get("input_parquet"))
@@ -183,6 +200,24 @@ def build_artifact_paths(args: Mapping[str, Any], payload: Mapping[str, Any] | N
         )
         output = output_file.expanduser().resolve()
         return {"reliability_artifact": str(output)}
+    if command == "ingest.sync":
+        source = str(args.get("source", "unknown"))
+        source_ref = str(args.get("source_ref", "unknown"))
+        safe_ref = re.sub(r"[^A-Za-z0-9._-]+", "_", source_ref.strip()) or "unknown"
+        default_root = Path("dist/ingest") / source / safe_ref
+        output_file = Path(
+            str(args.get("output_parquet", default_root / "jobs.parquet"))
+        ).expanduser().resolve()
+        report_file = Path(
+            str(args.get("report_file", default_root / "sync_report.json"))
+        ).expanduser().resolve()
+        artifacts = {
+            "output_parquet": str(output_file),
+            "report_file": str(report_file),
+        }
+        if bool(args.get("write_raw", False)):
+            artifacts["raw_file"] = str((default_root / "raw.jsonl").expanduser().resolve())
+        return artifacts
     return {}
 
 

@@ -61,6 +61,23 @@ def _print_runs_table(payload: Mapping[str, Any]) -> None:
         print(f"{run_id:32} {status:6}  {command:15}  {started}")
 
 
+def _print_ingest_table(payload: Mapping[str, Any]) -> None:
+    print(
+        "SYNC source={source} ref={ref} fetched={fetched} normalized={normalized} rows={rows} dedup_dropped={dropped}".format(
+            source=_stringify(payload.get("source")),
+            ref=_stringify(payload.get("source_ref")),
+            fetched=_stringify(payload.get("fetched_count")),
+            normalized=_stringify(payload.get("normalized_count")),
+            rows=_stringify(payload.get("rows_written")),
+            dropped=_stringify(payload.get("dedup_dropped")),
+        )
+    )
+    output_paths = payload.get("output_paths")
+    if isinstance(output_paths, Mapping):
+        for key in sorted(output_paths):
+            print(f"{str(key):20} {_stringify(output_paths[key])}")
+
+
 def emit_payload(payload: Mapping[str, Any], output_format: str) -> None:
     if output_format == "json":
         print(json.dumps(payload, indent=2, sort_keys=True))
@@ -77,6 +94,14 @@ def emit_payload(payload: Mapping[str, Any], output_format: str) -> None:
         return
     if isinstance(payload.get("runs"), list):
         _print_runs_table(payload)
+        return
+    if (
+        payload.get("schema_version") is not None
+        and payload.get("source") is not None
+        and payload.get("source_ref") is not None
+        and payload.get("rows_written") is not None
+    ):
+        _print_ingest_table(payload)
         return
     _print_kv_rows(payload)
 

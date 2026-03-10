@@ -57,6 +57,7 @@ nav:
       - Guides:
           - Configure Pipeline: guides/configure-pipeline.md
           - Run via CLI: guides/run-via-cli.md
+          - Ingest from Public ATS APIs: guides/ingest-public-ats.md
           - Run via Python API: guides/run-via-python-api.md
           - Explore Data with EDA: guides/explore-data-with-eda.md
           - Understand Output: guides/understand-output.md
@@ -65,6 +66,7 @@ nav:
       - Reference:
           - CLI: reference/cli.md
           - Runtime API: reference/runtime-api.md
+          - Ingest Source-Ref Glossary: reference/ingest-source-ref-glossary.md
           - Pipeline Config Schema: reference/pipeline-config-schema.md
           - Reliability Policy Schema: reference/reliability-policy-schema.md
           - EDA Rules Schema: reference/eda-rules-schema.md

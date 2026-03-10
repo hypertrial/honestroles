@@ -38,6 +38,14 @@ from honestroles.eda import (
     load_eda_artifacts,
     load_eda_rules,
 )
+from honestroles.ingest import (
+    IngestionReport,
+    IngestionRequest,
+    IngestionResult,
+    IngestionSource,
+    IngestionStateEntry,
+    sync_source,
+)
 from honestroles.io import (
     AdapterInferenceResult,
     DataQualityAccumulator,
@@ -89,6 +97,11 @@ __all__ = [
     "EDARules",
     "DriftRules",
     "GateRules",
+    "IngestionReport",
+    "IngestionRequest",
+    "IngestionResult",
+    "IngestionSource",
+    "IngestionStateEntry",
     "EDAProfileResult",
     "FilterPlugin",
     "FilterStageContext",
@@ -140,4 +153,5 @@ __all__ = [
     "resolve_source_aliases",
     "validate_source_data_contract",
     "write_parquet",
+    "sync_source",
 ]

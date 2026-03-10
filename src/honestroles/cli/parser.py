@@ -76,6 +76,27 @@ def build_parser() -> argparse.ArgumentParser:
     reliability_check.add_argument("--strict", action="store_true")
     _add_format_arg(reliability_check)
 
+    ingest_parser = sub.add_parser("ingest", help="Ingestion connector operations")
+    ingest_sub = ingest_parser.add_subparsers(dest="ingest_command", required=True)
+    ingest_sync = ingest_sub.add_parser(
+        "sync",
+        help="Fetch public ATS postings and write canonical parquet artifacts",
+    )
+    ingest_sync.add_argument(
+        "--source",
+        required=True,
+        choices=["greenhouse", "lever", "ashby", "workable"],
+    )
+    ingest_sync.add_argument("--source-ref", required=True)
+    ingest_sync.add_argument("--output-parquet", default=None)
+    ingest_sync.add_argument("--report-file", default=None)
+    ingest_sync.add_argument("--state-file", default=".honestroles/ingest/state.json")
+    ingest_sync.add_argument("--write-raw", action="store_true")
+    ingest_sync.add_argument("--max-pages", type=int, default=25)
+    ingest_sync.add_argument("--max-jobs", type=int, default=5000)
+    ingest_sync.add_argument("--full-refresh", action="store_true")
+    _add_format_arg(ingest_sync)
+
     scaffold_parser = sub.add_parser(
         "scaffold-plugin",
         help="Scaffold a plugin package from the bundled template",

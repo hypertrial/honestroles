@@ -11,6 +11,7 @@ $ honestroles --help
 Available commands:
 
 - `run`
+- `ingest sync`
 - `plugins validate`
 - `config validate`
 - `report-quality`
@@ -43,6 +44,7 @@ Structured-output commands default to JSON and accept `--format {json,table}`.
 | `honestroles plugins validate` | `--manifest` | Validates and loads plugin manifest | JSON/table plugin listing |
 | `honestroles config validate` | `--pipeline` | Validates pipeline config | JSON/table normalized config |
 | `honestroles report-quality` | `--pipeline-config`, optional `--plugins` | Runs runtime and computes quality report | JSON/table quality summary |
+| `honestroles ingest sync` | `--source`, `--source-ref`, optional `--output-parquet`, `--report-file`, `--state-file`, `--write-raw`, `--max-pages`, `--max-jobs`, `--full-refresh` | Fetches public ATS postings and writes canonical parquet + sync report artifacts | JSON/table sync summary |
 | `honestroles init` | `--input-parquet`, optional `--pipeline-config`, `--plugins-manifest`, `--output-parquet`, `--sample-rows`, `--force` | Scaffolds pipeline config + plugin manifest from sample data | JSON/table scaffold summary |
 | `honestroles doctor` | `--pipeline-config`, optional `--plugins`, `--sample-rows`, `--policy`, `--strict` | Validates environment, config, schema readiness, output path, and reliability policy thresholds | JSON/table checks + summary |
 | `honestroles reliability check` | `--pipeline-config`, optional `--plugins`, `--sample-rows`, `--policy`, `--output-file`, `--strict` | Runs policy-aware reliability checks and writes gate artifact | JSON/table checks + summary + artifact |
@@ -54,6 +56,33 @@ Structured-output commands default to JSON and accept `--format {json,table}`.
 | `honestroles eda diff` | `--baseline-dir`, `--candidate-dir`, optional `--output-dir`, optional `--rules-file` | Compares two profile artifact dirs and writes diff artifacts (`diff.json`, drift tables) | JSON/table diff summary |
 | `honestroles eda gate` | `--candidate-dir`, optional `--baseline-dir`, optional `--rules-file`, optional `--fail-on`, optional `--warn-on` | Evaluates gate policy and drift thresholds for CI | JSON/table gate summary + exit status |
 | `honestroles eda dashboard` | `--artifacts-dir`, optional `--diff-dir`, optional `--host`, `--port` | Launches Streamlit artifact viewer | Process exit code |
+
+## `ingest sync` Source-Ref and Defaults
+
+`--source-ref` values:
+
+- `greenhouse`: board token
+- `lever`: site/company handle
+- `ashby`: job board name
+- `workable`: subdomain
+
+Default output locations:
+
+- `--output-parquet`: `dist/ingest/<source>/<source_ref>/jobs.parquet`
+- `--report-file`: `dist/ingest/<source>/<source_ref>/sync_report.json`
+- `--state-file`: `.honestroles/ingest/state.json`
+- `--write-raw`: disabled by default; writes `raw.jsonl` when enabled
+
+Ingestion payload fields:
+
+- `schema_version`
+- `status`
+- `source`, `source_ref`
+- `request_count`, `fetched_count`, `normalized_count`, `dedup_dropped`
+- `high_watermark_before`, `high_watermark_after`
+- `output_paths`
+- `output_parquet`, `report_file`, optional `raw_file`
+- `rows_written`
 
 ## Run Lineage
 
@@ -72,6 +101,7 @@ Tracked commands:
 - `eda diff`
 - `eda gate`
 - `reliability check`
+- `ingest sync`
 
 Run schema fields include:
 
@@ -100,6 +130,7 @@ Run schema fields include:
 
 ```bash
 $ honestroles init --input-parquet data/jobs.parquet --pipeline-config pipeline.toml --plugins-manifest plugins.toml
+$ honestroles ingest sync --source greenhouse --source-ref stripe --format table
 $ honestroles doctor --pipeline-config pipeline.toml --plugins plugins.toml --policy reliability.toml --format table
 $ honestroles reliability check --pipeline-config pipeline.toml --plugins plugins.toml --strict --output-file dist/reliability/latest/gate_result.json --format table
 $ honestroles run --pipeline-config pipeline.toml --plugins plugins.toml --format table

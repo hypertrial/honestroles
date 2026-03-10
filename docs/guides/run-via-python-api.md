@@ -14,7 +14,13 @@ Use this for services, orchestration tasks, and integration tests.
 ## Steps
 
 ```python
-from honestroles import HonestRolesRuntime
+from honestroles import HonestRolesRuntime, sync_source
+
+ingest = sync_source(
+    source="greenhouse",
+    source_ref="stripe",
+)
+print(ingest.rows_written, ingest.output_parquet)
 
 runtime = HonestRolesRuntime.from_configs(
     pipeline_config_path="pipeline.toml",

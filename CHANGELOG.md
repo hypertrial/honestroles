@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Added Ingestion Connectors v1:
+  - New `honestroles ingest sync` command to fetch public ATS postings from Greenhouse, Lever, Ashby public postings, and Workable public endpoints.
+  - Added deterministic ingestion pipeline with canonical parquet output, sync report artifact, optional raw JSONL, and incremental sync state.
+  - Added new Python API surface `honestroles.sync_source(...) -> IngestionResult`.
+  - Added deterministic dedup key precedence (`apply_url`/`job_url`, then `source+source_job_id`, then normalized fallback hash).
+  - Added ingestion metadata columns (`source`, `source_ref`, `source_job_id`, `job_url`, `ingested_at_utc`, `source_payload_hash`) to normalized output.
+  - Added lineage tracking for `ingest.sync` runs.
+  - Updated CLI/docs with ingestion command, source-ref glossary, and ingestion troubleshooting guidance.
 - Added Reliability Gate v1:
   - New `honestroles reliability check` command with policy-aware checks and artifact output.
   - Extended `honestroles doctor` with `--policy` and `--strict`.

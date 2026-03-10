@@ -54,6 +54,79 @@ $ honestroles doctor --pipeline-config pipeline.toml --strict --format table
 
 In strict mode, aggregate `warn` becomes exit code `1`.
 
+## `ingest sync` Fails with Invalid `source-ref`
+
+Symptom:
+
+```text
+source-ref may only contain letters, numbers, '.', '_' and '-'
+```
+
+Cause:
+
+- `--source-ref` contains unsupported characters (for example `/` or spaces).
+
+Fix:
+
+Use a valid connector identifier from the source glossary:
+
+```bash
+$ honestroles ingest sync --source greenhouse --source-ref stripe
+```
+
+See [Ingest Source-Ref Glossary](../reference/ingest-source-ref-glossary.md).
+
+## `ingest sync` Hits HTTP 429 / Backoff
+
+Symptom:
+
+- Sync runs slowly and eventually fails with HTTP 429 or transient HTTP errors.
+
+Cause:
+
+- Public endpoint rate limiting or temporary server issues.
+
+Fix:
+
+- Reduce scope with `--max-pages` and/or `--max-jobs`.
+- Re-run after cooldown; retries/backoff are built in for transient failures.
+- Split large sources into separate scheduled runs.
+
+## `ingest sync` Returns Empty Result Set
+
+Symptom:
+
+- `rows_written = 0` with successful status.
+
+Cause:
+
+- No public postings currently available.
+- Incremental state dropped already-seen postings.
+
+Fix:
+
+Run a full refresh to bypass state filtering:
+
+```bash
+$ honestroles ingest sync --source lever --source-ref netflix --full-refresh --format table
+```
+
+## Reset Ingestion State
+
+Symptom:
+
+- You need to reprocess from scratch or state became stale/corrupt.
+
+Fix:
+
+- Use a clean state file path:
+
+```bash
+$ honestroles ingest sync --source ashby --source-ref notion --state-file .honestroles/ingest/state-reset.json
+```
+
+- Or run with `--full-refresh` for one execution.
+
 ## `reliability check` Fails in CI
 
 Symptom:

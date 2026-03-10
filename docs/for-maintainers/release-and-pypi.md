@@ -62,8 +62,8 @@ Important: local `.env` values are not visible to GitHub runners.
 After publish succeeds:
 
 1. Install the released version in a clean environment.
-2. Run `honestroles --help` and confirm commands are present (`init`, `doctor`, `reliability`, `runs`).
-3. Run one lineage-writing command (`run`, `report-quality`, `adapter infer`, `eda`, or `reliability check`) and verify `.honestroles/runs/<run_id>/run.json` is created.
+2. Run `honestroles --help` and confirm commands are present (`init`, `doctor`, `reliability`, `ingest`, `runs`).
+3. Run one lineage-writing command (`run`, `report-quality`, `adapter infer`, `eda`, `reliability check`, or `ingest sync`) and verify `.honestroles/runs/<run_id>/run.json` is created.
 4. If you ran `reliability check`, confirm `dist/reliability/latest/gate_result.json` is written (or your custom `--output-file`).
 
 ## Common Publish Failures

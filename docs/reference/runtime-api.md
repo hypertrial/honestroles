@@ -71,3 +71,31 @@ Diagnostics conditionally include:
 ## Determinism
 
 The runtime seeds Python randomness from `runtime.random_seed` at run start. Fixed inputs/spec/plugins produce stable outputs.
+
+## Ingestion API
+
+Use `sync_source(...)` to ingest public ATS postings into canonical parquet:
+
+```python
+from honestroles import sync_source
+
+result = sync_source(
+    source="greenhouse",
+    source_ref="stripe",
+)
+```
+
+`sync_source(...) -> IngestionResult` fields:
+
+- `report`: `IngestionReport`
+- `output_parquet`: resolved parquet path
+- `report_file`: resolved sync report path
+- `raw_file`: optional raw JSONL path (when `write_raw=True`)
+- `rows_written`: final row count written
+
+Supported `source` values:
+
+- `greenhouse`
+- `lever`
+- `ashby`
+- `workable`

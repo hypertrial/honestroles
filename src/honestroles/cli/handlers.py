@@ -25,6 +25,7 @@ from honestroles.io import (
     infer_source_adapter,
     read_parquet,
 )
+from honestroles.ingest import sync_source
 from honestroles.plugins.registry import PluginRegistry
 from honestroles.reliability import evaluate_reliability
 from honestroles.runtime import HonestRolesRuntime
@@ -283,6 +284,21 @@ def handle_reliability_check(args: argparse.Namespace) -> CommandResult:
         has_config_input_error=evaluation.has_config_input_error,
     )
     return CommandResult(payload=payload, exit_code=exit_code)
+
+
+def handle_ingest_sync(args: argparse.Namespace) -> CommandResult:
+    result = sync_source(
+        source=args.source,
+        source_ref=args.source_ref,
+        output_parquet=args.output_parquet,
+        report_file=args.report_file,
+        state_file=args.state_file,
+        write_raw=bool(args.write_raw),
+        max_pages=args.max_pages,
+        max_jobs=args.max_jobs,
+        full_refresh=bool(args.full_refresh),
+    )
+    return CommandResult(payload=result.to_payload())
 
 
 def handle_run(args: argparse.Namespace) -> CommandResult:

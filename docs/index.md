@@ -32,6 +32,7 @@ If your goal is to use HonestRoles (not build integrations), start here:
 ## Developer Paths
 
 - Run with the CLI: [Run via CLI](guides/run-via-cli.md)
+- Ingest from public ATS APIs: [Ingest from Public ATS APIs](guides/ingest-public-ats.md)
 - Run with Python: [Run via Python API](guides/run-via-python-api.md)
 - Read outputs and diagnostics: [Understand Output](guides/understand-output.md)
 - Handle failures and recovery: [Non-Fail-Fast and Recovery](guides/non-fail-fast-and-recovery.md)
@@ -41,6 +42,7 @@ If your goal is to use HonestRoles (not build integrations), start here:
 
 - CLI commands and exit codes: [CLI Reference](reference/cli.md)
 - Runtime API: [Runtime API](reference/runtime-api.md)
+- Connector source-ref map: [Ingest Source-Ref Glossary](reference/ingest-source-ref-glossary.md)
 - Pipeline schema: [Pipeline Config Schema](reference/pipeline-config-schema.md)
 - Reliability policy schema: [Reliability Policy Schema](reference/reliability-policy-schema.md)
 - Plugin schema and ABI: [Plugin Manifest Schema](reference/plugin-manifest-schema.md)
