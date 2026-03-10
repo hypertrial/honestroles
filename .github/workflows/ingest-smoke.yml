@@ -10,7 +10,7 @@ on:
       lever_ref:
         description: "Lever site/company handle"
         required: true
-        default: "lever"
+        default: "plaid"
       ashby_ref:
         description: "Ashby public job board name"
         required: true
@@ -18,7 +18,7 @@ on:
       workable_ref:
         description: "Workable company subdomain"
         required: true
-        default: "microsoft"
+        default: "skroutz"
 
 jobs:
   precommit_fast:

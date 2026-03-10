@@ -25,7 +25,7 @@ $ honestroles init --input-parquet examples/jobs_sample.parquet --pipeline-confi
 $ honestroles doctor --pipeline-config /tmp/pipeline.toml --format table
 $ honestroles reliability check --pipeline-config /tmp/pipeline.toml --strict --format table
 $ honestroles ingest validate --source greenhouse --source-ref stripe --quality-policy ingest_quality.toml --format table
-$ honestroles ingest sync --source greenhouse --source-ref stripe --max-pages 1 --max-jobs 50 --quality-policy ingest_quality.toml --merge-policy updated_hash --retain-snapshots 30 --prune-inactive-days 90 --format table
+$ honestroles ingest sync --source greenhouse --source-ref stripe --max-pages 1 --max-jobs 50 --quality-policy ingest_quality.toml --strict-quality --merge-policy updated_hash --retain-snapshots 30 --prune-inactive-days 90 --format table
 ```
 
 Optional batch smoke (if using ingestion manifests):
@@ -48,15 +48,15 @@ Local equivalent command:
 
 ```bash
 $ export HONESTROLES_SMOKE_GREENHOUSE_REF=stripe
-$ export HONESTROLES_SMOKE_LEVER_REF=lever
+$ export HONESTROLES_SMOKE_LEVER_REF=plaid
 $ export HONESTROLES_SMOKE_ASHBY_REF=notion
-$ export HONESTROLES_SMOKE_WORKABLE_REF=your-company
+$ export HONESTROLES_SMOKE_WORKABLE_REF=skroutz
 $ PYTHON_BIN=.venv/bin/python bash scripts/run_ingest_smoke.sh
 ```
 
 This flow runs only `smoke`-marked live integration tests and is intentionally isolated from deterministic CI and coverage gates.
 Smoke assertions require non-empty outputs per source (`rows_written > 0` and parquet
-height > 0), so keep refs current before triggering the workflow.
+height > 0) and strict quality pass, so keep refs current before triggering the workflow.
 
 ## Publish (Manual, API Token)
 

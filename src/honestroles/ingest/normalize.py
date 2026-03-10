@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import html
 import hashlib
 import json
+import re
 from typing import Any, Mapping
 
 import polars as pl
@@ -64,6 +66,13 @@ def _normalize_one(raw: Mapping[str, Any], *, source: str, source_ref: str) -> d
     base = extractor(raw)
     base["source"] = source
     base["source_ref"] = source_ref
+    base["company"] = _text_or_none(base.get("company")) or _text_or_none(source_ref)
+    base["description_text"] = _normalize_description_text(
+        base.get("description_text"),
+        base.get("description_html"),
+    )
+    base["posted_at"] = _resolve_posted_at(source=source, raw=raw, current=base.get("posted_at"))
+    base["remote"] = _normalize_remote_flag(base.get("remote"), base.get("work_mode"), base.get("location"))
     base["source_job_id"] = _text_or_none(base.get("source_job_id"))
     base["job_url"] = _text_or_none(base.get("job_url") or base.get("apply_url"))
     base["source_updated_at"] = _coerce_timestamp(base.get("source_updated_at"))
@@ -82,7 +91,11 @@ def _extract_greenhouse(raw: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "id": _text_or_none(raw.get("id")),
         "title": _text_or_none(raw.get("title")),
-        "company": _text_or_none(raw.get("company") or raw.get("office")),
+        "company": _text_or_none(
+            raw.get("company_name")
+            or raw.get("company")
+            or raw.get("office")
+        ),
         "location": location,
         "remote": _infer_remote(location),
         "description_text": _text_or_none(raw.get("content")),
@@ -91,7 +104,11 @@ def _extract_greenhouse(raw: Mapping[str, Any]) -> dict[str, Any]:
         "salary_min": None,
         "salary_max": None,
         "apply_url": _text_or_none(raw.get("absolute_url")),
-        "posted_at": _coerce_timestamp(raw.get("updated_at") or raw.get("created_at")),
+        "posted_at": _coerce_timestamp(
+            raw.get("first_published")
+            or raw.get("updated_at")
+            or raw.get("created_at")
+        ),
         "source_updated_at": _coerce_timestamp(raw.get("updated_at")),
         "work_mode": _infer_work_mode(location),
         "salary_currency": _text_or_none(raw.get("currency")),
@@ -109,19 +126,22 @@ def _extract_lever(raw: Mapping[str, Any]) -> dict[str, Any]:
     company = None
     if isinstance(categories, Mapping):
         location = _text_or_none(categories.get("location"))
-        company = _text_or_none(categories.get("team"))
+        company = _text_or_none(categories.get("organization")) or _text_or_none(
+            categories.get("team")
+        )
     created_at = raw.get("createdAt")
     if isinstance(created_at, (int, float)):
         created_text = datetime.fromtimestamp(float(created_at) / 1000.0, tz=UTC).isoformat()
     else:
         created_text = _coerce_timestamp(created_at)
     apply_url = _text_or_none(raw.get("hostedUrl") or raw.get("applyUrl"))
+    workplace_type = _text_or_none(raw.get("workplaceType"))
     return {
         "id": _text_or_none(raw.get("id")),
         "title": _text_or_none(raw.get("text") or raw.get("title")),
-        "company": company,
+        "company": _text_or_none(raw.get("company")) or company,
         "location": location,
-        "remote": _infer_remote(location),
+        "remote": _normalize_remote_flag(None, workplace_type, location),
         "description_text": _text_or_none(raw.get("descriptionPlain") or raw.get("description")),
         "description_html": _text_or_none(raw.get("description")),
         "skills": (),
@@ -129,8 +149,10 @@ def _extract_lever(raw: Mapping[str, Any]) -> dict[str, Any]:
         "salary_max": None,
         "apply_url": apply_url,
         "posted_at": created_text,
-        "source_updated_at": _coerce_timestamp(raw.get("updatedAt") or raw.get("createdAt")),
-        "work_mode": _infer_work_mode(location),
+        "source_updated_at": _coerce_timestamp_or_epoch(
+            raw.get("updatedAt") or raw.get("createdAt")
+        ),
+        "work_mode": _infer_work_mode(workplace_type or location),
         "salary_currency": _text_or_none(raw.get("salaryCurrency")),
         "salary_interval": _text_or_none(raw.get("salaryInterval")),
         "employment_type": _text_or_none(raw.get("categories", {}).get("commitment"))
@@ -151,25 +173,35 @@ def _extract_ashby(raw: Mapping[str, Any]) -> dict[str, Any]:
         or raw.get("locationLabel")
     )
     apply_url = _text_or_none(raw.get("jobUrl") or raw.get("jobPostUrl") or raw.get("applyUrl"))
+    workplace_type = _text_or_none(raw.get("workplaceType"))
+    is_remote = _coerce_bool(raw.get("isRemote"))
+    company = _text_or_none(raw.get("companyName")) or _text_or_none(raw.get("organizationName"))
+    if company is None and isinstance(raw.get("team"), Mapping):
+        company = _text_or_none(raw["team"].get("name"))
     return {
         "id": _text_or_none(raw.get("id") or raw.get("jobId")),
         "title": _text_or_none(raw.get("title") or raw.get("jobTitle")),
-        "company": _text_or_none(raw.get("companyName")),
+        "company": company,
         "location": location,
-        "remote": _infer_remote(location),
-        "description_text": _text_or_none(raw.get("description") or raw.get("descriptionText")),
-        "description_html": _text_or_none(raw.get("descriptionHtml") or raw.get("description")),
+        "remote": _normalize_remote_flag(is_remote, workplace_type, location),
+        "description_text": _text_or_none(
+            raw.get("descriptionPlain") or raw.get("descriptionText") or raw.get("description")
+        ),
+        "description_html": _text_or_none(
+            raw.get("descriptionHtml") or raw.get("description")
+        ),
         "skills": (),
         "salary_min": _coerce_float(raw.get("salaryMin")),
         "salary_max": _coerce_float(raw.get("salaryMax")),
         "apply_url": apply_url,
         "posted_at": _coerce_timestamp(
-            raw.get("publishedDate")
+            raw.get("publishedAt")
+            or raw.get("publishedDate")
             or raw.get("updatedAt")
             or raw.get("postedAt")
         ),
-        "source_updated_at": _coerce_timestamp(raw.get("updatedAt")),
-        "work_mode": _infer_work_mode(location),
+        "source_updated_at": _coerce_timestamp(raw.get("updatedAt") or raw.get("publishedAt")),
+        "work_mode": _infer_work_mode(workplace_type or location),
         "salary_currency": _text_or_none(raw.get("salaryCurrency")),
         "salary_interval": _text_or_none(raw.get("salaryInterval")),
         "employment_type": _text_or_none(raw.get("employmentType")),
@@ -188,28 +220,38 @@ def _extract_workable(raw: Mapping[str, Any]) -> dict[str, Any]:
             or raw["location"].get("country")
         )
     location = location or _text_or_none(raw.get("location"))
+    if location is None:
+        location = _location_from_workable(raw)
     apply_url = _text_or_none(raw.get("url") or raw.get("apply_url"))
+    telecommuting = _coerce_bool(raw.get("telecommuting"))
     return {
-        "id": _text_or_none(raw.get("shortcode") or raw.get("id")),
+        "id": _text_or_none(raw.get("code") or raw.get("shortcode") or raw.get("id")),
         "title": _text_or_none(raw.get("title")),
         "company": _text_or_none(raw.get("account") or raw.get("company")),
         "location": location,
-        "remote": _infer_remote(location),
+        "remote": _normalize_remote_flag(telecommuting, None, location),
         "description_text": _text_or_none(raw.get("description") or raw.get("description_plain")),
         "description_html": _text_or_none(raw.get("description")),
         "skills": (),
         "salary_min": _coerce_float(raw.get("salary_min")),
         "salary_max": _coerce_float(raw.get("salary_max")),
-        "apply_url": apply_url,
-        "posted_at": _coerce_timestamp(raw.get("published") or raw.get("updated_at")),
-        "source_updated_at": _coerce_timestamp(raw.get("updated_at")),
-        "work_mode": _infer_work_mode(location),
+        "apply_url": _text_or_none(raw.get("application_url")) or apply_url,
+        "posted_at": _coerce_timestamp(
+            raw.get("published_on")
+            or raw.get("published")
+            or raw.get("updated_at")
+            or raw.get("created_at")
+        ),
+        "source_updated_at": _coerce_timestamp(
+            raw.get("updated_at") or raw.get("created_at") or raw.get("published_on")
+        ),
+        "work_mode": _infer_work_mode("remote" if telecommuting else location),
         "salary_currency": _text_or_none(raw.get("salary_currency_code")),
         "salary_interval": _text_or_none(raw.get("salary_interval")),
         "employment_type": _text_or_none(raw.get("employment_type")),
-        "seniority": _text_or_none(raw.get("experience_level")),
-        "source_job_id": _text_or_none(raw.get("shortcode") or raw.get("id")),
-        "job_url": apply_url,
+        "seniority": _text_or_none(raw.get("experience_level") or raw.get("experience")),
+        "source_job_id": _text_or_none(raw.get("code") or raw.get("shortcode") or raw.get("id")),
+        "job_url": _text_or_none(raw.get("url") or raw.get("shortlink") or apply_url),
     }
 
 
@@ -285,6 +327,8 @@ def _empty_normalized_frame() -> pl.DataFrame:
 
 
 def _infer_remote(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
     text = _text_or_none(value)
     if text is None:
         return None
@@ -297,6 +341,8 @@ def _infer_remote(value: object) -> bool | None:
 
 
 def _infer_work_mode(value: object) -> str:
+    if isinstance(value, bool):
+        return "remote" if value else "onsite"
     text = _text_or_none(value)
     if text is None:
         return "unknown"
@@ -317,6 +363,96 @@ def _normalize_work_mode(value: object, location: object) -> str:
         if mode != "unknown":
             return mode
     return _infer_work_mode(location)
+
+
+def _normalize_remote_flag(value: object, work_mode: object, location: object) -> bool | None:
+    direct = _infer_remote(value)
+    if direct is not None:
+        return direct
+    mode = _infer_work_mode(work_mode)
+    if mode == "remote":
+        return True
+    if mode in {"hybrid", "onsite"}:
+        return False
+    return _infer_remote(location)
+
+
+def _location_from_workable(raw: Mapping[str, Any]) -> str | None:
+    parts = [
+        _text_or_none(raw.get("city")),
+        _text_or_none(raw.get("state")),
+        _text_or_none(raw.get("country")),
+    ]
+    composed = ", ".join(part for part in parts if part)
+    if composed:
+        return composed
+    locations = raw.get("locations")
+    if isinstance(locations, list):
+        labels: list[str] = []
+        for item in locations:
+            if isinstance(item, Mapping):
+                label = _text_or_none(
+                    item.get("location_str") or item.get("name") or item.get("city")
+                )
+                if label:
+                    labels.append(label)
+            else:
+                label = _text_or_none(item)
+                if label:
+                    labels.append(label)
+        if labels:
+            return ", ".join(labels)
+    return None
+
+
+def _normalize_description_text(text_value: object, html_value: object) -> str | None:
+    text = _text_or_none(text_value)
+    if text is not None:
+        return text
+    html_text = _text_or_none(html_value)
+    if html_text is None:
+        return None
+    # HTML snippets are common across connectors; stripping tags keeps deterministic plain text.
+    stripped = re.sub(r"<[^>]+>", " ", html_text)
+    unescaped = html.unescape(stripped)
+    cleaned = re.sub(r"\s+", " ", unescaped).strip()
+    return cleaned or None
+
+
+def _resolve_posted_at(
+    *,
+    source: str,
+    raw: Mapping[str, Any],
+    current: object,
+) -> str | None:
+    posted = _coerce_timestamp(current)
+    if posted is not None:
+        return posted
+    source_candidates: dict[str, tuple[str, ...]] = {
+        "greenhouse": ("first_published", "updated_at", "created_at"),
+        "lever": ("createdAt", "updatedAt"),
+        "ashby": ("publishedAt", "publishedDate", "updatedAt", "postedAt"),
+        "workable": ("published_on", "published", "updated_at", "created_at"),
+    }
+    for key in source_candidates.get(source, ("posted_at", "updated_at", "created_at")):
+        candidate = _coerce_timestamp(raw.get(key))
+        if candidate is not None:
+            return candidate
+    return None
+
+
+def _coerce_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    text = _text_or_none(value)
+    if text is None:
+        return None
+    lowered = text.lower()
+    if lowered in {"true", "1", "yes", "y"}:
+        return True
+    if lowered in {"false", "0", "no", "n"}:
+        return False
+    return None
 
 
 def _text_or_none(value: object) -> str | None:
@@ -355,6 +491,15 @@ def _coerce_timestamp(value: object) -> str | None:
     else:
         parsed = parsed.astimezone(UTC)
     return parsed.isoformat()
+
+
+def _coerce_timestamp_or_epoch(value: object) -> str | None:
+    if isinstance(value, (int, float)):
+        raw = float(value)
+        if abs(raw) > 1_000_000_000_000:
+            raw = raw / 1000.0
+        return datetime.fromtimestamp(raw, tz=UTC).isoformat()
+    return _coerce_timestamp(value)
 
 
 def _payload_hash(raw: Mapping[str, Any]) -> str:

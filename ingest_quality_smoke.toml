@@ -23,5 +23,5 @@ description_text = 0.10
 posted_at = 0.10
 
 [freshness]
-posted_at_max_age_days = 365
-source_updated_at_max_age_days = 730
+posted_at_max_age_days = 36500
+source_updated_at_max_age_days = 36500

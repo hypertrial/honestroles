@@ -60,6 +60,7 @@ def test_quality_policy_loader_and_hash(tmp_path: Path, monkeypatch: pytest.Monk
 schema_version = "1.0"
 min_rows = 2
 required_columns = ["id", "title", "posted_at"]
+location_or_remote_signal_min = 0.75
 [null_thresholds]
 title = 0.5
 [freshness]
@@ -71,6 +72,7 @@ source_updated_at_max_age_days = 60
     loaded, loaded_source, loaded_hash = ingest_quality.load_ingest_quality_policy(policy_file)
     assert loaded.min_rows == 2
     assert loaded.required_columns == ("id", "title", "posted_at")
+    assert loaded.location_or_remote_signal_min == 0.75
     assert loaded_source == str(policy_file.resolve())
     assert len(loaded_hash) == 64
 
@@ -102,6 +104,8 @@ def test_quality_policy_validation_errors(tmp_path: Path) -> None:
         ('[freshness]\nunknown = 1', "unknown freshness keys"),
         ('[freshness]\nposted_at_max_age_days = "x"', "freshness.posted_at_max_age_days must be integer"),
         ('[freshness]\nposted_at_max_age_days = -1', "freshness.posted_at_max_age_days must be >= 0"),
+        ('location_or_remote_signal_min = "x"', "location_or_remote_signal_min must be numeric"),
+        ("location_or_remote_signal_min = 2", "location_or_remote_signal_min must be within"),
     ]
     for index, (body, message) in enumerate(cases):
         path = tmp_path / f"case-{index}.toml"
@@ -129,7 +133,7 @@ def test_quality_evaluator_and_helpers() -> None:
     records[1]["source_updated_at"] = recent
     result = ingest_quality.evaluate_ingest_quality(records, policy=policy, now_utc=now)
     assert result.status == "warn"
-    assert "INGEST_QUALITY_NULL_RATE" in result.check_codes
+    assert "INGEST_QUALITY_NULL_RATE_TITLE" in result.check_codes
     assert "INGEST_QUALITY_POSTED_AT_PARSEABLE" in result.check_codes
     assert result.summary["warn"] > 0
 
@@ -141,6 +145,32 @@ def test_quality_evaluator_and_helpers() -> None:
         [_record()], policy=none_fresh_policy, now_utc=now
     )
     assert "INGEST_QUALITY_POSTED_AT_FRESHNESS" not in none_fresh.check_codes
+
+    signal_warn = ingest_quality.evaluate_ingest_quality(
+        [
+            {
+                "id": "1",
+                "title": "t",
+                "apply_url": "https://jobs.example/1",
+                "source": "greenhouse",
+                "source_ref": "stripe",
+                "source_job_id": "1",
+                "source_payload_hash": "h1",
+                "location": None,
+                "remote": None,
+                "work_mode": "unknown",
+            }
+        ],
+        policy=ingest_quality.IngestQualityPolicy(
+            required_columns=(),
+            null_thresholds={},
+            location_or_remote_signal_min=0.85,
+            posted_at_max_age_days=None,
+            source_updated_at_max_age_days=None,
+        ),
+        now_utc=now,
+    )
+    assert "INGEST_QUALITY_LOCATION_OR_REMOTE_SIGNAL" in signal_warn.check_codes
 
     empty_parse = ingest_quality.evaluate_ingest_quality(
         [{"posted_at": " ", "source_updated_at": " "}],
@@ -172,6 +202,7 @@ def test_quality_evaluator_and_helpers() -> None:
     assert ingest_quality._parse_freshness(None)["posted_at_max_age_days"] is not None
     parsed_freshness = ingest_quality._parse_freshness({"posted_at_max_age_days": None})
     assert parsed_freshness["posted_at_max_age_days"] is not None
+    assert ingest_quality._parse_ratio(0.5, field_name="x", default=0.1) == 0.5
 
 
 def test_quality_fail_status_branch(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -195,6 +226,27 @@ def test_quality_fail_status_branch(monkeypatch: pytest.MonkeyPatch) -> None:
         now_utc=datetime.now(UTC),
     )
     assert result.status == "fail"
+
+
+def test_quality_check_codes_are_unique_when_duplicate_codes_emitted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = ingest_quality._quality_check
+
+    def fake_quality_check(**kwargs: Any) -> dict[str, Any]:
+        out = original(**kwargs)
+        out["status"] = "warn"
+        out["severity"] = "warn"
+        out["code"] = "DUPLICATE_CODE"
+        return out
+
+    monkeypatch.setattr(ingest_quality, "_quality_check", fake_quality_check)
+    result = ingest_quality.evaluate_ingest_quality(
+        [_record()],
+        policy=ingest_quality.IngestQualityPolicy(required_columns=("id",), null_thresholds={}),
+        now_utc=datetime.now(UTC),
+    )
+    assert result.check_codes == ("DUPLICATE_CODE",)
 
 
 def test_sync_source_strict_quality_gate_and_validate(tmp_path: Path) -> None:
@@ -230,7 +282,7 @@ title = 0.0
         assert not (tmp_path / "latest.parquet").exists()
         assert strict.report_file.exists()
         assert strict.raw_file is not None and strict.raw_file.exists()
-        assert "INGEST_QUALITY_NULL_RATE" in strict.check_codes
+        assert "INGEST_QUALITY_NULL_RATE_POSTED_AT" in strict.check_codes
 
         strict_no_raw = ingest_service.sync_source(
             source="greenhouse",
@@ -264,6 +316,7 @@ schema_version = "1.0"
 min_rows = 1
 required_columns = ["id"]
 null_thresholds = {}
+location_or_remote_signal_min = 0.0
 [freshness]
 posted_at_max_age_days = 9999
 source_updated_at_max_age_days = 9999
@@ -303,6 +356,91 @@ source_updated_at_max_age_days = 9999
         assert validate_fail.report.status == "fail"
     finally:
         ingest_service._SOURCE_FETCHERS["greenhouse"] = original
+
+
+@pytest.mark.parametrize(
+    ("source", "raw_record"),
+    (
+        (
+            "greenhouse",
+            {
+                "id": "g-1",
+                "title": "Engineer",
+                "absolute_url": "https://jobs.example/g-1",
+                "company_name": "Stripe",
+                "first_published": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-01-01T00:00:00Z",
+                "content": "<p>desc</p>",
+                "location": {"name": "Remote"},
+            },
+        ),
+        (
+            "lever",
+            {
+                "id": "l-1",
+                "text": "Engineer",
+                "hostedUrl": "https://jobs.lever.co/acme/l-1",
+                "categories": {"location": "Remote", "team": "Eng"},
+                "workplaceType": "remote",
+                "descriptionPlain": "desc",
+                "createdAt": 1767225600000,
+            },
+        ),
+        (
+            "ashby",
+            {
+                "id": "a-1",
+                "title": "Engineer",
+                "jobUrl": "https://jobs.ashbyhq.com/acme/a-1",
+                "publishedAt": "2026-01-01T00:00:00Z",
+                "descriptionPlain": "desc",
+                "isRemote": True,
+                "workplaceType": "remote",
+            },
+        ),
+        (
+            "workable",
+            {
+                "code": "w-1",
+                "title": "Engineer",
+                "url": "https://jobs.workable.com/acme/j/w-1",
+                "application_url": "https://apply.workable.com/acme/j/w-1",
+                "published_on": "2026-01-01T00:00:00Z",
+                "description": "<p>desc</p>",
+                "city": "Athens",
+                "country": "GR",
+                "telecommuting": True,
+            },
+        ),
+    ),
+)
+def test_sync_source_strict_quality_passes_with_smoke_policy(
+    tmp_path: Path,
+    source: str,
+    raw_record: dict[str, Any],
+) -> None:
+    original = ingest_service._SOURCE_FETCHERS[source]
+    ingest_service._SOURCE_FETCHERS[source] = (
+        lambda _source_ref, *, max_pages, max_jobs, http_get_json: ([raw_record], 1, ())
+    )
+    policy_file = Path(__file__).resolve().parents[1] / "ingest_quality_smoke.toml"
+    try:
+        result = ingest_service.sync_source(
+            source=source,
+            source_ref="acme",
+            output_parquet=tmp_path / f"{source}.parquet",
+            report_file=tmp_path / f"{source}.json",
+            state_file=tmp_path / f"{source}.state.json",
+            strict_quality=True,
+            quality_policy_file=policy_file,
+            full_refresh=True,
+        )
+    finally:
+        ingest_service._SOURCE_FETCHERS[source] = original
+    assert result.report.status == "pass"
+    assert result.report.quality_status == "pass"
+    assert result.report.key_field_completeness["company_non_null_pct"] >= 95.0
+    assert result.report.key_field_completeness["posted_at_non_null_pct"] >= 95.0
 
 
 def test_sync_source_page_repeat_warning_marks_coverage_incomplete(tmp_path: Path) -> None:
@@ -890,6 +1028,88 @@ source_ref = "stripe"
     monkeypatch.setattr(ingest_service, "sync_source", lambda **_kwargs: sync_result)
     batch = ingest_service.sync_sources_from_manifest(manifest_path=manifest_path)
     assert batch.quality_summary == {"pass": 0, "warn": 0, "fail": 0}
+
+
+def test_sync_all_key_field_completeness_aggregation_edges(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    manifest_path = tmp_path / "ingest.toml"
+    manifest_path.write_text(
+        """
+[[sources]]
+source = "greenhouse"
+source_ref = "stripe"
+
+[[sources]]
+source = "lever"
+source_ref = "netflix"
+
+[[sources]]
+source = "ashby"
+source_ref = "notion"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    class _FakeResult:
+        def __init__(self, payload: dict[str, Any]) -> None:
+            self._payload = payload
+
+        def to_payload(self) -> dict[str, Any]:
+            return dict(self._payload)
+
+    def fake_sync_source(**kwargs: Any) -> _FakeResult:
+        source = kwargs["source"]
+        base = {
+            "schema_version": INGEST_SCHEMA_VERSION,
+            "status": "pass",
+            "source": source,
+            "source_ref": kwargs["source_ref"],
+            "rows_written": 1,
+            "fetched_count": 1,
+            "request_count": 1,
+            "normalized_count": 1,
+            "quality_status": "pass",
+            "quality_summary": {"pass": 1, "warn": 0, "fail": 0},
+            "check_codes": [],
+        }
+        if source == "greenhouse":
+            base["key_field_completeness"] = "bad"
+        elif source == "lever":
+            base["rows_written"] = 0
+            base["normalized_count"] = 0
+            base["key_field_completeness"] = {"company_non_null_pct": 50.0}
+        else:
+            base["rows_written"] = 2
+            base["key_field_completeness"] = {
+                "company_non_null_pct": "bad",
+                "posted_at_non_null_pct": "80.0",
+            }
+        return _FakeResult(base)
+
+    monkeypatch.setattr(ingest_service, "sync_source", fake_sync_source)
+    batch = ingest_service.sync_sources_from_manifest(manifest_path=manifest_path)
+    assert batch.status == "pass"
+    assert batch.fail_count == 0
+    assert batch.key_field_completeness == {"posted_at_non_null_pct": 80.0}
+    assert ingest_service._safe_int(None) == 0
+    assert ingest_service._safe_int("bad") == 0
+    assert ingest_service._aggregate_key_field_completeness({}, total_weight=0) == {}
+    assert (
+        ingest_service._key_field_completeness(
+            [
+                {
+                    "company": None,
+                    "posted_at": "2026-01-01T00:00:00Z",
+                    "description_text": "desc",
+                    "location": None,
+                    "remote": None,
+                    "work_mode": None,
+                }
+            ]
+        )["location_or_remote_signal_pct"]
+        == 0.0
+    )
 
 
 def test_validate_ingestion_source_wraps_unexpected_errors(tmp_path: Path) -> None:

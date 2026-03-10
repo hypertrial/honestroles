@@ -1,1 +1,1 @@
-{"jobs": [{"id": 1, "title": "Engineer", "absolute_url": "https://boards.greenhouse.io/acme/jobs/1", "location": {"name": "Remote"}, "updated_at": "2026-01-01T00:00:00Z"}]}
+{"jobs": [{"id": 1, "title": "Engineer", "company_name": "Acme", "absolute_url": "https://boards.greenhouse.io/acme/jobs/1", "location": {"name": "Remote"}, "updated_at": "2026-01-01T00:00:00Z", "first_published": "2026-01-01T00:00:00Z", "content": "<p>Role description</p>"}]}

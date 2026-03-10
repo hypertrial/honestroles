@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Added Ingestion Data Quality Recovery v1:
+  - Corrected connector normalization mappings for Greenhouse, Lever, Ashby, and Workable to improve `company`, `posted_at`, `description_text`, and remote/location coverage.
+  - Added shared normalization fallbacks for company identity (`source_ref`), source-specific posted timestamp fallback chains, and deterministic HTML-to-text conversion.
+  - Hardened ingest quality defaults with stricter null thresholds and a new `location_or_remote_signal_min` policy gate.
+  - Switched null-rate check codes to deterministic column-specific codes (for example `INGEST_QUALITY_NULL_RATE_COMPANY`).
+  - Added additive ingestion observability metric `key_field_completeness` to per-source reports and batch aggregates, and surfaced it in lineage ingest metrics.
+  - Added repository smoke quality policy (`ingest_quality_smoke.toml`) and enforced strict-quality gating in live ingestion smoke tests.
+  - Updated ingestion docs/reference/troubleshooting/maintainer runbook for new quality checks, mappings, and smoke expectations.
 - Added Ingestion Reliability Hotfix Bundle:
   - Fixed URL dedup keying to preserve identity query params (`gh_jid`, `job_id`, `jobid`, `posting_id`, `position_id`) while still dropping tracking params.
   - Added Greenhouse repeated-page detection (`INGEST_PAGE_REPEAT_DETECTED`) with coverage-incomplete semantics.

@@ -74,7 +74,7 @@ $ honestroles report-quality --pipeline-config pipeline.toml --plugins plugins.t
 $ honestroles runs list --limit 20 --format table
 $ honestroles runs list --command reliability.check --since 2026-01-01T00:00:00Z --contains-code POLICY_NULL_RATE --format table
 $ honestroles runs list --command ingest.sync-all --since 2026-01-01T00:00:00Z --format table
-$ honestroles runs list --command ingest.validate --since 2026-01-01T00:00:00Z --contains-code INGEST_QUALITY_NULL_RATE --format table
+$ honestroles runs list --command ingest.validate --since 2026-01-01T00:00:00Z --contains-code INGEST_QUALITY_NULL_RATE_COMPANY --format table
 $ honestroles runs show --run-id <run_id>
 ```
 

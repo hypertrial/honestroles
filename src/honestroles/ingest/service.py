@@ -101,6 +101,7 @@ class _PreparedRecords:
     quality_result: IngestQualityResult
     quality_policy_source: str
     quality_policy_hash: str
+    key_field_completeness: dict[str, float]
 
 
 def sync_source(
@@ -162,6 +163,7 @@ def sync_source(
     quality_policy_source = "builtin"
     quality_policy_hash: str | None = None
     warning_codes: set[str] = set()
+    key_field_completeness: dict[str, float] = {}
 
     telemetry = _HttpTelemetry()
     fetch_fn = (
@@ -212,6 +214,7 @@ def sync_source(
         quality_result = prepared.quality_result
         quality_policy_source = prepared.quality_policy_source
         quality_policy_hash = prepared.quality_policy_hash
+        key_field_completeness = prepared.key_field_completeness
         warning_codes.update(prepared.warning_codes)
         warning_codes.update(quality_result.check_codes)
 
@@ -243,6 +246,7 @@ def sync_source(
                 quality_status=quality_result.status,
                 quality_summary=quality_result.summary,
                 quality_check_codes=quality_result.check_codes,
+                key_field_completeness=key_field_completeness,
                 stage_timings_ms=stage_timings_ms,
                 warnings=tuple(sorted(warning_codes)),
                 merge_policy=merge_policy,
@@ -342,6 +346,7 @@ def sync_source(
             quality_status=quality_result.status,
             quality_summary=quality_result.summary,
             quality_check_codes=quality_result.check_codes,
+            key_field_completeness=key_field_completeness,
             stage_timings_ms=stage_timings_ms,
             warnings=tuple(sorted(warning_codes)),
             merge_policy=merge_policy,
@@ -386,6 +391,7 @@ def sync_source(
             merge_policy=merge_policy,
             quality_policy_source=quality_policy_source,
             quality_policy_hash=quality_policy_hash,
+            key_field_completeness=key_field_completeness,
         )
         raise
     except Exception as exc:
@@ -410,6 +416,7 @@ def sync_source(
             merge_policy=merge_policy,
             quality_policy_source=quality_policy_source,
             quality_policy_hash=quality_policy_hash,
+            key_field_completeness=key_field_completeness,
         )
         raise wrapped from exc
 
@@ -539,6 +546,7 @@ def validate_ingestion_source(
             quality_status=quality_status,
             quality_summary=prepared.quality_result.summary,
             quality_check_codes=prepared.quality_result.check_codes,
+            key_field_completeness=prepared.key_field_completeness,
             stage_timings_ms=stage_timings_ms,
             warnings=tuple(sorted(warning_codes)),
             merge_policy="updated_hash",
@@ -663,6 +671,7 @@ def _prepare_records(
     quality_started = perf_counter()
     quality_result = evaluate_ingest_quality(records=deduped_records, policy=policy)
     stage_timings_ms["quality"] = _elapsed_ms(quality_started)
+    key_field_completeness = _key_field_completeness(deduped_records)
 
     coverage_complete = _is_coverage_complete(
         request_count=request_count,
@@ -691,6 +700,7 @@ def _prepare_records(
         quality_result=quality_result,
         quality_policy_source=quality_policy_source,
         quality_policy_hash=quality_policy_hash,
+        key_field_completeness=key_field_completeness,
     )
 
 
@@ -712,6 +722,8 @@ def sync_sources_from_manifest(
     total_request_count = 0
     quality_summary = {"pass": 0, "warn": 0, "fail": 0}
     warnings: set[str] = set()
+    key_field_weighted_sums: dict[str, float] = {}
+    key_field_total_weight = 0.0
 
     enabled_sources = [item for item in manifest.sources if item.enabled]
     for source_cfg in enabled_sources:
@@ -729,6 +741,23 @@ def sync_sources_from_manifest(
                 quality_summary[quality_status] += 1
             for code in payload.get("check_codes", []):
                 warnings.add(str(code))
+            completeness = payload.get("key_field_completeness")
+            if isinstance(completeness, dict):
+                weight = float(
+                    _safe_int(payload.get("rows_written"))
+                    or _safe_int(payload.get("normalized_count"))
+                )
+                if weight > 0:
+                    key_field_total_weight += weight
+                    for key, value in completeness.items():
+                        try:
+                            parsed = float(value)
+                        except (TypeError, ValueError):
+                            continue
+                        key = str(key)
+                        key_field_weighted_sums[key] = (
+                            key_field_weighted_sums.get(key, 0.0) + parsed * weight
+                        )
         except Exception as exc:
             fail_count += 1
             fail_payload = {
@@ -769,6 +798,10 @@ def sync_sources_from_manifest(
         total_fetched_count=total_fetched_count,
         total_request_count=total_request_count,
         quality_summary=quality_summary,
+        key_field_completeness=_aggregate_key_field_completeness(
+            key_field_weighted_sums,
+            total_weight=key_field_total_weight,
+        ),
         sources=tuple(source_payloads),
         stage_timings_ms={"total": _elapsed_ms(total_started)},
         report_file=batch_report_path,
@@ -1203,6 +1236,7 @@ def _write_failure_report(
     merge_policy: IngestionMergePolicy = "updated_hash",
     quality_policy_source: str = "builtin",
     quality_policy_hash: str | None = None,
+    key_field_completeness: dict[str, float] | None = None,
 ) -> None:
     finished_at = datetime.now(UTC)
     effective_quality = (
@@ -1230,6 +1264,7 @@ def _write_failure_report(
         quality_status=effective_quality.status,
         quality_summary=effective_quality.summary,
         quality_check_codes=effective_quality.check_codes,
+        key_field_completeness=key_field_completeness or {},
         stage_timings_ms=stage_timings_ms or {},
         warnings=warning_codes,
         merge_policy=merge_policy,
@@ -1250,3 +1285,69 @@ def _elapsed_ms(started: float) -> int:
 
 def _duration_ms(started: datetime, finished: datetime) -> int:
     return int((finished - started).total_seconds() * 1000)
+
+
+def _safe_int(value: object) -> int:
+    try:
+        if value is None:
+            return 0
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _key_field_completeness(records: list[dict[str, Any]]) -> dict[str, float]:
+    total = float(len(records))
+    if total == 0:
+        return {
+            "company_non_null_pct": 0.0,
+            "posted_at_non_null_pct": 0.0,
+            "description_text_non_null_pct": 0.0,
+            "location_or_remote_signal_pct": 0.0,
+        }
+
+    company_non_null = 0
+    posted_non_null = 0
+    description_non_null = 0
+    location_or_remote_signal = 0
+    for record in records:
+        if _text_or_none(record.get("company")) is not None:
+            company_non_null += 1
+        if _text_or_none(record.get("posted_at")) is not None:
+            posted_non_null += 1
+        if _text_or_none(record.get("description_text")) is not None:
+            description_non_null += 1
+        if _has_location_or_remote_signal(record):
+            location_or_remote_signal += 1
+
+    return {
+        "company_non_null_pct": round((company_non_null / total) * 100.0, 3),
+        "posted_at_non_null_pct": round((posted_non_null / total) * 100.0, 3),
+        "description_text_non_null_pct": round((description_non_null / total) * 100.0, 3),
+        "location_or_remote_signal_pct": round((location_or_remote_signal / total) * 100.0, 3),
+    }
+
+
+def _has_location_or_remote_signal(record: Mapping[str, Any]) -> bool:
+    if _text_or_none(record.get("location")) is not None:
+        return True
+    remote = record.get("remote")
+    if isinstance(remote, bool):
+        return True
+    mode = _text_or_none(record.get("work_mode"))
+    if mode is None:
+        return False
+    return mode.lower() in {"remote", "hybrid", "onsite"}
+
+
+def _aggregate_key_field_completeness(
+    weighted_sums: Mapping[str, float],
+    *,
+    total_weight: float,
+) -> dict[str, float]:
+    if total_weight <= 0:
+        return {}
+    return {
+        key: round(value / total_weight, 3)
+        for key, value in sorted(weighted_sums.items())
+    }

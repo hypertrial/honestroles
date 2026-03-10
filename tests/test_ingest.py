@@ -475,7 +475,14 @@ def test_source_connectors_shapes_and_errors() -> None:
 
 def test_normalize_records_and_dataframe_paths() -> None:
     now = datetime.now(UTC).isoformat()
-    greenhouse = {"id": 1, "title": "T", "location": {"name": "Remote"}, "absolute_url": "https://a"}
+    greenhouse = {
+        "id": 1,
+        "title": "T",
+        "location": {"name": "Remote"},
+        "absolute_url": "https://a",
+        "company_name": "Stripe",
+        "first_published": now,
+    }
     lever = {
         "id": "2",
         "text": "L",
@@ -484,8 +491,32 @@ def test_normalize_records_and_dataframe_paths() -> None:
         "hostedUrl": "https://b",
         "createdAt": 1_700_000_000_000,
     }
-    ashby = {"jobId": "3", "jobTitle": "A", "jobUrl": "https://c", "publishedDate": now}
-    workable = {"shortcode": "4", "title": "W", "url": "https://d", "location": {"location_str": "Hybrid"}}
+    ashby = {
+        "jobId": "3",
+        "jobTitle": "A",
+        "jobUrl": "https://c",
+        "publishedAt": now,
+        "descriptionPlain": "plain",
+        "descriptionHtml": "<p>plain</p>",
+        "isRemote": True,
+    }
+    workable = {
+        "shortcode": "4",
+        "code": "WB-4",
+        "title": "W",
+        "url": "https://d",
+        "application_url": "https://apply.d",
+        "city": "Lisbon",
+        "country": "PT",
+        "telecommuting": False,
+        "published_on": now,
+    }
+    workable_nested_location = {
+        "shortcode": "6",
+        "title": "W3",
+        "url": "https://d3",
+        "location": {"city": "Porto"},
+    }
     workable_text_location = {"shortcode": "5", "title": "W2", "url": "https://d2", "location": "Remote"}
     generic = {"id": "5", "title": "G", "url": "https://e", "posted_at": "bad-time"}
 
@@ -498,10 +529,18 @@ def test_normalize_records_and_dataframe_paths() -> None:
     assert rows[0]["source_payload_hash"]
     assert rows[0]["remote"] is True
     assert rows[0]["job_url"] == "https://a"
+    assert rows[0]["company"] == "Stripe"
+    assert rows[0]["posted_at"] is not None
 
     assert ingest_normalize._extract_lever(lever)["company"] == "Ops"
     assert ingest_normalize._extract_ashby(ashby)["title"] == "A"
+    assert ingest_normalize._extract_ashby(ashby)["description_text"] == "plain"
+    assert ingest_normalize._extract_ashby({"id": "a", "team": {"name": "Core"}})["company"] == "Core"
     assert ingest_normalize._extract_workable(workable)["remote"] is False
+    assert ingest_normalize._extract_workable(workable)["apply_url"] == "https://apply.d"
+    assert ingest_normalize._extract_workable(workable)["source_job_id"] == "WB-4"
+    assert ingest_normalize._extract_workable(workable)["location"] == "Lisbon, PT"
+    assert ingest_normalize._extract_workable(workable_nested_location)["location"] == "Porto"
     assert ingest_normalize._extract_workable(workable_text_location)["remote"] is True
     assert ingest_normalize._extract_generic(generic)["posted_at"] == "bad-time"
     assert ingest_normalize._ensure_metadata_columns(pl.DataFrame({"id": ["1"]})).height == 1
@@ -511,9 +550,50 @@ def test_normalize_records_and_dataframe_paths() -> None:
     assert ingest_normalize._coerce_timestamp("2026-01-01T00:00:00Z") is not None
     assert ingest_normalize._coerce_timestamp("2026-01-01T00:00:00").endswith("+00:00")
     assert ingest_normalize._coerce_timestamp("bad") == "bad"
+    assert ingest_normalize._coerce_timestamp_or_epoch(1_700_000_000_000) is not None
+    assert ingest_normalize._coerce_timestamp_or_epoch(1_700_000_000) is not None
+    assert ingest_normalize._coerce_bool("yes") is True
+    assert ingest_normalize._coerce_bool("no") is False
+    assert ingest_normalize._coerce_bool("maybe") is None
+    assert ingest_normalize._normalize_description_text(None, "<p>A&nbsp;B</p>") == "A B"
     assert ingest_normalize._infer_remote("onsite") is False
     assert ingest_normalize._infer_remote("unknown") is None
+    assert ingest_normalize._infer_remote(True) is True
+    assert ingest_normalize._infer_work_mode(False) == "onsite"
+    assert ingest_normalize._normalize_remote_flag(None, "hybrid", None) is False
+    assert (
+        ingest_normalize._location_from_workable(
+            {"locations": [{"name": "Lisbon"}, "Porto"]}
+        )
+        == "Lisbon, Porto"
+    )
+    assert ingest_normalize._location_from_workable({"locations": [{}, "   "]}) is None
+    assert ingest_normalize._location_from_workable({}) is None
     assert ingest_normalize._text_or_none(" ") is None
+    assert (
+        ingest_normalize._resolve_posted_at(
+            source="workable",
+            raw={"created_at": "2026-01-01T00:00:00Z"},
+            current=None,
+        )
+        is not None
+    )
+
+    generic_rows = ingest_normalize.normalize_records(
+        [
+            {
+                "id": "g-1",
+                "title": "Generic",
+                "description_html": "<p>hello&nbsp;world</p>",
+                "url": "https://example.com/jobs/1",
+            }
+        ],
+        source="unknown",
+        source_ref="fallback-company",
+        ingested_at_utc=now,
+    )
+    assert generic_rows[0]["company"] == "fallback-company"
+    assert generic_rows[0]["description_text"] == "hello world"
 
     frame = ingest_normalize.normalized_dataframe(
         ingest_normalize.normalize_records(

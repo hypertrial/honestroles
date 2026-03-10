@@ -296,6 +296,7 @@ def _ingest_metrics(
             "rows_written": _safe_int(payload.get("rows_written")),
             "quality_status": str(payload.get("quality_status", "pass")),
             "quality_summary": payload.get("quality_summary", {}),
+            "key_field_completeness": payload.get("key_field_completeness", {}),
             "stage_timings_ms": payload.get("stage_timings_ms", {}),
             "warnings": payload.get("warnings", []),
         }
@@ -308,6 +309,7 @@ def _ingest_metrics(
             "total_fetched_count": _safe_int(payload.get("total_fetched_count")),
             "total_rows_written": _safe_int(payload.get("total_rows_written")),
             "quality_summary": payload.get("quality_summary", {}),
+            "key_field_completeness": payload.get("key_field_completeness", {}),
             "stage_timings_ms": payload.get("stage_timings_ms", {}),
         }
     if command == "ingest.validate":
@@ -318,6 +320,7 @@ def _ingest_metrics(
             "rows_evaluated": _safe_int(payload.get("rows_evaluated")),
             "quality_status": str(payload.get("quality_status", "pass")),
             "quality_summary": payload.get("quality_summary", {}),
+            "key_field_completeness": payload.get("key_field_completeness", {}),
             "stage_timings_ms": payload.get("stage_timings_ms", {}),
             "warnings": payload.get("warnings", []),
         }

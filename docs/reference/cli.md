@@ -94,6 +94,7 @@ Default batch report location:
 - `skipped_by_state`, `tombstoned_count`, `coverage_complete`
 - `retry_count`, `http_status_counts`
 - `quality_status`, `quality_summary`, `quality_check_codes`
+- `key_field_completeness` (`company_non_null_pct`, `posted_at_non_null_pct`, `description_text_non_null_pct`, `location_or_remote_signal_pct`)
 - `stage_timings_ms`, `warnings`
 - warning codes can include:
   - `INGEST_TRUNCATED` (run hit limits or could not fully cover source)
@@ -110,6 +111,7 @@ Default batch report location:
 - `source`, `source_ref`
 - `request_count`, `fetched_count`, `normalized_count`, `dedup_dropped`
 - `quality_status`, `quality_summary`, `quality_check_codes`
+- `key_field_completeness`
 - `rows_evaluated`
 - `stage_timings_ms`, `warnings`
 - `output_paths` (validation report, optional raw JSONL)
@@ -122,6 +124,7 @@ Default batch report location:
 - `total_sources`, `pass_count`, `fail_count`
 - `total_rows_written`, `total_fetched_count`, `total_request_count`
 - `quality_summary`
+- `key_field_completeness` (weighted aggregate across successful source runs)
 - `stage_timings_ms`
 - `sources` (one entry per attempted source)
 - `report_file`

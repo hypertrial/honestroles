@@ -111,6 +111,7 @@ Additive request controls:
 Additive result/report fields include:
 
 - `quality_status`, `quality_summary`, `quality_check_codes`
+- `key_field_completeness` (`company_non_null_pct`, `posted_at_non_null_pct`, `description_text_non_null_pct`, `location_or_remote_signal_pct`)
 - `stage_timings_ms`, `warnings`
 - `merge_policy`, `retained_snapshot_count`, `pruned_snapshot_count`, `pruned_inactive_count`
 - `quality_policy_source`, `quality_policy_hash`
@@ -147,6 +148,7 @@ print(batch.status, batch.total_sources, batch.fail_count)
 - per-source payloads under `sources`
 - aggregate totals (`total_rows_written`, `total_fetched_count`, `total_request_count`)
 - aggregate quality summary (`quality_summary`)
+- aggregate key field completeness (`key_field_completeness`)
 - `report_file`
 
 Supported `source` values:

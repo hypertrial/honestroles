@@ -53,6 +53,9 @@ def test_greenhouse_connector_fixture_pagination_and_normalization() -> None:
         "seniority",
     ):
         assert key in row
+    assert row["company"] == "Acme"
+    assert row["posted_at"] is not None
+    assert row["description_text"] is not None
     assert row["work_mode"] in {"remote", "hybrid", "onsite", "unknown"}
 
 
@@ -88,6 +91,23 @@ def test_lever_connector_fixture_pagination_and_malformed_payload() -> None:
     assert request_count == 2
     assert len(jobs) == 1
     assert warnings == ()
+    normalized = normalize_records(
+        [
+            {
+                "id": "x",
+                "text": "Analyst",
+                "hostedUrl": "https://jobs.lever.co/acme/x",
+                "categories": {"location": "NYC", "team": "Data"},
+                "workplaceType": "remote",
+                "createdAt": 1767225600000,
+            }
+        ],
+        source="lever",
+        source_ref="acme",
+        ingested_at_utc=datetime.now(UTC).isoformat(),
+    )
+    assert normalized[0]["remote"] is True
+    assert normalized[0]["work_mode"] == "remote"
     with pytest.raises(ConfigValidationError, match="array or object"):
         fetch_lever_jobs("acme", max_pages=1, max_jobs=10, http_get_json=lambda _u: {"bad": 1})
 
@@ -111,6 +131,26 @@ def test_ashby_connector_fixture_loop_protection_and_partial_payload() -> None:
         ingested_at_utc=datetime.now(UTC).isoformat(),
     )
     assert normalized[0]["source_job_id"] == "x"
+    rich = normalize_records(
+        [
+            {
+                "id": "a-1",
+                "title": "PM",
+                "jobUrl": "https://jobs.ashbyhq.com/acme/a-1",
+                "publishedAt": "2026-01-01T00:00:00Z",
+                "descriptionPlain": "plain",
+                "descriptionHtml": "<p>plain</p>",
+                "isRemote": True,
+                "workplaceType": "remote",
+            }
+        ],
+        source="ashby",
+        source_ref="acme",
+        ingested_at_utc=datetime.now(UTC).isoformat(),
+    )
+    assert rich[0]["posted_at"] is not None
+    assert rich[0]["description_text"] == "plain"
+    assert rich[0]["remote"] is True
 
 
 def test_workable_connector_fixture_public_endpoints_and_payload_validation() -> None:
@@ -133,5 +173,26 @@ def test_workable_connector_fixture_public_endpoints_and_payload_validation() ->
     assert request_count == 3
     assert len(jobs) == 1
     assert warnings == ()
+    normalized = normalize_records(
+        [
+            {
+                "code": "WB-1",
+                "title": "Ops",
+                "url": "https://jobs.workable.com/acme/j/WB-1",
+                "application_url": "https://apply.workable.com/acme/j/WB-1",
+                "city": "Athens",
+                "country": "GR",
+                "published_on": "2026-01-01T00:00:00Z",
+                "telecommuting": True,
+            }
+        ],
+        source="workable",
+        source_ref="acme",
+        ingested_at_utc=datetime.now(UTC).isoformat(),
+    )
+    assert normalized[0]["company"] == "acme"
+    assert normalized[0]["posted_at"] is not None
+    assert normalized[0]["location"] == "Athens, GR"
+    assert normalized[0]["remote"] is True
     with pytest.raises(ConfigValidationError, match="'jobs' array"):
         fetch_workable_jobs("acme", max_pages=1, max_jobs=10, http_get_json=lambda _u: {"x": []})

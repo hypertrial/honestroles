@@ -147,6 +147,13 @@ $ honestroles ingest validate --source greenhouse --source-ref stripe --quality-
 $ honestroles ingest sync --source greenhouse --source-ref stripe --quality-policy ingest_quality.toml --strict-quality --format table
 ```
 
+Common ingestion quality codes and fixes:
+
+- `INGEST_QUALITY_NULL_RATE_COMPANY`: map company fields (for example `company_name`) or use source fallback.
+- `INGEST_QUALITY_NULL_RATE_POSTED_AT`: map `publishedAt|first_published|published_on|created_at`.
+- `INGEST_QUALITY_NULL_RATE_DESCRIPTION_TEXT`: map plain-text description field or rely on HTML fallback.
+- `INGEST_QUALITY_LOCATION_OR_REMOTE_SIGNAL`: map at least one of `location`, `remote`, or `work_mode`.
+
 ## `ingest sync` Returns Empty Result Set
 
 Symptom:

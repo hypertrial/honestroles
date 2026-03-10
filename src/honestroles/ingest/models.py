@@ -105,6 +105,7 @@ class IngestionReport:
     quality_status: str = "pass"
     quality_summary: dict[str, int] = field(default_factory=dict)
     quality_check_codes: tuple[str, ...] = field(default_factory=tuple)
+    key_field_completeness: dict[str, float] = field(default_factory=dict)
     stage_timings_ms: dict[str, int] = field(default_factory=dict)
     warnings: tuple[str, ...] = field(default_factory=tuple)
     merge_policy: IngestionMergePolicy = "updated_hash"
@@ -144,6 +145,10 @@ class IngestionReport:
                 str(key): int(value) for key, value in sorted(self.quality_summary.items())
             },
             "quality_check_codes": list(self.quality_check_codes),
+            "key_field_completeness": {
+                str(key): float(value)
+                for key, value in sorted(self.key_field_completeness.items())
+            },
             "stage_timings_ms": {
                 str(key): int(value) for key, value in sorted(self.stage_timings_ms.items())
             },
@@ -272,6 +277,7 @@ class BatchIngestionResult:
     quality_summary: dict[str, int] = field(
         default_factory=lambda: {"pass": 0, "warn": 0, "fail": 0}
     )
+    key_field_completeness: dict[str, float] = field(default_factory=dict)
     sources: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     stage_timings_ms: dict[str, int] = field(default_factory=dict)
     report_file: Path | None = None
@@ -292,6 +298,10 @@ class BatchIngestionResult:
             "total_request_count": self.total_request_count,
             "quality_summary": {
                 str(key): int(value) for key, value in sorted(self.quality_summary.items())
+            },
+            "key_field_completeness": {
+                str(key): float(value)
+                for key, value in sorted(self.key_field_completeness.items())
             },
             "stage_timings_ms": {
                 str(key): int(value) for key, value in sorted(self.stage_timings_ms.items())

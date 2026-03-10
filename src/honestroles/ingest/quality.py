@@ -25,10 +25,15 @@ _DEFAULT_REQUIRED_COLUMNS: tuple[str, ...] = (
 )
 
 _DEFAULT_NULL_THRESHOLDS: dict[str, float] = {
-    "id": 0.05,
-    "title": 0.20,
-    "apply_url": 0.40,
+    "id": 0.00,
+    "title": 0.00,
+    "apply_url": 0.00,
+    "source_job_id": 0.00,
+    "company": 0.05,
+    "description_text": 0.10,
+    "posted_at": 0.10,
 }
+_DEFAULT_LOCATION_OR_REMOTE_SIGNAL_MIN = 0.85
 
 _DEFAULT_POSTED_AT_MAX_AGE_DAYS = 365
 _DEFAULT_SOURCE_UPDATED_AT_MAX_AGE_DAYS = 730
@@ -39,6 +44,7 @@ _POLICY_ALLOWED_ROOT_KEYS = {
     "required_columns",
     "null_thresholds",
     "freshness",
+    "location_or_remote_signal_min",
 }
 _POLICY_ALLOWED_FRESHNESS_KEYS = {
     "posted_at_max_age_days",
@@ -53,6 +59,7 @@ class IngestQualityPolicy:
     null_thresholds: dict[str, float] = field(
         default_factory=lambda: dict(_DEFAULT_NULL_THRESHOLDS)
     )
+    location_or_remote_signal_min: float = _DEFAULT_LOCATION_OR_REMOTE_SIGNAL_MIN
     posted_at_max_age_days: int | None = _DEFAULT_POSTED_AT_MAX_AGE_DAYS
     source_updated_at_max_age_days: int | None = _DEFAULT_SOURCE_UPDATED_AT_MAX_AGE_DAYS
 
@@ -65,6 +72,7 @@ class IngestQualityPolicy:
                 str(key): float(value)
                 for key, value in sorted(self.null_thresholds.items())
             },
+            "location_or_remote_signal_min": float(self.location_or_remote_signal_min),
             "freshness": {
                 "posted_at_max_age_days": self.posted_at_max_age_days,
                 "source_updated_at_max_age_days": self.source_updated_at_max_age_days,
@@ -121,11 +129,17 @@ def load_ingest_quality_policy(
         default=_DEFAULT_REQUIRED_COLUMNS,
     )
     null_thresholds = _parse_null_thresholds(raw.get("null_thresholds"))
+    location_or_remote_signal_min = _parse_ratio(
+        raw.get("location_or_remote_signal_min"),
+        field_name="location_or_remote_signal_min",
+        default=_DEFAULT_LOCATION_OR_REMOTE_SIGNAL_MIN,
+    )
     freshness = _parse_freshness(raw.get("freshness"))
     policy = IngestQualityPolicy(
         min_rows=min_rows,
         required_columns=required_columns,
         null_thresholds=null_thresholds,
+        location_or_remote_signal_min=location_or_remote_signal_min,
         posted_at_max_age_days=freshness["posted_at_max_age_days"],
         source_updated_at_max_age_days=freshness["source_updated_at_max_age_days"],
     )
@@ -198,7 +212,7 @@ def evaluate_ingest_quality(
         checks.append(
             _quality_check(
                 check_id=f"quality.null_rate.{column}",
-                code="INGEST_QUALITY_NULL_RATE",
+                code=_null_rate_code(column),
                 ok=ratio <= threshold,
                 message=(
                     f"{column} null rate {ratio:.3f} <= {threshold:.3f}"
@@ -212,6 +226,33 @@ def evaluate_ingest_quality(
                 ),
             )
         )
+
+    signal_count = 0
+    for record in records:
+        if _has_location_or_remote_signal(record):
+            signal_count += 1
+    signal_ratio = (signal_count / row_count) if row_count > 0 else 0.0
+    signal_ok = signal_ratio >= policy.location_or_remote_signal_min
+    checks.append(
+        _quality_check(
+            check_id="quality.location_or_remote_signal",
+            code="INGEST_QUALITY_LOCATION_OR_REMOTE_SIGNAL",
+            ok=signal_ok,
+            message=(
+                "location_or_remote_signal "
+                f"{signal_ratio:.3f} >= {policy.location_or_remote_signal_min:.3f}"
+                if signal_ok
+                else "location_or_remote_signal "
+                f"{signal_ratio:.3f} below {policy.location_or_remote_signal_min:.3f}"
+            ),
+            fix=(
+                "improve connector mapping for location/remote/work_mode or relax "
+                "location_or_remote_signal_min in ingest_quality.toml"
+                if not signal_ok
+                else None
+            ),
+        )
+    )
 
     checks.extend(
         _timestamp_quality_checks(
@@ -359,6 +400,22 @@ def _quality_check(
     return payload
 
 
+def _null_rate_code(column: str) -> str:
+    return f"INGEST_QUALITY_NULL_RATE_{column.strip().upper()}"
+
+
+def _has_location_or_remote_signal(record: dict[str, Any]) -> bool:
+    if not _is_missing(record.get("location")):
+        return True
+    remote = record.get("remote")
+    if isinstance(remote, bool):
+        return True
+    mode = _text_or_none(record.get("work_mode"))
+    if mode is None:
+        return False
+    return mode.lower() in {"remote", "hybrid", "onsite"}
+
+
 def _is_missing(value: object) -> bool:
     if value is None:
         return True
@@ -417,6 +474,17 @@ def _parse_string_list(
             )
         out.append(item.strip())
     return tuple(out)
+
+
+def _parse_ratio(value: object, *, field_name: str, default: float) -> float:
+    if value is None:
+        return float(default)
+    if not isinstance(value, (int, float)):
+        raise ConfigValidationError(f"ingest quality policy: {field_name} must be numeric")
+    ratio = float(value)
+    if ratio < 0 or ratio > 1:
+        raise ConfigValidationError(f"ingest quality policy: {field_name} must be within [0, 1]")
+    return ratio
 
 
 def _parse_null_thresholds(value: object) -> dict[str, float]:

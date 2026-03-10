@@ -12,6 +12,7 @@ from honestroles.ingest.normalize import INGEST_METADATA_FIELDS
 from honestroles.schema import CANONICAL_SOURCE_FIELDS
 
 _RUN_SMOKE_ENV = "HONESTROLES_RUN_INGEST_SMOKE"
+_SMOKE_POLICY = Path(__file__).resolve().parent.parent / "ingest_quality_smoke.toml"
 _SOURCE_REF_ENV_BY_SOURCE: dict[str, str] = {
     "greenhouse": "HONESTROLES_SMOKE_GREENHOUSE_REF",
     "lever": "HONESTROLES_SMOKE_LEVER_REF",
@@ -65,12 +66,16 @@ def test_ingest_sync_live_source_end_to_end(
             "50",
             "--full-refresh",
             "--write-raw",
+            "--quality-policy",
+            str(_SMOKE_POLICY),
+            "--strict-quality",
         ]
     )
     assert code == 0
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "pass"
+    assert payload["quality_status"] == "pass"
     assert payload["source"] == source
     assert payload["source_ref"] == source_ref
     assert int(payload["request_count"]) >= 1
@@ -81,6 +86,13 @@ def test_ingest_sync_live_source_end_to_end(
 
     report_payload = json.loads(report_file.read_text(encoding="utf-8"))
     assert report_payload["status"] == "pass"
+    assert report_payload["quality_status"] == "pass"
+    blocked_codes = {
+        "INGEST_QUALITY_NULL_RATE_COMPANY",
+        "INGEST_QUALITY_NULL_RATE_POSTED_AT",
+        "INGEST_QUALITY_NULL_RATE_DESCRIPTION_TEXT",
+    }
+    assert blocked_codes.isdisjoint(set(report_payload.get("quality_check_codes", [])))
     assert report_payload["source"] == source
     assert report_payload["source_ref"] == source_ref
     assert int(report_payload["duration_ms"]) >= 0

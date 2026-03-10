@@ -55,6 +55,9 @@ $ honestroles ingest validate \
   --format table
 ```
 
+For manual live smoke checks, use `ingest_quality_smoke.toml` to keep quality gates
+strict while relaxing freshness windows for long-lived archived postings.
+
 4. Optional: use batch ingestion with `ingest.toml`:
 
 ```toml
@@ -131,6 +134,13 @@ Incremental semantics:
 - Catalog compaction prunes inactive rows older than `prune_inactive_days`.
 - Quality policy checks run before latest overwrite; with `--strict-quality`, non-pass quality fails the command.
 - URL dedup preserves identity query keys (`gh_jid`, `job_id`, `jobid`, `posting_id`, `position_id`) and removes tracking params.
+
+Normalization highlights by connector:
+
+- `greenhouse`: `company_name -> company`, `first_published|updated_at -> posted_at`, `content -> description_text`.
+- `lever`: `workplaceType -> remote/work_mode`, `categories.organization|team -> company` fallback.
+- `ashby`: `publishedAt -> posted_at`, `descriptionPlain -> description_text`, `isRemote/workplaceType -> remote/work_mode`.
+- `workable`: `published_on|created_at -> posted_at`, `application_url -> apply_url`, `city/state/country/locations -> location`, `telecommuting -> remote`.
 
 ## Next steps
 

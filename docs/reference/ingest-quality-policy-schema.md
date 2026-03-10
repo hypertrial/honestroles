@@ -16,6 +16,7 @@ Top-level keys:
 - `schema_version` (optional, default `"1.0"`)
 - `min_rows` (optional integer, `>= 1`)
 - `required_columns` (optional non-empty string array)
+- `location_or_remote_signal_min` (optional number in `[0, 1]`, default `0.85`)
 - `null_thresholds` (optional table, values in `[0, 1]`)
 - `freshness` (optional table)
 
@@ -39,11 +40,16 @@ required_columns = [
   "source_job_id",
   "source_payload_hash",
 ]
+location_or_remote_signal_min = 0.85
 
 [null_thresholds]
-id = 0.05
-title = 0.20
-apply_url = 0.40
+id = 0.00
+title = 0.00
+apply_url = 0.00
+source_job_id = 0.00
+company = 0.05
+description_text = 0.10
+posted_at = 0.10
 
 [freshness]
 posted_at_max_age_days = 365
@@ -56,7 +62,14 @@ Quality checks emit stable codes:
 
 - `INGEST_QUALITY_REQUIRED_COLUMNS`
 - `INGEST_QUALITY_MIN_ROWS`
-- `INGEST_QUALITY_NULL_RATE`
+- `INGEST_QUALITY_NULL_RATE_ID`
+- `INGEST_QUALITY_NULL_RATE_TITLE`
+- `INGEST_QUALITY_NULL_RATE_APPLY_URL`
+- `INGEST_QUALITY_NULL_RATE_SOURCE_JOB_ID`
+- `INGEST_QUALITY_NULL_RATE_COMPANY`
+- `INGEST_QUALITY_NULL_RATE_DESCRIPTION_TEXT`
+- `INGEST_QUALITY_NULL_RATE_POSTED_AT`
+- `INGEST_QUALITY_LOCATION_OR_REMOTE_SIGNAL`
 - `INGEST_QUALITY_POSTED_AT_PARSEABLE`
 - `INGEST_QUALITY_POSTED_AT_FRESHNESS`
 - `INGEST_QUALITY_SOURCE_UPDATED_AT_PARSEABLE`
