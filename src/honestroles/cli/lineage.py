@@ -78,6 +78,12 @@ def _command_key(args: Mapping[str, Any]) -> str:
             feedback_command = str(args.get("recommend_feedback_command", ""))
             return f"recommend.feedback.{feedback_command}"
         return f"recommend.{recommend_command}"
+    if command == "publish":
+        target = str(args.get("publish_target", ""))
+        subcommand = str(args.get("publish_neondb_command", ""))
+        if target and subcommand:
+            return f"publish.{target}.{subcommand}"
+        return f"publish.{target}".rstrip(".")
     return command
 
 
@@ -98,6 +104,9 @@ def should_track(args: Mapping[str, Any]) -> bool:
         "recommend.evaluate",
         "recommend.feedback.add",
         "recommend.feedback.summarize",
+        "publish.neondb.migrate",
+        "publish.neondb.sync",
+        "publish.neondb.verify",
     }
 
 
@@ -207,6 +216,19 @@ def compute_hashes(args: Mapping[str, Any]) -> tuple[str | None, dict[str, str],
             "|".join([_args_fingerprint(args)] + [input_hashes[key] for key in sorted(input_hashes)]).encode("utf-8")
         )
         return None, input_hashes, config_hash
+    if command.startswith("publish.neondb."):
+        input_hashes: dict[str, str] = {}
+        for key in ("jobs_parquet", "index_dir", "sync_report"):
+            path = _existing_path(args.get(key))
+            if path is not None:
+                input_hashes[key] = _hash_input_path(path)
+        config_hash = _sha256_bytes(
+            "|".join(
+                [_args_fingerprint(args)]
+                + [input_hashes[key] for key in sorted(input_hashes)]
+            ).encode("utf-8")
+        )
+        return None, input_hashes, config_hash
     if command.startswith("eda."):
         return _eda_hashes(args)
     return None, {}, _args_fingerprint(args)
@@ -297,6 +319,22 @@ def build_artifact_paths(args: Mapping[str, Any], payload: Mapping[str, Any] | N
     if command == "recommend.feedback.summarize":
         root = (Path.cwd() / ".honestroles" / "recommend" / "feedback").resolve()
         return {"events_file": str(root / "events.jsonl")}
+    if command == "publish.neondb.migrate":
+        return {}
+    if command == "publish.neondb.sync":
+        artifacts: dict[str, str] = {}
+        jobs_path = args.get("jobs_parquet")
+        if jobs_path not in (None, ""):
+            artifacts["jobs_parquet"] = str(Path(str(jobs_path)).expanduser().resolve())
+        index_dir = args.get("index_dir")
+        if index_dir not in (None, ""):
+            artifacts["index_dir"] = str(Path(str(index_dir)).expanduser().resolve())
+        sync_report = args.get("sync_report")
+        if sync_report not in (None, ""):
+            artifacts["sync_report"] = str(Path(str(sync_report)).expanduser().resolve())
+        return artifacts
+    if command == "publish.neondb.verify":
+        return {}
     return {}
 
 
@@ -319,6 +357,7 @@ def create_record(
             check_codes = [str(code) for code in raw_codes if str(code).strip()]
     ingest_metrics = _ingest_metrics(_command_key(args), payload)
     recommend_metrics = _recommend_metrics(_command_key(args), payload)
+    publish_metrics = _publish_metrics(_command_key(args), payload)
     return {
         "schema_version": _SCHEMA_VERSION,
         "run_id": run_id,
@@ -334,6 +373,7 @@ def create_record(
         "check_codes": check_codes,
         "ingest_metrics": ingest_metrics,
         "recommend_metrics": recommend_metrics,
+        "publish_metrics": publish_metrics,
         "error": dict(error) if error is not None else None,
     }
 
@@ -422,6 +462,36 @@ def _recommend_metrics(
             "profile_id": payload.get("profile_id"),
             "total_events": _safe_int(payload.get("total_events")),
             "counts": payload.get("counts", {}),
+        }
+    return None
+
+
+def _publish_metrics(
+    command: str,
+    payload: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    if payload is None:
+        return None
+    if command == "publish.neondb.migrate":
+        return {
+            "schema": payload.get("schema"),
+            "migrations_total": _safe_int(payload.get("migrations_total")),
+            "migrations_applied": payload.get("migrations_applied", []),
+        }
+    if command == "publish.neondb.sync":
+        return {
+            "schema": payload.get("schema"),
+            "batch_id": payload.get("batch_id"),
+            "inserted_count": _safe_int(payload.get("inserted_count")),
+            "updated_count": _safe_int(payload.get("updated_count")),
+            "deactivated_count": _safe_int(payload.get("deactivated_count")),
+            "active_jobs": _safe_int(payload.get("active_jobs")),
+            "quality_gate_status": payload.get("quality_gate_status"),
+        }
+    if command == "publish.neondb.verify":
+        return {
+            "schema": payload.get("schema"),
+            "check_codes": payload.get("check_codes", []),
         }
     return None
 

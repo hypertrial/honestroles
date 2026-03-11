@@ -1,0 +1,56 @@
+name: NeonDB Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      schema:
+        description: "Target schema for publish contract"
+        required: true
+        default: "honestroles_api"
+
+jobs:
+  precommit_fast:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pre-commit
+        run: python -m pip install --upgrade pip pre-commit
+
+      - name: Run fast pre-commit checks
+        run: bash scripts/run_precommit_fast.sh
+
+  neondb_smoke:
+    needs: precommit_fast
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -e ".[dev,db]"
+
+      - name: Run NeonDB smoke flow
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          DATABASE_URL_ENV: NEON_DATABASE_URL
+          SCHEMA: ${{ inputs.schema }}
+          PYTHON_BIN: .venv/bin/python
+          WORK_DIR: dist/neondb-smoke
+        run: |
+          bash scripts/run_neondb_smoke.sh

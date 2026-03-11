@@ -31,6 +31,11 @@ from honestroles.ingest import (
     validate_ingestion_source,
 )
 from honestroles.plugins.registry import PluginRegistry
+from honestroles.publish import (
+    migrate_neondb,
+    publish_neondb_sync,
+    verify_neondb_contract,
+)
 from honestroles.recommend import (
     build_retrieval_index,
     evaluate_relevance,
@@ -399,6 +404,39 @@ def handle_recommend_feedback_add(args: argparse.Namespace) -> CommandResult:
 def handle_recommend_feedback_summarize(args: argparse.Namespace) -> CommandResult:
     result = summarize_feedback(profile_id=getattr(args, "profile_id", None))
     return CommandResult(payload=result.to_payload(), exit_code=0)
+
+
+def handle_publish_neondb_migrate(args: argparse.Namespace) -> CommandResult:
+    result = migrate_neondb(
+        database_url_env=args.database_url_env,
+        schema=args.schema,
+    )
+    return CommandResult(payload=result.to_payload(), exit_code=0)
+
+
+def handle_publish_neondb_sync(args: argparse.Namespace) -> CommandResult:
+    result = publish_neondb_sync(
+        database_url_env=args.database_url_env,
+        schema=args.schema,
+        jobs_parquet=args.jobs_parquet,
+        index_dir=args.index_dir,
+        sync_report=getattr(args, "sync_report", None),
+        require_quality_pass=bool(getattr(args, "require_quality_pass", True)),
+        full_refresh=bool(getattr(args, "full_refresh", False)),
+        batch_id=getattr(args, "batch_id", None),
+    )
+    return CommandResult(payload=result.to_payload(), exit_code=0)
+
+
+def handle_publish_neondb_verify(args: argparse.Namespace) -> CommandResult:
+    result = verify_neondb_contract(
+        database_url_env=args.database_url_env,
+        schema=args.schema,
+    )
+    return CommandResult(
+        payload=result.to_payload(),
+        exit_code=_EXIT_OK if result.status == "pass" else _EXIT_GENERIC,
+    )
 
 
 def handle_run(args: argparse.Namespace) -> CommandResult:

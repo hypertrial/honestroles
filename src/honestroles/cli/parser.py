@@ -76,6 +76,61 @@ def build_parser() -> argparse.ArgumentParser:
     reliability_check.add_argument("--strict", action="store_true")
     _add_format_arg(reliability_check)
 
+    publish_parser = sub.add_parser("publish", help="Publish artifacts to external stores")
+    publish_sub = publish_parser.add_subparsers(dest="publish_target", required=True)
+
+    publish_neondb = publish_sub.add_parser(
+        "neondb",
+        help="NeonDB publishing and contract verification",
+    )
+    publish_neondb_sub = publish_neondb.add_subparsers(
+        dest="publish_neondb_command",
+        required=True,
+    )
+
+    publish_neondb_migrate = publish_neondb_sub.add_parser(
+        "migrate",
+        help="Apply HonestRoles schema migrations to NeonDB",
+    )
+    publish_neondb_migrate.add_argument(
+        "--database-url-env",
+        default="NEON_DATABASE_URL",
+    )
+    publish_neondb_migrate.add_argument("--schema", default="honestroles_api")
+    _add_format_arg(publish_neondb_migrate)
+
+    publish_neondb_sync = publish_neondb_sub.add_parser(
+        "sync",
+        help="Publish jobs and recommendation features into NeonDB",
+    )
+    publish_neondb_sync.add_argument(
+        "--database-url-env",
+        default="NEON_DATABASE_URL",
+    )
+    publish_neondb_sync.add_argument("--jobs-parquet", required=True)
+    publish_neondb_sync.add_argument("--index-dir", required=True)
+    publish_neondb_sync.add_argument("--schema", default="honestroles_api")
+    publish_neondb_sync.add_argument("--sync-report", default=None)
+    publish_neondb_sync.add_argument(
+        "--require-quality-pass",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    publish_neondb_sync.add_argument("--full-refresh", action="store_true")
+    publish_neondb_sync.add_argument("--batch-id", default=None)
+    _add_format_arg(publish_neondb_sync)
+
+    publish_neondb_verify = publish_neondb_sub.add_parser(
+        "verify",
+        help="Verify NeonDB contract objects and migration state",
+    )
+    publish_neondb_verify.add_argument(
+        "--database-url-env",
+        default="NEON_DATABASE_URL",
+    )
+    publish_neondb_verify.add_argument("--schema", default="honestroles_api")
+    _add_format_arg(publish_neondb_verify)
+
     ingest_parser = sub.add_parser("ingest", help="Ingestion connector operations")
     ingest_sub = ingest_parser.add_subparsers(dest="ingest_command", required=True)
     ingest_sync = ingest_sub.add_parser(

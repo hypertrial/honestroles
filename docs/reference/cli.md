@@ -28,6 +28,9 @@ Available commands:
 - `recommend evaluate`
 - `recommend feedback add`
 - `recommend feedback summarize`
+- `publish neondb migrate`
+- `publish neondb sync`
+- `publish neondb verify`
 - `scaffold-plugin`
 - `eda generate`
 - `eda diff`
@@ -65,6 +68,9 @@ Structured-output commands default to JSON and accept `--format {json,table}`.
 | `honestroles recommend evaluate` | `--index-dir`, `--golden-set`, optional `--thresholds`, optional `--policy` | Computes `precision@k` / `recall@k` and enforces thresholds | JSON/table eval summary |
 | `honestroles recommend feedback add` | `--profile-id`, `--job-id`, `--event`, optional `--meta-json` | Appends feedback event and updates profile weights | JSON/table feedback event summary |
 | `honestroles recommend feedback summarize` | optional `--profile-id` | Summarizes feedback history and effective profile weights | JSON/table feedback summary |
+| `honestroles publish neondb migrate` | optional `--database-url-env`, optional `--schema` | Applies versioned DB migrations under the HonestRoles Neon schema | JSON/table migration summary |
+| `honestroles publish neondb sync` | `--jobs-parquet`, `--index-dir`, optional `--database-url-env`, `--schema`, `--sync-report`, `--require-quality-pass`, `--full-refresh`, `--batch-id` | Publishes canonical jobs + features + facets to Neon and records batch metadata | JSON/table sync summary |
+| `honestroles publish neondb verify` | optional `--database-url-env`, optional `--schema` | Verifies required tables/functions/migration state for API queries | JSON/table check summary |
 | `honestroles scaffold-plugin` | `--name`, optional `--output-dir` | Copies bundled plugin template | JSON/table scaffold path + package name |
 | `honestroles eda generate` | `--input-parquet`, optional `--output-dir`, `--quality-profile`, repeated `--quality-weight`, `--top-k`, `--max-rows`, optional `--rules-file` | Builds deterministic profile artifacts (`summary.json`, tables, figures, report) | JSON/table artifact summary |
 | `honestroles eda diff` | `--baseline-dir`, `--candidate-dir`, optional `--output-dir`, optional `--rules-file` | Compares two profile artifact dirs and writes diff artifacts (`diff.json`, drift tables) | JSON/table diff summary |
@@ -175,6 +181,22 @@ golden-set JSON and enforces `recommend_eval.toml` thresholds.
 - `.honestroles/recommend/feedback/events.jsonl`
 - `.honestroles/recommend/feedback/weights/<profile_id>.json`
 
+## `publish neondb migrate`, `publish neondb sync`, and `publish neondb verify`
+
+Default schema: `honestroles_api`.
+
+Managed DB objects include:
+
+- tables: `jobs_live`, `job_features`, `job_facets`, `publish_batches`, `feedback_events`, `profile_weights`, `profile_cache`, `migration_history`
+- function: `match_jobs_v1(candidate jsonb, top_k int, include_excluded boolean, policy_override jsonb)`
+
+`publish neondb sync` notes:
+
+- `--require-quality-pass` defaults to enabled.
+- If `--sync-report` is omitted, the command attempts `<jobs_parquet_dir>/sync_report.json`.
+- `--full-refresh` forces a truncation-based rebuild before upsert.
+- Feedback sidecar state from `.honestroles/recommend/feedback/` is synchronized into DB feedback/weight tables when present.
+
 ## Run Lineage
 
 Tracked commands write a run record to:
@@ -200,6 +222,9 @@ Tracked commands:
 - `recommend evaluate`
 - `recommend feedback add`
 - `recommend feedback summarize`
+- `publish neondb migrate`
+- `publish neondb sync`
+- `publish neondb verify`
 
 Run schema fields include:
 
@@ -213,6 +238,8 @@ Run schema fields include:
 - `artifact_paths`
 - `check_codes`
 - `ingest_metrics` (for ingest commands)
+- `recommend_metrics` (for recommend commands)
+- `publish_metrics` (for publish commands)
 - `error` (present on failures)
 
 ## Exit Codes
@@ -243,6 +270,9 @@ $ honestroles recommend match --index-dir dist/recommend/index/<index_id> --cand
 $ honestroles recommend evaluate --index-dir dist/recommend/index/<index_id> --golden-set examples/recommend_golden_set.json --thresholds recommend_eval.toml
 $ honestroles recommend feedback add --profile-id jane_doe --job-id 12345 --event interviewed
 $ honestroles recommend feedback summarize --profile-id jane_doe
+$ honestroles publish neondb migrate --database-url-env NEON_DATABASE_URL --schema honestroles_api
+$ honestroles publish neondb sync --database-url-env NEON_DATABASE_URL --schema honestroles_api --jobs-parquet dist/ingest/greenhouse/stripe/jobs.parquet --index-dir dist/recommend/index/<index_id> --sync-report dist/ingest/greenhouse/stripe/sync_report.json --require-quality-pass --format table
+$ honestroles publish neondb verify --database-url-env NEON_DATABASE_URL --schema honestroles_api --format table
 $ honestroles eda generate --input-parquet data/jobs.parquet --output-dir dist/eda/latest
 $ honestroles eda diff --baseline-dir dist/eda/baseline --candidate-dir dist/eda/candidate --output-dir dist/eda/diff
 $ honestroles eda gate --candidate-dir dist/eda/candidate --baseline-dir dist/eda/baseline --rules-file eda-rules.toml

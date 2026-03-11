@@ -218,6 +218,49 @@ def _print_recommend_feedback_table(payload: Mapping[str, Any]) -> None:
             print(f"weight.{key:13} {_stringify(weights[key])}")
 
 
+def _print_publish_table(payload: Mapping[str, Any]) -> None:
+    if payload.get("migrations_total") is not None:
+        print(
+            "NEON MIGRATE schema={schema} applied={applied} total={total}".format(
+                schema=_stringify(payload.get("schema")),
+                applied=_stringify(len(payload.get("migrations_applied", []))),
+                total=_stringify(payload.get("migrations_total")),
+            )
+        )
+    elif payload.get("batch_id") is not None:
+        print(
+            "NEON SYNC schema={schema} batch={batch} active={active} inserted={ins} updated={upd} deactivated={deact} quality={quality}".format(
+                schema=_stringify(payload.get("schema")),
+                batch=_stringify(payload.get("batch_id")),
+                active=_stringify(payload.get("active_jobs")),
+                ins=_stringify(payload.get("inserted_count")),
+                upd=_stringify(payload.get("updated_count")),
+                deact=_stringify(payload.get("deactivated_count")),
+                quality=_stringify(payload.get("quality_gate_status")),
+            )
+        )
+    elif isinstance(payload.get("checks"), list):
+        print(
+            "NEON VERIFY schema={schema} checks={count}".format(
+                schema=_stringify(payload.get("schema")),
+                count=_stringify(len(payload.get("checks", []))),
+            )
+        )
+    checks = payload.get("checks")
+    if isinstance(checks, list):
+        print("CODE                          STATUS  MESSAGE")
+        for item in checks:
+            if not isinstance(item, Mapping):
+                continue
+            print(
+                "{code:28} {status:6}  {message}".format(
+                    code=str(item.get("code", ""))[:28],
+                    status=str(item.get("status", "")),
+                    message=str(item.get("message", "")),
+                )
+            )
+
+
 def emit_payload(payload: Mapping[str, Any], output_format: str) -> None:
     if output_format == "json":
         print(json.dumps(payload, indent=2, sort_keys=True))
@@ -253,6 +296,9 @@ def emit_payload(payload: Mapping[str, Any], output_format: str) -> None:
         return
     if payload.get("event") is not None or payload.get("profile_counts") is not None:
         _print_recommend_feedback_table(payload)
+        return
+    if payload.get("database_url_env") is not None and payload.get("schema") is not None:
+        _print_publish_table(payload)
         return
     if (
         payload.get("schema_version") is not None

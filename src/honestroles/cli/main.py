@@ -27,6 +27,9 @@ from .handlers import (
     handle_ingest_sync,
     handle_ingest_sync_all,
     handle_ingest_validate,
+    handle_publish_neondb_migrate,
+    handle_publish_neondb_sync,
+    handle_publish_neondb_verify,
     handle_plugins_validate,
     handle_reliability_check,
     handle_report_quality,
@@ -94,6 +97,18 @@ def _handle_ingest_sync_all(args: argparse.Namespace) -> CommandResult:
 
 def _handle_ingest_validate(args: argparse.Namespace) -> CommandResult:
     return handle_ingest_validate(args)
+
+
+def _handle_publish_neondb_migrate(args: argparse.Namespace) -> CommandResult:
+    return handle_publish_neondb_migrate(args)
+
+
+def _handle_publish_neondb_sync(args: argparse.Namespace) -> CommandResult:
+    return handle_publish_neondb_sync(args)
+
+
+def _handle_publish_neondb_verify(args: argparse.Namespace) -> CommandResult:
+    return handle_publish_neondb_verify(args)
 
 
 def _handle_adapter_infer(args: argparse.Namespace) -> CommandResult:
@@ -214,6 +229,24 @@ def _dispatch(args: argparse.Namespace) -> CommandResult | int | None:
         return _handle_ingest_sync_all(args)
     if args.command == "ingest" and args.ingest_command == "validate":
         return _handle_ingest_validate(args)
+    if (
+        args.command == "publish"
+        and args.publish_target == "neondb"
+        and args.publish_neondb_command == "migrate"
+    ):
+        return _handle_publish_neondb_migrate(args)
+    if (
+        args.command == "publish"
+        and args.publish_target == "neondb"
+        and args.publish_neondb_command == "sync"
+    ):
+        return _handle_publish_neondb_sync(args)
+    if (
+        args.command == "publish"
+        and args.publish_target == "neondb"
+        and args.publish_neondb_command == "verify"
+    ):
+        return _handle_publish_neondb_verify(args)
     if args.command == "adapter" and args.adapter_command == "infer":
         return _handle_adapter_infer(args)
     if args.command == "scaffold-plugin":

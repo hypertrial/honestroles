@@ -45,6 +45,9 @@ $ honestroles recommend build-index --input-parquet dist/ingest/greenhouse/strip
 $ honestroles recommend match --index-dir dist/recommend/index/<index_id> --candidate-json examples/candidate.json --top-k 25 --include-excluded --format table
 $ honestroles recommend evaluate --index-dir dist/recommend/index/<index_id> --golden-set examples/recommend_golden_set.json --thresholds recommend_eval.toml --format table
 $ honestroles recommend feedback add --profile-id jane_doe --job-id 12345 --event interviewed --format table
+$ honestroles publish neondb migrate --database-url-env NEON_DATABASE_URL --schema honestroles_api --format table
+$ honestroles publish neondb sync --database-url-env NEON_DATABASE_URL --schema honestroles_api --jobs-parquet dist/ingest/greenhouse/stripe/jobs.parquet --index-dir dist/recommend/index/<index_id> --sync-report dist/ingest/greenhouse/stripe/sync_report.json --require-quality-pass --format table
+$ honestroles publish neondb verify --database-url-env NEON_DATABASE_URL --schema honestroles_api --format table
 $ honestroles init --input-parquet data/jobs.parquet --pipeline-config pipeline.toml --plugins-manifest plugins.toml
 $ honestroles doctor --pipeline-config pipeline.toml --plugins plugins.toml --format table
 $ honestroles reliability check --pipeline-config pipeline.toml --plugins plugins.toml --strict --format table
@@ -63,12 +66,15 @@ from honestroles import (
     HonestRolesRuntime,
     build_retrieval_index,
     evaluate_relevance,
+    migrate_neondb,
     match_jobs,
+    publish_neondb_sync,
     record_feedback_event,
     sync_source,
     sync_sources_from_manifest,
     summarize_feedback,
     validate_ingestion_source,
+    verify_neondb_contract,
 )
 
 ingest = sync_source(
@@ -115,6 +121,15 @@ print(evaluation.status, evaluation.metrics)
 record_feedback_event(profile_id="jane_doe", job_id="12345", event="interviewed")
 print(summarize_feedback(profile_id="jane_doe").weights)
 
+print(migrate_neondb(database_url_env="NEON_DATABASE_URL").status)
+publish_result = publish_neondb_sync(
+    database_url_env="NEON_DATABASE_URL",
+    jobs_parquet="dist/ingest/greenhouse/stripe/jobs.parquet",
+    index_dir=index.index_dir,
+    sync_report="dist/ingest/greenhouse/stripe/sync_report.json",
+)
+print(publish_result.batch_id, verify_neondb_contract(database_url_env="NEON_DATABASE_URL").status)
+
 runtime = HonestRolesRuntime.from_configs(
     pipeline_config_path="pipeline.toml",
     plugin_manifest_path="plugins.toml",
@@ -144,6 +159,8 @@ $ bash scripts/check_docs_refs.sh
 # HONESTROLES_SMOKE_GREENHOUSE_REF, HONESTROLES_SMOKE_LEVER_REF,
 # HONESTROLES_SMOKE_ASHBY_REF, HONESTROLES_SMOKE_WORKABLE_REF
 $ bash scripts/run_ingest_smoke.sh
+# Optional Neon DB smoke (requires NEON_DATABASE_URL):
+$ PYTHON_BIN=.venv/bin/python DATABASE_URL_ENV=NEON_DATABASE_URL SCHEMA=honestroles_api bash scripts/run_neondb_smoke.sh
 ```
 
 For local profiling data, keep large parquet inputs under `data/` and write generated artifacts under `dist/` (both are ignored by git).

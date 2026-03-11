@@ -58,6 +58,29 @@ This flow runs only `smoke`-marked live integration tests and is intentionally i
 Smoke assertions require non-empty outputs per source (`rows_written > 0` and parquet
 height > 0) and strict quality pass, so keep refs current before triggering the workflow.
 
+## Dedicated Neon Smoke Flow
+
+Neon publish contract checks run in a separate manual workflow:
+
+- GitHub Actions workflow: `NeonDB Smoke` (`.github/workflows/neondb-smoke.yml`)
+- Trigger: `workflow_dispatch`
+- Inputs: `schema` (default `honestroles_api`)
+- Required secret: `NEON_DATABASE_URL`
+
+Local equivalent command:
+
+```bash
+$ export NEON_DATABASE_URL=<postgres-url>
+$ PYTHON_BIN=.venv/bin/python DATABASE_URL_ENV=NEON_DATABASE_URL SCHEMA=honestroles_api bash scripts/run_neondb_smoke.sh
+```
+
+This flow validates the complete publish contract:
+
+1. `publish neondb migrate`
+2. `publish neondb sync` (from generated sample artifacts)
+3. `publish neondb verify`
+4. Direct `match_jobs_v1(...)` query with non-empty assertion and payload-key checks against `contracts/agent_response.v1.json`.
+
 ## Publish (Manual, API Token)
 
 Publishing is manual and token-based.

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added Neon Agent API Enablement v1:
+  - Added `honestroles publish neondb` CLI group with `migrate`, `sync`, and `verify` subcommands.
+  - Added first-class Neon publish Python APIs: `migrate_neondb`, `publish_neondb_sync`, and `verify_neondb_contract`.
+  - Added optional DB dependency extra: `.[db]` (`psycopg[binary]>=3.2,<4`).
+  - Added managed Neon contract objects under schema `honestroles_api`: `jobs_live`, `job_features`, `job_facets`, `publish_batches`, `feedback_events`, `profile_weights`, `profile_cache`, `migration_history`, and `match_jobs_v1(...)`.
+  - Added deterministic SQL ranking function `match_jobs_v1(...)` with hard filters, explainability fields, exclusion codes, and deterministic tie-break ordering.
+  - Added publish lineage tracking and publish metrics for `publish.neondb.migrate|sync|verify`.
+  - Added versioned agent payload JSON schemas: `contracts/agent_request.v1.json` and `contracts/agent_response.v1.json`.
+  - Added Neon operator docs (publish runbook + DB contract reference + agent contract reference).
+  - Added manual GitHub Actions smoke workflow `NeonDB Smoke` (`migrate -> sync -> verify -> match_jobs_v1 query`).
 - Added Relevance & Agent API v1:
   - Added new recommendation CLI group: `recommend build-index`, `recommend match`, `recommend evaluate`, `recommend feedback add`, and `recommend feedback summarize`.
   - Added deterministic candidate profile contract and parsers (`candidate JSON` + plain-text resume parsing).

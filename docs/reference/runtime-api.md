@@ -208,3 +208,46 @@ record_feedback_event(profile_id="jane_doe", job_id="12345", event="interviewed"
 summary = summarize_feedback(profile_id="jane_doe")
 print(summary.total_events, summary.weights)
 ```
+
+## NeonDB Publish API
+
+Apply migrations:
+
+```python
+from honestroles import migrate_neondb
+
+result = migrate_neondb(
+    database_url_env="NEON_DATABASE_URL",
+    schema="honestroles_api",
+)
+print(result.status, result.migrations_applied)
+```
+
+Publish jobs + features:
+
+```python
+from honestroles import publish_neondb_sync
+
+result = publish_neondb_sync(
+    database_url_env="NEON_DATABASE_URL",
+    schema="honestroles_api",
+    jobs_parquet="dist/ingest/greenhouse/stripe/jobs.parquet",
+    index_dir="dist/recommend/index/<index_id>",
+    sync_report="dist/ingest/greenhouse/stripe/sync_report.json",
+    require_quality_pass=True,
+    full_refresh=False,
+)
+print(result.status, result.batch_id, result.inserted_count)
+```
+
+Verify DB contract:
+
+```python
+from honestroles import verify_neondb_contract
+
+result = verify_neondb_contract(
+    database_url_env="NEON_DATABASE_URL",
+    schema="honestroles_api",
+)
+print(result.status, result.check_codes)
+```

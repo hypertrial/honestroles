@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://honestroles.com/schemas/agent_response.v1.json",
+  "title": "HonestRoles Agent Response v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status", "results"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "status": {"type": "string", "enum": ["pass", "fail"]},
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "job_id",
+          "score",
+          "match_reasons",
+          "required_missing_skills",
+          "apply_url",
+          "posted_at",
+          "source",
+          "quality_flags"
+        ],
+        "properties": {
+          "job_id": {"type": "string"},
+          "score": {"type": "number", "minimum": 0, "maximum": 1},
+          "match_reasons": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["code", "value", "weight", "contribution"],
+              "properties": {
+                "code": {"type": "string"},
+                "value": {"type": "number"},
+                "weight": {"type": "number"},
+                "contribution": {"type": "number"}
+              }
+            }
+          },
+          "required_missing_skills": {"type": "array", "items": {"type": "string"}},
+          "apply_url": {"type": ["string", "null"]},
+          "posted_at": {"type": ["string", "null"]},
+          "source": {"type": ["string", "null"]},
+          "quality_flags": {"type": "array", "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    "excluded_jobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["job_id", "exclude_reasons", "apply_url", "posted_at", "source"],
+        "properties": {
+          "job_id": {"type": "string"},
+          "exclude_reasons": {"type": "array", "items": {"type": "string"}},
+          "apply_url": {"type": ["string", "null"]},
+          "posted_at": {"type": ["string", "null"]},
+          "source": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "check_codes": {"type": "array", "items": {"type": "string"}}
+  }
+}

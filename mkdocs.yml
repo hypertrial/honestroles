@@ -58,6 +58,7 @@ nav:
           - Configure Pipeline: guides/configure-pipeline.md
           - Run via CLI: guides/run-via-cli.md
           - Ingest from Public ATS APIs: guides/ingest-public-ats.md
+          - Publish to NeonDB: guides/publish-to-neondb.md
           - Recommend for Agents: guides/recommend-for-agents.md
           - Run via Python API: guides/run-via-python-api.md
           - Explore Data with EDA: guides/explore-data-with-eda.md
@@ -67,6 +68,8 @@ nav:
       - Reference:
           - CLI: reference/cli.md
           - Runtime API: reference/runtime-api.md
+          - NeonDB Contract: reference/neondb-contract.md
+          - Agent API Contracts: reference/agent-api-contracts.md
           - Ingest Manifest Schema: reference/ingest-manifest-schema.md
           - Ingest Source-Ref Glossary: reference/ingest-source-ref-glossary.md
           - Recommendation Policy Schema: reference/recommendation-policy-schema.md

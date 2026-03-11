@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://honestroles.com/schemas/agent_request.v1.json",
+  "title": "HonestRoles Agent Request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidate", "top_k"],
+  "properties": {
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile_id"],
+      "properties": {
+        "profile_id": {"type": "string", "minLength": 1},
+        "skills": {"type": "array", "items": {"type": "string"}},
+        "titles": {"type": "array", "items": {"type": "string"}},
+        "years_experience": {"type": ["number", "null"]},
+        "locations": {"type": "array", "items": {"type": "string"}},
+        "work_mode_preferences": {
+          "type": "array",
+          "items": {"type": "string", "enum": ["remote", "hybrid", "onsite", "unknown"]}
+        },
+        "seniority_targets": {
+          "type": "array",
+          "items": {"type": "string", "enum": ["junior", "mid", "senior", "staff", "principal"]}
+        },
+        "employment_type_preferences": {
+          "type": "array",
+          "items": {"type": "string", "enum": ["full_time", "part_time", "contract", "internship", "temporary", "unknown"]}
+        },
+        "salary_targets": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "minimum": {"type": ["number", "null"]},
+            "maximum": {"type": ["number", "null"]},
+            "currency": {"type": ["string", "null"]},
+            "interval": {"type": ["string", "null"]}
+          }
+        },
+        "visa_work_auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "requires_sponsorship": {"type": ["boolean", "null"]},
+            "authorized_locations": {"type": "array", "items": {"type": "string"}}
+          }
+        }
+      }
+    },
+    "top_k": {"type": "integer", "minimum": 1, "maximum": 500},
+    "include_excluded": {"type": "boolean", "default": false},
+    "policy_override": {"type": "object"}
+  }
+}
