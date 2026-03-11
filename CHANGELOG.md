@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.5
+
 - Added Neon Agent API Enablement v1:
   - Added `honestroles publish neondb` CLI group with `migrate`, `sync`, and `verify` subcommands.
   - Added first-class Neon publish Python APIs: `migrate_neondb`, `publish_neondb_sync`, and `verify_neondb_contract`.
